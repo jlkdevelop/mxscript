@@ -4,6 +4,23 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.8.0] — 2026-05-02
+
+### Added
+- **Call-stack tracebacks**: runtime errors now include the active
+  function call chain. Each frame shows the function name and the
+  source location where it was invoked. Matches Python / Node / Go
+  conventions (failing function at top).
+- **`mx run --eval '<src>'`** (alias `-e`): run an inline MX snippet
+  with no file. Great for one-liners and shell glue.
+- **New stdlib output helpers**: `write(...)` (no trailing newline)
+  and `eprint(...)` (writes to stderr).
+- **`env_required(name)`**: like `env()` but throws a descriptive
+  error if the variable is unset or empty — used at startup to
+  fail-fast on misconfiguration.
+
+[0.8.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.8.0
+
 ## [0.7.0] — 2026-05-02
 
 ### Added
