@@ -8,6 +8,9 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.24.0** (2026-05-02)
+  - Language Server (`mx lsp`) — diagnostics + format-on-save + hover stub
+  - VS Code extension declares LSP integration
 - **v0.23.0** (2026-05-02)
   - Docs site at mxscript.com (`site/`, GitHub Pages)
   - Landing page + single-page docs with sticky sidebar

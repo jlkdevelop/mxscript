@@ -25,6 +25,7 @@ import (
 	"github.com/jlkdevelop/mxscript/formatter"
 	"github.com/jlkdevelop/mxscript/interpreter"
 	"github.com/jlkdevelop/mxscript/lexer"
+	"github.com/jlkdevelop/mxscript/lsp"
 	"github.com/jlkdevelop/mxscript/parser"
 )
 
@@ -46,7 +47,7 @@ func (rr *replReader) ReadLine() (string, bool) {
 // Version is bumped at release time. Override at build with:
 //
 //	go build -ldflags "-X main.Version=v0.2.0"
-var Version = "v0.23.0"
+var Version = "v0.24.0"
 
 const (
 	cReset  = "\033[0m"
@@ -80,6 +81,8 @@ func main() {
 		cmdTest(args)
 	case "fmt":
 		cmdFmt(args)
+	case "lsp":
+		cmdLSP(args)
 	case "version", "-v", "--version":
 		fmt.Println("MX Script", Version)
 	case "help", "-h", "--help":
@@ -104,6 +107,7 @@ func printHelp() {
 	fmt.Println("  repl                  Start an interactive REPL")
 	fmt.Println("  test [path]           Run *_test.mx files (default: current dir)")
 	fmt.Println("  fmt [paths]           Format .mx files (-w writes, --check exits 1 on diffs)")
+	fmt.Println("  lsp                   Run the Language Server (JSON-RPC over stdio)")
 	fmt.Println("  version               Print version and exit")
 	fmt.Println("  help                  Show this help")
 	fmt.Println()
@@ -570,6 +574,16 @@ func globalUserKeys(g *interpreter.Env) []string {
 		out = append(out, k)
 	}
 	return out
+}
+
+// ===== mx lsp =====
+
+func cmdLSP(args []string) {
+	_ = args
+	if err := lsp.Run(os.Stdin, os.Stdout); err != nil {
+		fmt.Fprintf(os.Stderr, "%slsp:%s %v\n", cRed, cReset, err)
+		os.Exit(1)
+	}
 }
 
 // ===== mx fmt =====

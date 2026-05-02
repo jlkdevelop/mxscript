@@ -4,6 +4,35 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.24.0] — 2026-05-02
+
+### Added
+- **Language Server** via `mx lsp`. JSON-RPC 2.0 over stdio,
+  implementing the editor essentials:
+  - `initialize` / `shutdown` / `exit` lifecycle
+  - `textDocument/didOpen` / `didChange` / `didClose` buffer tracking
+  - `textDocument/publishDiagnostics` — parse errors reported as
+    inline squiggles
+  - `textDocument/formatting` — runs `mx fmt` on the whole document
+  - `textDocument/hover` (stub for now; wired up so clients don't err)
+
+  Configure any LSP-capable editor:
+
+  ```jsonc
+  // VS Code, Helix, Neovim, Zed, Sublime LSP — all the same shape.
+  {
+    "command": "mx",
+    "args": ["lsp"],
+    "filetypes": ["mxscript"]
+  }
+  ```
+
+  The bundled VS Code extension now declares the LSP integration in
+  `package.json`; the next extension publish will wire it through
+  automatically.
+
+[0.24.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.24.0
+
 ## [0.23.0] — 2026-05-02
 
 ### Added

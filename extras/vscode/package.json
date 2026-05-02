@@ -1,8 +1,8 @@
 {
   "name": "mxscript",
   "displayName": "MX Script",
-  "description": "Syntax highlighting and language support for MX Script (.mx files).",
-  "version": "0.5.0",
+  "description": "Syntax highlighting, formatting, and diagnostics for MX Script (.mx files) via the bundled Language Server.",
+  "version": "0.24.0",
   "publisher": "jlkdevelop",
   "author": {
     "name": "Jassim Alkharafi",
@@ -38,6 +38,21 @@
         "scopeName": "source.mx",
         "path": "./syntaxes/mxscript.tmLanguage.json"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "MX Script",
+      "properties": {
+        "mxscript.lsp.command": {
+          "type": "string",
+          "default": "mx",
+          "description": "Path to the mx binary used as the language server."
+        },
+        "mxscript.lsp.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable diagnostics + format-on-save via `mx lsp`."
+        }
+      }
+    }
   }
 }
