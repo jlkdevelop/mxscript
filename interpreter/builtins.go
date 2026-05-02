@@ -5,6 +5,10 @@ package interpreter
 
 import (
 	"bytes"
+	crand "crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,6 +16,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -98,6 +103,22 @@ func registerBuiltins(i *Interpreter) {
 	// --- JSON helpers ---
 	def("json_parse", builtinJSONParse)
 	def("json_stringify", builtinJSONStringify)
+
+	// --- File I/O ---
+	def("read_file", builtinReadFile)
+	def("write_file", builtinWriteFile)
+	def("file_exists", builtinFileExists)
+	def("list_files", builtinListFiles)
+	def("delete_file", builtinDeleteFile)
+
+	// --- Crypto / encoding ---
+	def("hash_sha256", builtinHashSHA256)
+	def("base64_encode", builtinBase64Encode)
+	def("base64_decode", builtinBase64Decode)
+	def("uuid", builtinUUID)
+
+	// --- Time helpers ---
+	def("now_iso", builtinNowISO)
 
 	// --- AI namespace ---
 	ai := NewOrderedMap()
@@ -722,6 +743,120 @@ func builtinJSONStringify(i *Interpreter, args []Value) (Value, error) {
 		return Value{}, err
 	}
 	return StringValue(string(b)), nil
+}
+
+// ===== File I/O =====
+
+func builtinReadFile(i *Interpreter, args []Value) (Value, error) {
+	path, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return Value{}, err
+	}
+	return StringValue(string(data)), nil
+}
+
+func builtinWriteFile(i *Interpreter, args []Value) (Value, error) {
+	path, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	content, err := stringArg(args, 1)
+	if err != nil {
+		return Value{}, err
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		return Value{}, err
+	}
+	return NullValue(), nil
+}
+
+func builtinFileExists(i *Interpreter, args []Value) (Value, error) {
+	path, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	_, err = os.Stat(path)
+	return BoolValue(err == nil), nil
+}
+
+func builtinListFiles(i *Interpreter, args []Value) (Value, error) {
+	dir, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return Value{}, err
+	}
+	out := make([]Value, 0, len(entries))
+	for _, e := range entries {
+		out = append(out, StringValue(filepath.Join(dir, e.Name())))
+	}
+	return ArrayValue(out), nil
+}
+
+func builtinDeleteFile(i *Interpreter, args []Value) (Value, error) {
+	path, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	if err := os.Remove(path); err != nil {
+		return Value{}, err
+	}
+	return NullValue(), nil
+}
+
+// ===== Crypto / encoding =====
+
+func builtinHashSHA256(i *Interpreter, args []Value) (Value, error) {
+	s, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	h := sha256.Sum256([]byte(s))
+	return StringValue(hex.EncodeToString(h[:])), nil
+}
+
+func builtinBase64Encode(i *Interpreter, args []Value) (Value, error) {
+	s, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	return StringValue(base64.StdEncoding.EncodeToString([]byte(s))), nil
+}
+
+func builtinBase64Decode(i *Interpreter, args []Value) (Value, error) {
+	s, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	out, err := base64.StdEncoding.DecodeString(s)
+	if err != nil {
+		return Value{}, err
+	}
+	return StringValue(string(out)), nil
+}
+
+// builtinUUID returns an RFC 4122 v4 UUID using crypto/rand.
+func builtinUUID(i *Interpreter, args []Value) (Value, error) {
+	var b [16]byte
+	if _, err := crand.Read(b[:]); err != nil {
+		return Value{}, err
+	}
+	b[6] = (b[6] & 0x0f) | 0x40 // version 4
+	b[8] = (b[8] & 0x3f) | 0x80 // variant RFC 4122
+	return StringValue(fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
+		b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])), nil
+}
+
+// ===== Time =====
+
+func builtinNowISO(i *Interpreter, args []Value) (Value, error) {
+	return StringValue(time.Now().UTC().Format(time.RFC3339Nano)), nil
 }
 
 // ===== AI namespace =====
