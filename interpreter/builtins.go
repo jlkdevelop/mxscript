@@ -12,6 +12,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"image"
+	_ "image/gif" // register decoders
+	"image/jpeg"
+	"image/png"
 	"io"
 	"math"
 	"math/rand"
@@ -214,6 +218,14 @@ func registerBuiltins(i *Interpreter) {
 
 	// --- Webhook helpers ---
 	def("verify_webhook", builtinVerifyWebhook)
+
+	// --- Image namespace ---
+	imageNS := NewOrderedMap()
+	imageNS.Set("info", FunctionValue(&Function{Name: "image.info", Native: builtinImageInfo}))
+	imageNS.Set("resize", FunctionValue(&Function{Name: "image.resize", Native: builtinImageResize}))
+	imageNS.Set("convert", FunctionValue(&Function{Name: "image.convert", Native: builtinImageConvert}))
+	g.Set("image", ObjectValue(imageNS))
+	builtinNames["image"] = true
 
 	// --- OAuth2 namespace ---
 	oauthNS := NewOrderedMap()
@@ -2250,6 +2262,123 @@ func lookupTemplateVar(vars *OrderedMap, expr string) Value {
 func htmlEscapeString(s string) string {
 	r := strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;", "'", "&#39;")
 	return r.Replace(s)
+}
+
+// ===== Image =====
+//
+// Image bytes flow through MX as strings (the same shape multipart file
+// content uses, so request.files?.image.content goes straight to these
+// functions). Helpers:
+//
+//   image.info(bytes)              -> { width, height, format }
+//   image.resize(bytes, w, h, opts?) -> resized bytes
+//   image.convert(bytes, format)   -> bytes (jpeg / png)
+//
+// Pure stdlib (image, image/png, image/jpeg, image/gif). No GIF write,
+// no WebP, no AVIF — open a PR if you need them.
+
+func builtinImageInfo(i *Interpreter, args []Value) (Value, error) {
+	data, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	cfg, format, err := image.DecodeConfig(strings.NewReader(data))
+	if err != nil {
+		return Value{}, err
+	}
+	out := NewOrderedMap()
+	out.Set("format", StringValue(format))
+	out.Set("width", NumberValue(float64(cfg.Width)))
+	out.Set("height", NumberValue(float64(cfg.Height)))
+	return ObjectValue(out), nil
+}
+
+func builtinImageResize(i *Interpreter, args []Value) (Value, error) {
+	data, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	w, err := numberArg(args, 1)
+	if err != nil {
+		return Value{}, err
+	}
+	h, err := numberArg(args, 2)
+	if err != nil {
+		return Value{}, err
+	}
+	src, format, err := image.Decode(strings.NewReader(data))
+	if err != nil {
+		return Value{}, err
+	}
+	// Override format if opts.format is set.
+	outFormat := format
+	quality := 85
+	if len(args) > 3 && args[3].Kind == KindObject {
+		if v, ok := args[3].Object.Get("format"); ok && v.Kind == KindString {
+			outFormat = v.String
+		}
+		if v, ok := args[3].Object.Get("quality"); ok && v.Kind == KindNumber {
+			quality = int(v.Number)
+		}
+	}
+
+	dst := imageNearestNeighborResize(src, int(w), int(h))
+	return encodeImage(dst, outFormat, quality)
+}
+
+func builtinImageConvert(i *Interpreter, args []Value) (Value, error) {
+	data, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	format, err := stringArg(args, 1)
+	if err != nil {
+		return Value{}, err
+	}
+	src, _, err := image.Decode(strings.NewReader(data))
+	if err != nil {
+		return Value{}, err
+	}
+	quality := 85
+	if len(args) > 2 && args[2].Kind == KindNumber {
+		quality = int(args[2].Number)
+	}
+	return encodeImage(src, format, quality)
+}
+
+// imageNearestNeighborResize is fast and good enough for thumbnails.
+// For higher-quality (Lanczos/bilinear) resizing the user can pull in
+// golang.org/x/image — we keep stdlib-only here.
+func imageNearestNeighborResize(src image.Image, dstW, dstH int) image.Image {
+	srcB := src.Bounds()
+	srcW := srcB.Dx()
+	srcH := srcB.Dy()
+	dst := image.NewRGBA(image.Rect(0, 0, dstW, dstH))
+	for y := 0; y < dstH; y++ {
+		sy := y * srcH / dstH
+		for x := 0; x < dstW; x++ {
+			sx := x * srcW / dstW
+			dst.Set(x, y, src.At(srcB.Min.X+sx, srcB.Min.Y+sy))
+		}
+	}
+	return dst
+}
+
+func encodeImage(img image.Image, format string, quality int) (Value, error) {
+	var buf bytes.Buffer
+	switch strings.ToLower(format) {
+	case "png":
+		if err := png.Encode(&buf, img); err != nil {
+			return Value{}, err
+		}
+	case "jpeg", "jpg":
+		if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: quality}); err != nil {
+			return Value{}, err
+		}
+	default:
+		return Value{}, fmt.Errorf("unsupported image format %q (use png or jpeg)", format)
+	}
+	return StringValue(buf.String()), nil
 }
 
 // ===== OAuth2 =====

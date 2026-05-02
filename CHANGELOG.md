@@ -4,6 +4,38 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.19.0] — 2026-05-02
+
+### Added
+- **Image namespace** (PNG / JPEG via Go's stdlib `image`):
+
+  ```mx
+  post /upload {
+    let f = request.files?.image
+    let info = image.info(f.content)         // { format, width, height }
+
+    // Resize for the avatar slot
+    let avatar = image.resize(f.content, 256, 256, { format: "jpeg", quality: 80 })
+    write_file("./uploads/${uuid()}.jpg", avatar)
+
+    // Always store a PNG copy
+    let archive = image.convert(f.content, "png")
+    write_file("./archive/${uuid()}.png", archive)
+
+    return json({ ok: true, original: info })
+  }
+  ```
+
+  - `image.info(bytes)` — `{ format, width, height }`
+  - `image.resize(bytes, w, h, opts?)` — nearest-neighbour resize
+    (good enough for thumbnails). `opts` may include `format`
+    (`"png"` / `"jpeg"`) and `quality` (JPEG, 0-100).
+  - `image.convert(bytes, format, quality?)` — re-encode without
+    resizing.
+  - GIF input is decoded but not encoded back (use png / jpeg).
+
+[0.19.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.19.0
+
 ## [0.18.0] — 2026-05-02
 
 ### Added
