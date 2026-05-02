@@ -11,6 +11,7 @@
 package main
 
 import (
+	"bufio"
 	"crypto/sha256"
 	"errors"
 	"fmt"
@@ -25,6 +26,21 @@ import (
 	"github.com/jlkdevelop/mxscript/lexer"
 	"github.com/jlkdevelop/mxscript/parser"
 )
+
+// replReader is a simple line-buffered stdin reader for the REPL.
+type replReader struct{ r *bufio.Reader }
+
+func newReplReader() *replReader { return &replReader{r: bufio.NewReader(os.Stdin)} }
+
+// ReadLine returns one line of input (without the trailing newline). The
+// second return value is false on EOF.
+func (rr *replReader) ReadLine() (string, bool) {
+	line, err := rr.r.ReadString('\n')
+	if err != nil && line == "" {
+		return "", false
+	}
+	return strings.TrimRight(line, "\r\n"), true
+}
 
 // Version is bumped at release time. Override at build with:
 //
@@ -57,6 +73,8 @@ func main() {
 		cmdInit(args)
 	case "build":
 		cmdBuild(args)
+	case "repl":
+		cmdRepl(args)
 	case "version", "-v", "--version":
 		fmt.Println("MX Script", Version)
 	case "help", "-h", "--help":
@@ -77,6 +95,7 @@ func printHelp() {
 	fmt.Println("  run <file.mx>         Run an MX Script file")
 	fmt.Println("  init [name]           Scaffold a new MX Script project")
 	fmt.Println("  build <file.mx>       Type-check & validate an MX Script file")
+	fmt.Println("  repl                  Start an interactive REPL")
 	fmt.Println("  version               Print version and exit")
 	fmt.Println("  help                  Show this help")
 	fmt.Println()
@@ -355,6 +374,160 @@ route GET /hello/:name {
 const starterEnv = `# Environment variables — read with env("KEY") inside .mx
 # OPENAI_API_KEY=sk-...
 `
+
+// ===== mx repl =====
+
+func cmdRepl(args []string) {
+	debug := false
+	for _, a := range args {
+		if a == "--debug" {
+			debug = true
+		}
+	}
+
+	interp := interpreter.New()
+	interp.SetFile("<repl>")
+
+	fmt.Printf("%sMX Script%s %s · interactive REPL\n", cGreen, cReset, Version)
+	fmt.Printf("%sType%s %s.help%s for help, %s.exit%s or Ctrl-D to leave.\n\n",
+		cGray, cReset, cCyan, cReset, cCyan, cReset)
+
+	in := newReplReader()
+	var buf strings.Builder
+	prompt := func() string {
+		if buf.Len() == 0 {
+			return cGreen + "mx> " + cReset
+		}
+		return cGray + "..> " + cReset
+	}
+	for {
+		fmt.Print(prompt())
+		line, ok := in.ReadLine()
+		if !ok {
+			fmt.Println()
+			return
+		}
+		trimmed := strings.TrimSpace(line)
+
+		if buf.Len() == 0 {
+			switch trimmed {
+			case ".exit", ".quit":
+				return
+			case ".help":
+				fmt.Println("  .exit / .quit — leave the REPL")
+				fmt.Println("  .help         — show this help")
+				fmt.Println("  .clear        — discard current multi-line input")
+				fmt.Println("  .vars         — list defined variables")
+				continue
+			case ".clear":
+				buf.Reset()
+				continue
+			case ".vars":
+				printGlobals(interp)
+				continue
+			case "":
+				continue
+			}
+		}
+
+		buf.WriteString(line)
+		buf.WriteByte('\n')
+
+		// Try to parse what we have so far. If it's incomplete (unbalanced
+		// braces / unterminated string), keep reading.
+		src := buf.String()
+		if !looksComplete(src) {
+			continue
+		}
+
+		tokens, err := lexer.New(src).Tokenize()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%serror:%s %v\n", cRed, cReset, err)
+			buf.Reset()
+			continue
+		}
+		prog, err := parser.New(tokens).Parse()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%serror:%s %v\n", cRed, cReset, err)
+			buf.Reset()
+			continue
+		}
+		if debug {
+			fmt.Fprintln(os.Stderr, cGray+"--- AST ---"+cReset)
+			for _, s := range prog.Stmts {
+				fmt.Fprintf(os.Stderr, "  %T\n", s)
+			}
+		}
+		v, err := interp.Exec(prog)
+		buf.Reset()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%serror:%s %v\n", cRed, cReset, err)
+			continue
+		}
+		if v.Kind != interpreter.KindNull {
+			fmt.Printf("%s=>%s %s\n", cCyan, cReset, interpreter.DisplayValue(v))
+		}
+	}
+}
+
+// looksComplete is a heuristic: balanced braces / parens / brackets and no
+// unterminated string. It lets the REPL accept multi-line input.
+func looksComplete(src string) bool {
+	depth := 0
+	inStr := false
+	var quote rune
+	runes := []rune(src)
+	for i := 0; i < len(runes); i++ {
+		c := runes[i]
+		if inStr {
+			if c == '\\' && i+1 < len(runes) {
+				i++
+				continue
+			}
+			if c == quote {
+				inStr = false
+			}
+			continue
+		}
+		switch c {
+		case '"', '\'':
+			inStr = true
+			quote = c
+		case '{', '(', '[':
+			depth++
+		case '}', ')', ']':
+			depth--
+		}
+	}
+	return !inStr && depth <= 0
+}
+
+func printGlobals(interp *interpreter.Interpreter) {
+	g := interp.Globals()
+	keys := globalUserKeys(g)
+	if len(keys) == 0 {
+		fmt.Println("  (no user variables yet)")
+		return
+	}
+	for _, k := range keys {
+		v, _ := g.Get(k)
+		fmt.Printf("  %s = %s\n", k, interpreter.DisplayValue(v))
+	}
+}
+
+// globalUserKeys filters out the built-ins so .vars only shows what the user
+// has defined.
+func globalUserKeys(g *interpreter.Env) []string {
+	all := g.Keys()
+	out := make([]string, 0, len(all))
+	for _, k := range all {
+		if interpreter.IsBuiltin(k) {
+			continue
+		}
+		out = append(out, k)
+	}
+	return out
+}
 
 // ===== mx build =====
 

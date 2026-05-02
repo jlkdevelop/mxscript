@@ -17,11 +17,20 @@ import (
 	"time"
 )
 
+// builtinNames lists every name registered into the global environment by
+// registerBuiltins. The REPL uses it to filter built-ins out of `.vars`.
+var builtinNames = map[string]bool{}
+
+// IsBuiltin reports whether a global name was installed by the standard
+// library rather than the user's program.
+func IsBuiltin(name string) bool { return builtinNames[name] }
+
 func registerBuiltins(i *Interpreter) {
 	g := i.globals
 
 	def := func(name string, fn func(interp *Interpreter, args []Value) (Value, error)) {
 		g.Set(name, FunctionValue(&Function{Name: name, Native: fn}))
+		builtinNames[name] = true
 	}
 
 	// --- Output ---
@@ -95,6 +104,7 @@ func registerBuiltins(i *Interpreter) {
 	ai.Set("complete", FunctionValue(&Function{Name: "ai.complete", Native: builtinAIComplete}))
 	ai.Set("embed", FunctionValue(&Function{Name: "ai.embed", Native: builtinAIEmbed}))
 	g.Set("ai", ObjectValue(ai))
+	builtinNames["ai"] = true
 }
 
 // ===== Output =====

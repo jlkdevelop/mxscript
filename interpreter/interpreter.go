@@ -187,6 +187,17 @@ func (e *Env) Get(name string) (Value, bool) {
 
 func (e *Env) Set(name string, v Value) { e.vars[name] = v }
 
+// Keys returns the names defined directly in this scope (not parents).
+// Used by the REPL to show what the user has bound.
+func (e *Env) Keys() []string {
+	keys := make([]string, 0, len(e.vars))
+	for k := range e.vars {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
 // Assign walks up parents until the variable is found, then replaces it.
 // If not found, defines it in the current scope.
 func (e *Env) Assign(name string, v Value) {
@@ -287,6 +298,43 @@ func New() *Interpreter {
 
 // SetFile records the source file path for error messages.
 func (i *Interpreter) SetFile(path string) { i.file = path }
+
+// Globals returns the interpreter's top-level environment. It's exposed so
+// embedders (notably the REPL) can evaluate statements that read or write
+// the same scope across multiple calls.
+func (i *Interpreter) Globals() *Env { return i.globals }
+
+// Exec runs every statement in the program against the global scope and
+// returns the value of the last expression statement (if any). Unlike Run,
+// it does NOT start an HTTP server even if the program defined routes.
+// This is intended for the REPL, where we want immediate feedback.
+func (i *Interpreter) Exec(prog *parser.Program) (Value, error) {
+	var last Value = NullValue()
+	for _, s := range prog.Stmts {
+		// Expression statements get evaluated directly so we can return
+		// the result for the REPL to display. Other statements use
+		// execStmt's normal path (which would discard the value).
+		if es, ok := s.(*parser.ExprStmt); ok {
+			v, err := i.evalExpr(es.Expr, i.globals)
+			if err != nil {
+				return Value{}, i.wrapErr(err)
+			}
+			last = v
+			continue
+		}
+		if err := i.execStmt(s, i.globals); err != nil {
+			if rs, ok := err.(*returnSignal); ok {
+				last = rs.Value
+				continue
+			}
+			return Value{}, i.wrapErr(err)
+		}
+	}
+	return last, nil
+}
+
+// DisplayValue formats a value for human-readable output, used by the REPL.
+func DisplayValue(v Value) string { return v.Display() }
 
 // SetPort marks the CLI-provided port. It overrides any port set by the
 // program's `server { port: ... }` block so `mx run --port 3000` always wins.
