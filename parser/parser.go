@@ -102,6 +102,16 @@ func (p *Parser) parseStmt() (Stmt, error) {
 		return p.parseIf()
 	case lexer.TokenLoop:
 		return p.parseLoop()
+	case lexer.TokenWhile:
+		return p.parseWhile()
+	case lexer.TokenBreak:
+		tok := p.advance()
+		p.match(lexer.TokenSemicolon)
+		return &BreakStmt{pos: mkPos(tok)}, nil
+	case lexer.TokenContinue:
+		tok := p.advance()
+		p.match(lexer.TokenSemicolon)
+		return &ContinueStmt{pos: mkPos(tok)}, nil
 	case lexer.TokenTry:
 		return p.parseTry()
 	case lexer.TokenReturn:
@@ -352,6 +362,25 @@ func (p *Parser) parseLoop() (Stmt, error) {
 	return &LoopStmt{pos: mkPos(tok), Iterable: iter, Var: varName.Lexeme, Body: body}, nil
 }
 
+func (p *Parser) parseWhile() (Stmt, error) {
+	tok := p.advance()
+	hadParen := p.match(lexer.TokenLParen)
+	cond, err := p.parseExpr()
+	if err != nil {
+		return nil, err
+	}
+	if hadParen {
+		if _, err := p.expect(lexer.TokenRParen, "to close `while` condition"); err != nil {
+			return nil, err
+		}
+	}
+	body, err := p.parseBlock()
+	if err != nil {
+		return nil, err
+	}
+	return &WhileStmt{pos: mkPos(tok), Cond: cond, Body: body}, nil
+}
+
 func (p *Parser) parseTry() (Stmt, error) {
 	tok := p.advance()
 	tryBody, err := p.parseBlock()
@@ -388,9 +417,10 @@ func (p *Parser) parseReturn() (Stmt, error) {
 	// or another statement-starting keyword that can't begin an expression.
 	if !p.check(lexer.TokenRBrace) && !p.check(lexer.TokenSemicolon) && !p.isAtEnd() {
 		switch p.cur().Type {
-		case lexer.TokenLet, lexer.TokenIf, lexer.TokenLoop,
+		case lexer.TokenLet, lexer.TokenIf, lexer.TokenLoop, lexer.TokenWhile,
 			lexer.TokenRoute, lexer.TokenServer, lexer.TokenMiddleware,
-			lexer.TokenUse, lexer.TokenTry, lexer.TokenReturn, lexer.TokenImport:
+			lexer.TokenUse, lexer.TokenTry, lexer.TokenReturn, lexer.TokenImport,
+			lexer.TokenBreak, lexer.TokenContinue:
 			// no value — these tokens can't start an expression.
 		default:
 			val, err := p.parseExpr()

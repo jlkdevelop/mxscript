@@ -37,6 +37,9 @@ const (
 	TokenNull
 	TokenImport
 	TokenExport
+	TokenWhile
+	TokenBreak
+	TokenContinue
 
 	TokenLBrace
 	TokenRBrace
@@ -89,6 +92,9 @@ var tokenNames = map[TokenType]string{
 	TokenNull:       "null",
 	TokenImport:     "import",
 	TokenExport:     "export",
+	TokenWhile:      "while",
+	TokenBreak:      "break",
+	TokenContinue:   "continue",
 	TokenLBrace:     "{",
 	TokenRBrace:     "}",
 	TokenLParen:     "(",
@@ -142,6 +148,9 @@ var keywords = map[string]TokenType{
 	"null":       TokenNull,
 	"import":     TokenImport,
 	"export":     TokenExport,
+	"while":      TokenWhile,
+	"break":      TokenBreak,
+	"continue":   TokenContinue,
 }
 
 type Token struct {

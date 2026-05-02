@@ -115,6 +115,25 @@ type LoopStmt struct {
 
 func (*LoopStmt) stmtNode() {}
 
+// WhileStmt is `while (cond) { ... }`.
+type WhileStmt struct {
+	pos
+	Cond Expr
+	Body []Stmt
+}
+
+func (*WhileStmt) stmtNode() {}
+
+// BreakStmt exits the nearest enclosing loop.
+type BreakStmt struct{ pos }
+
+func (*BreakStmt) stmtNode() {}
+
+// ContinueStmt jumps to the next iteration of the nearest enclosing loop.
+type ContinueStmt struct{ pos }
+
+func (*ContinueStmt) stmtNode() {}
+
 type TryStmt struct {
 	pos
 	Try      []Stmt

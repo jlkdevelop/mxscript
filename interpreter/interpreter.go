@@ -219,6 +219,14 @@ type returnSignal struct{ Value Value }
 
 func (r *returnSignal) Error() string { return "return" }
 
+type breakSignal struct{}
+
+func (*breakSignal) Error() string { return "break" }
+
+type continueSignal struct{}
+
+func (*continueSignal) Error() string { return "continue" }
+
 // MXError is a structured runtime error with file/line context.
 type MXError struct {
 	Message string
@@ -346,6 +354,12 @@ func (i *Interpreter) execStmt(s parser.Stmt, env *Env) error {
 		return i.execIf(n, env)
 	case *parser.LoopStmt:
 		return i.execLoop(n, env)
+	case *parser.WhileStmt:
+		return i.execWhile(n, env)
+	case *parser.BreakStmt:
+		return &breakSignal{}
+	case *parser.ContinueStmt:
+		return &continueSignal{}
 	case *parser.TryStmt:
 		return i.execTry(n, env)
 	case *parser.ReturnStmt:
@@ -498,36 +512,78 @@ func (i *Interpreter) execLoop(n *parser.LoopStmt, env *Env) error {
 	if err != nil {
 		return err
 	}
+	runIteration := func(item Value) (stop bool, err error) {
+		scope := NewEnv(env)
+		scope.Set(n.Var, item)
+		if err := i.execBlock(n.Body, scope); err != nil {
+			if _, ok := err.(*breakSignal); ok {
+				return true, nil
+			}
+			if _, ok := err.(*continueSignal); ok {
+				return false, nil
+			}
+			return false, err
+		}
+		return false, nil
+	}
 	switch iter.Kind {
 	case KindArray:
 		for _, item := range iter.Array {
-			scope := NewEnv(env)
-			scope.Set(n.Var, item)
-			if err := i.execBlock(n.Body, scope); err != nil {
+			stop, err := runIteration(item)
+			if err != nil {
 				return err
+			}
+			if stop {
+				return nil
 			}
 		}
 	case KindNumber:
 		count := int(iter.Number)
 		for k := 0; k < count; k++ {
-			scope := NewEnv(env)
-			scope.Set(n.Var, NumberValue(float64(k)))
-			if err := i.execBlock(n.Body, scope); err != nil {
+			stop, err := runIteration(NumberValue(float64(k)))
+			if err != nil {
 				return err
+			}
+			if stop {
+				return nil
 			}
 		}
 	case KindObject:
 		for _, key := range iter.Object.Keys {
-			scope := NewEnv(env)
-			scope.Set(n.Var, StringValue(key))
-			if err := i.execBlock(n.Body, scope); err != nil {
+			stop, err := runIteration(StringValue(key))
+			if err != nil {
 				return err
+			}
+			if stop {
+				return nil
 			}
 		}
 	default:
 		return runtimeErrorf(n, "cannot loop over %s", iter.typeName())
 	}
 	return nil
+}
+
+func (i *Interpreter) execWhile(n *parser.WhileStmt, env *Env) error {
+	for {
+		c, err := i.evalExpr(n.Cond, env)
+		if err != nil {
+			return err
+		}
+		if !c.IsTruthy() {
+			return nil
+		}
+		scope := NewEnv(env)
+		if err := i.execBlock(n.Body, scope); err != nil {
+			if _, ok := err.(*breakSignal); ok {
+				return nil
+			}
+			if _, ok := err.(*continueSignal); ok {
+				continue
+			}
+			return err
+		}
+	}
 }
 
 func (i *Interpreter) execTry(n *parser.TryStmt, env *Env) error {
