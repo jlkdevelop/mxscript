@@ -1357,15 +1357,13 @@ func (i *Interpreter) execTry(n *parser.TryStmt, env *Env) error {
 }
 
 func (i *Interpreter) execImport(n *parser.ImportStmt, env *Env) error {
-	// Phase: minimal local-file import. Resolve relative to the running file.
+	// Resolve path relative to the current file.
 	path := n.Path
-	if i.file != "" {
-		if !strings.HasPrefix(path, "/") {
-			dir := i.file
-			if idx := strings.LastIndex(dir, "/"); idx >= 0 {
-				dir = dir[:idx]
-				path = dir + "/" + path
-			}
+	if i.file != "" && !strings.HasPrefix(path, "/") {
+		dir := i.file
+		if idx := strings.LastIndex(dir, "/"); idx >= 0 {
+			dir = dir[:idx]
+			path = dir + "/" + path
 		}
 	}
 	src, err := os.ReadFile(path)
@@ -1376,11 +1374,41 @@ func (i *Interpreter) execImport(n *parser.ImportStmt, env *Env) error {
 	if err != nil {
 		return runtimeErrorf(n, "import %q: %v", n.Path, err)
 	}
+
+	if n.As == "" {
+		// Flat import — execute the file's statements in the current scope.
+		for _, s := range prog.Stmts {
+			if err := i.execStmt(s, env); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	// Namespaced import — execute in a private env hung off globals,
+	// then expose top-level let / fn bindings as a module object.
+	private := NewEnv(i.globals)
 	for _, s := range prog.Stmts {
-		if err := i.execStmt(s, env); err != nil {
+		if err := i.execStmt(s, private); err != nil {
 			return err
 		}
 	}
+	module := NewOrderedMap()
+	for _, s := range prog.Stmts {
+		switch decl := s.(type) {
+		case *parser.LetStmt:
+			if decl.Name != "" {
+				if v, ok := private.Get(decl.Name); ok {
+					module.Set(decl.Name, v)
+				}
+			}
+		case *parser.FnDecl:
+			if v, ok := private.Get(decl.Name); ok {
+				module.Set(decl.Name, v)
+			}
+		}
+	}
+	env.Set(n.As, ObjectValue(module))
 	return nil
 }
 

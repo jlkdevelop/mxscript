@@ -182,9 +182,19 @@ type ExprStmt struct {
 
 func (*ExprStmt) stmtNode() {}
 
+// ImportStmt represents either a flat import (everything dumped into the
+// current scope) or a namespaced one:
+//
+//	import "./utils.mx"             // everything top-level becomes globally available
+//	import "./auth.mx" as auth      // exports become auth.login(), auth.signup()
+//
+// When `As` is non-empty, only top-level `let` bindings and `fn`
+// declarations from the imported file are exposed, and they're hung
+// off an object named `As` in the importing file's scope.
 type ImportStmt struct {
 	pos
 	Path string
+	As   string // empty for flat import, non-empty for namespaced
 }
 
 func (*ImportStmt) stmtNode() {}

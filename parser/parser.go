@@ -624,8 +624,18 @@ func (p *Parser) parseImport() (Stmt, error) {
 	if err != nil {
 		return nil, err
 	}
+	stmt := &ImportStmt{pos: mkPos(tok), Path: path.Lexeme}
+	// Optional `as <ident>` for namespaced imports.
+	if p.check(lexer.TokenAs) {
+		p.advance()
+		alias, err := p.expect(lexer.TokenIdent, "as namespace alias after `as`")
+		if err != nil {
+			return nil, err
+		}
+		stmt.As = alias.Lexeme
+	}
 	p.match(lexer.TokenSemicolon)
-	return &ImportStmt{pos: mkPos(tok), Path: path.Lexeme}, nil
+	return stmt, nil
 }
 
 func (p *Parser) parseExprStmt() (Stmt, error) {

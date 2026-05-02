@@ -8,6 +8,8 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.42.0** (2026-05-02)
+  - Namespaced imports: `import "./auth.mx" as auth` — proper module encapsulation
 - **v0.41.0** (2026-05-02)
   - `mx new <template>` — five opinionated starters: api / todo / chat / ai / blog
 - **v0.40.0** (2026-05-02)

@@ -4,6 +4,34 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.42.0] — 2026-05-02
+
+### Added
+- **Namespaced imports** — `import "./auth.mx" as auth` exposes the
+  module's top-level `let` / `fn` declarations as members of an
+  `auth` object. Module-internal state stays encapsulated:
+
+  ```mx
+  // auth.mx
+  let secret = "internal-only"
+  fn make_token(user_id) { return jwt.sign({ sub: user_id }, secret) }
+  fn verify(token)       { return jwt.verify(token, secret) }
+  ```
+
+  ```mx
+  // app.mx
+  import "./auth.mx" as auth
+
+  let t = auth.make_token("jassim")  // works
+  let c = auth.verify(t)              // works
+  // print(secret)                    // error: undefined — encapsulated
+  ```
+
+  The flat form (`import "./utils.mx"` with no `as`) still works and
+  dumps every top-level binding into the importing scope.
+
+[0.42.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.42.0
+
 ## [0.41.0] — 2026-05-02
 
 ### Added

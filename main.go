@@ -47,7 +47,7 @@ func (rr *replReader) ReadLine() (string, bool) {
 // Version is bumped at release time. Override at build with:
 //
 //	go build -ldflags "-X main.Version=v0.2.0"
-var Version = "v0.41.0"
+var Version = "v0.42.0"
 
 const (
 	cReset  = "\033[0m"
@@ -1037,10 +1037,10 @@ var projectTemplates = map[string]projectTemplate{
 		Description: "Full-stack todo API with KV persistence + JWT auth",
 		Hint:        "  Set JWT_SECRET in .env and POST /login with { username, password }.",
 		Files: map[string]string{
-			"app.mx":         starterTodoApp,
-			".env.example":   "JWT_SECRET=replace-me-with-something-long\n",
-			".gitignore":     ".env\n*.bin\n*.db\n",
-			"README.md":      "# Todo API\n\nBuilt with [MX Script](https://mxscript.com).\n\n```\ncp .env.example .env\nmx run app.mx\n```\n",
+			"app.mx":       starterTodoApp,
+			".env.example": "JWT_SECRET=replace-me-with-something-long\n",
+			".gitignore":   ".env\n*.bin\n*.db\n",
+			"README.md":    "# Todo API\n\nBuilt with [MX Script](https://mxscript.com).\n\n```\ncp .env.example .env\nmx run app.mx\n```\n",
 		},
 	},
 	"chat": {
