@@ -4,6 +4,40 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.0] — 2026-05-02
+
+### Added
+- **`mx test`**: a built-in test runner. Files matching `*_test.mx` are
+  discovered automatically; functions whose names start with `test_`
+  are executed in isolation (each in a fresh interpreter). Exits non-zero
+  on any failure, so it slots straight into CI.
+
+  ```mx
+  fn test_addition() { assert_eq(1 + 1, 2) }
+  fn test_split()    { assert(len(split("a,b", ",")) == 2) }
+  ```
+
+  ```
+  $ mx test
+  examples/foo_test.mx
+    ✓ addition
+    ✓ split
+  ✓ 2 passed in 3ms
+  ```
+- **Assertions**: `assert(cond, msg?)` and `assert_eq(a, b, msg?)`. The
+  `_eq` variant prints both values on failure for an instant diff.
+- **URL helpers**: `parse_url(s)` returns a structured object with
+  `scheme`, `host`, `port`, `path`, `query`, `fragment`, `raw`.
+  Plus `url_encode` / `url_decode`.
+- **Date helpers**: `parse_date(s, layout?)` parses to Unix milliseconds;
+  `format_date(ms, layout?)` is the inverse. Both default to RFC 3339
+  and accept any Go reference layout.
+- **`retry(fn, attempts, delay_ms?)`**: call `fn()` up to `attempts`
+  times, returning the first non-error result. Useful for flaky
+  third-party API calls.
+
+[0.6.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.6.0
+
 ## [0.5.0] — 2026-05-02
 
 ### Added

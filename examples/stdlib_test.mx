@@ -1,0 +1,70 @@
+// stdlib_test.mx — exercise core stdlib functions via mx test.
+//   $ mx test examples/
+
+fn test_strings() {
+  assert_eq(upper("mx"), "MX")
+  assert_eq(lower("HELLO"), "hello")
+  assert_eq(trim("  hi  "), "hi")
+  assert(contains("hello world", "world"))
+  assert_eq(len(split("a,b,c", ",")), 3)
+  assert_eq(replace("foo bar foo", "foo", "baz"), "baz bar baz")
+}
+
+fn test_arrays() {
+  let a = [1, 2, 3]
+  assert_eq(len(a), 3)
+  assert_eq(map(a, fn(n) { return n * 2 }), [2, 4, 6])
+  assert_eq(filter(a, fn(n) { return n > 1 }), [2, 3])
+  assert_eq(find(a, fn(n) { return n == 2 }), 2)
+  assert(contains(a, 3))
+}
+
+fn test_spread() {
+  assert_eq([...[1, 2], ...[3, 4]], [1, 2, 3, 4])
+  let merged = { ...{ a: 1 }, ...{ b: 2 } }
+  assert_eq(merged.a, 1)
+  assert_eq(merged.b, 2)
+}
+
+fn test_optional_chaining() {
+  let user = { name: "Jassim" }
+  assert_eq(user?.name, "Jassim")
+  assert_eq(user?.profile?.city, null)
+  assert_eq(user?.profile?.city ?? "unknown", "unknown")
+}
+
+fn test_pattern_matching() {
+  fn label(n) {
+    return match n {
+      1 => "one"
+      2 => "two"
+      _ => "other"
+    }
+  }
+  assert_eq(label(1), "one")
+  assert_eq(label(99), "other")
+}
+
+fn test_jwt_roundtrip() {
+  let secret = "test-secret"
+  let token = jwt.sign({ sub: "tester" }, secret)
+  let claims = jwt.verify(token, secret)
+  assert_eq(claims.sub, "tester")
+  assert_eq(jwt.verify(token, "wrong"), null)
+}
+
+fn test_regex() {
+  assert(re_match("\\d+", "abc 123"))
+  assert_eq(re_find_all("\\d+", "1 2 3"), ["1", "2", "3"])
+  assert_eq(re_replace("\\s+", "a   b", "_"), "a_b")
+}
+
+fn test_url_parse() {
+  let u = parse_url("https://example.com:8080/path?key=value#frag")
+  assert_eq(u.scheme, "https")
+  assert_eq(u.host, "example.com")
+  assert_eq(u.port, "8080")
+  assert_eq(u.path, "/path")
+  assert_eq(u.query.key, "value")
+  assert_eq(u.fragment, "frag")
+}

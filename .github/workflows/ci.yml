@@ -42,3 +42,6 @@ jobs:
 
       - name: smoke test (hello.mx)
         run: ./mx run examples/hello.mx
+
+      - name: mx test
+        run: ./mx test examples/

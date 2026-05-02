@@ -105,6 +105,7 @@ mx run <file.mx>               # run an MX Script program
 mx run <file.mx> --port 3000   # override the server port
 mx run <file.mx> --watch       # restart on file changes (hot reload)
 mx run <file.mx> --debug       # print tokens and AST
+mx test [path]                 # run *_test.mx files
 mx init [name]                 # scaffold a new project
 mx build <file.mx>             # parse & validate without running
 mx repl                        # interactive REPL
@@ -212,7 +213,10 @@ route POST /admin {
 | Crypto     | `hash_sha256`, `hmac_sha256`, `base64_encode`, `base64_decode`, `uuid` |
 | Regex      | `re_match`, `re_find`, `re_find_all`, `re_replace` |
 | JWT        | `jwt.sign(payload, secret)`, `jwt.verify(token, secret)` |
-| Time       | `now()`, `now_iso()`, `sleep(ms)` |
+| URL        | `parse_url`, `url_encode`, `url_decode` |
+| Time       | `now()`, `now_iso()`, `sleep(ms)`, `parse_date`, `format_date` |
+| Test       | `assert(cond, msg?)`, `assert_eq(a, b, msg?)` |
+| Misc       | `retry(fn, attempts, delay_ms?)` |
 | AI         | `ai.complete(prompt)`, `ai.embed(text)` |
 
 See [docs/api.md](docs/api.md) for the full reference.

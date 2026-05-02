@@ -8,6 +8,11 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.6.0** (2026-05-02)
+  - `mx test` — built-in test runner with `assert` / `assert_eq` builtins
+  - URL parsing (`parse_url`, `url_encode`, `url_decode`)
+  - Date helpers (`parse_date`, `format_date`)
+  - `retry(fn, attempts, delay_ms?)` for flaky calls
 - **v0.5.0** (2026-05-02)
   - Pattern matching with `match` / `=>`
   - JWT (HS256) — `jwt.sign` / `jwt.verify` (honours `exp`)
@@ -43,7 +48,7 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ---
 
-## Next up (v0.6 candidates)
+## Next up (v0.7 candidates)
 
 These are the things we'd most like help with.
 
@@ -51,6 +56,8 @@ These are the things we'd most like help with.
 - [ ] **WebSocket routes** — `route WS /chat { ... }`.
 - [ ] **SQLite driver** — `db.query("select ...")` as a built-in (pure-Go driver).
 - [ ] **Sessions helper** — signed-cookie sessions backed by JWT.
+- [ ] **`try` as expression** — `let x = try { ... } catch { ... }`.
+- [ ] **Coverage** — `mx test --cover`.
 - [ ] **GitHub linguist PR** — once we hit the public-adoption threshold.
 - [ ] **VS Code Marketplace listing** — publish the extension.
 
