@@ -8,6 +8,9 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.59.0** (2026-05-02)
+  - `notify.slack` / `notify.discord` / `notify.email` — one-line outbound notifications with `{ ok, status, error }` results
+  - String messages auto-shape (`text` for Slack, `content` for Discord); object messages pass through for rich payloads
 - **v0.58.0** (2026-05-02)
   - `magic_link.create` / `verify` — signed, stateless, time-limited tokens for passwordless email sign-in
   - `totp.generate` / `verify` / `uri` — RFC 6238 TOTP (Google Authenticator compatible) with ±drift windows

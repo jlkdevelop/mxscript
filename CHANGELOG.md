@@ -4,6 +4,54 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.59.0] — 2026-05-02
+
+### Added — `notify.*` namespace (Slack / Discord / Resend email)
+
+- **One-line outbound posts to the three channels every SaaS app
+  wires up first.** No more copy-pasted curl recipes:
+
+  ```mx
+  notify.slack(env("SLACK_WEBHOOK"), "✅ deploy succeeded")
+  notify.discord(env("DISCORD_WEBHOOK"), "build broke 💥")
+  notify.email("user@example.com", "Verify your email",
+    "<p>Click <a href='${link}'>here</a></p>", { html: true })
+  ```
+
+- **Rich-payload pass-through.** String messages take the simple
+  shape (`{text:...}` for Slack, `{content:...}` for Discord); object
+  messages pass through unchanged so users can send blocks, embeds,
+  attachments, custom usernames, avatar URLs, etc.
+
+  ```mx
+  notify.discord(env("DISCORD_WEBHOOK"), {
+    content: "release v1.2.3",
+    embeds: [{ title: "Changelog", description: "...", color: 65280 }]
+  })
+  ```
+
+- **Standard result shape.** Every `notify.*` returns
+  `{ ok, status, error }` so handlers stay declarative — no
+  try/catch boilerplate around outbound calls:
+
+  ```mx
+  let r = notify.slack(env("SLACK_WEBHOOK"), "deploy")
+  if (!r.ok) { log.warn("slack failed:", r.error) }
+  ```
+
+- **Resend email integration.** `notify.email` posts to the Resend
+  API (`RESEND_API_KEY`). Optional `from` (defaults to `RESEND_FROM`
+  env or `noreply@example.com`), `html` (vs plain text), `reply_to`,
+  `cc`, `bcc`.
+
+- **6 wire-format tests** using `httptest` so the body shape, headers
+  (auth bearer, content-type), and error-result construction are all
+  asserted without making real network calls.
+
+- **`examples/notify.mx`** — three routes, three channels, drop-in.
+
+[0.59.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.59.0
+
 ## [0.58.0] — 2026-05-02
 
 ### Added — passwordless auth (`magic_link.*` + `totp.*`)

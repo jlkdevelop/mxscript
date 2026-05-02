@@ -378,6 +378,17 @@ func registerBuiltins(i *Interpreter) {
 	g.Set("webhooks", ObjectValue(webhooks))
 	builtinNames["webhooks"] = true
 
+	// --- Notify namespace ---
+	// notify.* are one-shot outbound posts to common SaaS endpoints.
+	// Each returns { ok, status, error } so callers can stay
+	// declarative ("if (!r.ok) ...") without try/catch boilerplate.
+	notifyNS := NewOrderedMap()
+	notifyNS.Set("slack", FunctionValue(&Function{Name: "notify.slack", Native: builtinNotifySlack}))
+	notifyNS.Set("discord", FunctionValue(&Function{Name: "notify.discord", Native: builtinNotifyDiscord}))
+	notifyNS.Set("email", FunctionValue(&Function{Name: "notify.email", Native: builtinNotifyEmail}))
+	g.Set("notify", ObjectValue(notifyNS))
+	builtinNames["notify"] = true
+
 	// --- AI namespace ---
 	ai := NewOrderedMap()
 	ai.Set("complete", FunctionValue(&Function{Name: "ai.complete", Native: builtinAIComplete}))

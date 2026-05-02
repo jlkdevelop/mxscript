@@ -1,0 +1,44 @@
+// notify.mx — outbound notifications to Slack, Discord, and email
+// in three lines each. Set the relevant env vars and `mx run notify.mx`.
+//
+//   SLACK_WEBHOOK    — incoming-webhook URL from your Slack app
+//   DISCORD_WEBHOOK  — channel webhook URL
+//   RESEND_API_KEY   — get one free at resend.com/api-keys
+//   RESEND_FROM      — verified sender (default noreply@example.com)
+
+server { port: 8080 }
+
+// ---- Slack: alert when a deploy lands ---------------------------
+route POST /deploys {
+  let r = notify.slack(env("SLACK_WEBHOOK"),
+    "✅ deploy ${request.body.app} v${request.body.version}")
+  if (!r.ok) {
+    println("slack failed:", r.error)
+  }
+  return json({ logged: true })
+}
+
+// ---- Discord: rich embed with build status ----------------------
+route POST /builds {
+  notify.discord(env("DISCORD_WEBHOOK"), {
+    content: "build ${request.body.id}",
+    embeds: [{
+      title: request.body.commit,
+      description: request.body.summary,
+      color: 65280
+    }]
+  })
+  return json({ logged: true })
+}
+
+// ---- Email: send a verification message via Resend --------------
+route POST /signup {
+  let token = magic_link.create(request.body.email, env("APP_SECRET"))
+  let link = "https://app.example.com/verify?t=" + token
+  notify.email(request.body.email, "Verify your email",
+    "<p>Click to verify: <a href='" + link + "'>" + link + "</a></p>",
+    { html: true })
+  return json({ sent: true })
+}
+
+println("notify demo at http://localhost:8080/")
