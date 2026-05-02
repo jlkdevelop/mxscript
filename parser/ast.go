@@ -302,6 +302,6 @@ type MatchExpr struct {
 func (*MatchExpr) exprNode() {}
 
 type MatchArm struct {
-	Pattern  Expr // nil means wildcard `_`
-	Body     Expr
+	Pattern Expr // nil means wildcard `_`
+	Body    Expr
 }

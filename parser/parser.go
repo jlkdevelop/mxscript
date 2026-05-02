@@ -742,7 +742,7 @@ func (p *Parser) parsePrimary() (Expr, error) {
 
 // parseMatch parses `match <expr> { pat => expr, pat => expr, _ => expr }`.
 func (p *Parser) parseMatch() (Expr, error) {
-	tok := p.advance() // consume `match`
+	tok := p.advance()          // consume `match`
 	subject, err := p.parseOr() // parse below ?? to keep `match` standalone-friendly
 	if err != nil {
 		return nil, err
