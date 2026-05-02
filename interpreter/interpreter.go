@@ -811,6 +811,31 @@ func (i *Interpreter) HasRoutes() bool {
 	return len(i.routes) > 0 || len(i.statics) > 0
 }
 
+// RouteInfo is a public summary of one route — the shape returned by
+// the `mx routes` CLI and any embedder that wants to introspect routes
+// without poking at unexported fields.
+type RouteInfo struct {
+	Method      string
+	Path        string
+	Middlewares []string
+}
+
+// RouteSummary returns one entry per registered route, in registration
+// order. Static mounts and middleware declarations are not included —
+// only `route VERB /path { ... }` and shorthand `get /x { ... }`.
+func (i *Interpreter) RouteSummary() []RouteInfo {
+	out := make([]RouteInfo, 0, len(i.routes))
+	for _, r := range i.routes {
+		path := "/" + strings.Join(r.PathParts, "/")
+		if path == "/" && len(r.PathParts) == 1 && r.PathParts[0] == "" {
+			path = "/"
+		}
+		mws := append([]string(nil), r.Middlewares...)
+		out = append(out, RouteInfo{Method: r.Method, Path: path, Middlewares: mws})
+	}
+	return out
+}
+
 // Run executes a parsed program. If the program declared any routes,
 // it boots an HTTP server and blocks; otherwise it returns once the
 // top-level statements have all been evaluated.

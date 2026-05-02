@@ -54,7 +54,7 @@ func (rr *replReader) ReadLine() (string, bool) {
 // Version is bumped at release time. Override at build with:
 //
 //	go build -ldflags "-X main.Version=v0.2.0"
-var Version = "v0.56.0"
+var Version = "v0.57.0"
 
 const (
 	cReset  = "\033[0m"
@@ -1257,6 +1257,63 @@ func cmdDoctor(args []string) {
 		fmt.Printf("  %s%s%s %-20s %s\n", mark, cReset, "", c.Name, detail)
 	}
 	fmt.Println()
+}
+
+// ===== mx routes =====
+
+// cmdRoutes parses and loads a program without booting the HTTP server,
+// then prints every registered route. Useful for: understanding an
+// unfamiliar codebase, generating an OpenAPI spec offline, or asserting
+// in CI that the route set hasn't changed unexpectedly.
+//
+//	$ mx routes app.mx
+//	GET    /                         [auth, log]
+//	POST   /api/v1/users
+//	GET    /api/v1/users/:id         [auth]
+//	5 routes
+func cmdRoutes(args []string) {
+	if len(args) < 1 {
+		fatal("usage: mx routes <file.mx>")
+	}
+	file := args[0]
+	src, err := os.ReadFile(file)
+	if err != nil {
+		fatal("cannot read %s: %v", file, err)
+	}
+	tokens, err := lexer.New(string(src)).Tokenize()
+	if err != nil {
+		printError(file, err)
+		os.Exit(1)
+	}
+	prog, err := parser.New(tokens).Parse()
+	if err != nil {
+		printError(file, err)
+		os.Exit(1)
+	}
+	interp := interpreter.New()
+	interp.SetFile(file)
+	if err := interp.Load(prog); err != nil {
+		printError(file, err)
+		os.Exit(1)
+	}
+
+	routes := interp.RouteSummary()
+	if len(routes) == 0 {
+		fmt.Printf("%sno routes registered in %s%s\n", cYellow, file, cReset)
+		return
+	}
+	for _, r := range routes {
+		mw := ""
+		if len(r.Middlewares) > 0 {
+			mw = fmt.Sprintf("  %s[%s]%s", cGray, strings.Join(r.Middlewares, ", "), cReset)
+		}
+		fmt.Printf("  %s%-7s%s %s%s\n", cCyan, r.Method, cReset, r.Path, mw)
+	}
+	noun := "routes"
+	if len(routes) == 1 {
+		noun = "route"
+	}
+	fmt.Printf("\n%s%d %s%s\n", cBold, len(routes), noun, cReset)
 }
 
 // ===== mx new =====

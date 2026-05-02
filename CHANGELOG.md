@@ -4,6 +4,64 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.57.0] — 2026-05-02
+
+### Added — `cron()` scheduler + `mx routes` introspection
+
+- **`cron(spec, fn)` runs a function on a Vixie-cron schedule.** Standard
+  five-field expression: `"minute hour day-of-month month day-of-week"`.
+
+  ```mx
+  cron("0 9 * * 1-5", fn() { send_daily_digest() })  // 09:00 weekdays
+  cron("*/5 * * * *", fn() { sweep_jobs() })         // every 5 minutes
+  cron("0 0 1 * *",  fn() { roll_invoices() })       // 1st of each month
+  ```
+
+  Each field supports `*`, single values, lists (`1,5,10`), ranges
+  (`1-10`), and steps (`*/5`, `9-17/2`). Day-of-month and day-of-week
+  combine with OR semantics when both are restricted, matching Vixie
+  cron's documented behavior. Returns a stop function:
+
+  ```mx
+  let stop = cron("* * * * *", fn() { ... })
+  stop()
+  ```
+
+- **Bitmask-based matching.** Each field compiles to a `uint64` of
+  allowed values, so the per-minute "does this fire?" check is one
+  AND per field — fast enough that `Next()` walks minute-by-minute up
+  to four years for pathological specs (`* * 29 2 *`).
+
+- **8 cron tests** including the Vixie OR semantics, step expressions,
+  range expressions, month-boundary `Next()`, and parser rejection of
+  every documented invalid form.
+
+- **`mx routes <file.mx>` lists every route a program registers**
+  without booting the HTTP server. Loads, runs initialization, and
+  prints the route table — useful for understanding an unfamiliar
+  codebase, generating an OpenAPI spec offline, or asserting in CI
+  that the route surface hasn't changed.
+
+  ```bash
+  $ mx routes examples/webhooks.mx
+    POST    /webhooks/stripe
+    POST    /webhooks/github
+    POST    /webhooks/svix
+    POST    /webhooks/shopify
+    POST    /webhooks/slack
+
+  5 routes
+  ```
+
+- **Public `Interpreter.RouteSummary() []RouteInfo`.** Embedders that
+  want to build their own admin / dev tooling can introspect routes
+  without poking at unexported fields.
+
+- **`examples/cron.mx`** — heartbeat, weekday digest, monthly billing,
+  weekly cleanup. Drop-in starter.
+
+[0.57.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.57.0
+
 ## [0.56.0] — 2026-05-02
 
 ### Added — `webhooks.*` namespace

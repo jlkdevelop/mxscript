@@ -1,0 +1,39 @@
+// cron.mx — Vixie-cron scheduling for daily / weekly / hourly tasks.
+// Run: mx run examples/cron.mx
+// Watch the console — handlers print as they fire.
+
+server {
+  port: 8080
+}
+
+// ---- Five-minute heartbeat ------------------------------------------
+cron("*/5 * * * *", fn() {
+  println("[", now_iso(), "] heartbeat")
+})
+
+// ---- Weekday digest at 09:00 ---------------------------------------
+cron("0 9 * * 1-5", fn() {
+  println("[", now_iso(), "] sending weekday digest...")
+  // email.send(...) — your real handler here
+})
+
+// ---- Roll invoices at midnight on the 1st of each month ------------
+cron("0 0 1 * *", fn() {
+  println("[", now_iso(), "] rolling monthly invoices...")
+})
+
+// ---- Every Sunday at 06:30 — weekly cleanup ------------------------
+cron("30 6 * * 0", fn() {
+  println("[", now_iso(), "] weekly cleanup")
+})
+
+// Cron returns a stop function — call it to cancel a schedule:
+//
+//   let stop = cron("* * * * *", fn() { ... })
+//   stop()
+
+route GET / {
+  return text("cron jobs scheduled — watch the server console")
+}
+
+println("scheduler running, server up at http://localhost:8080/")

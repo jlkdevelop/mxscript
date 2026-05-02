@@ -8,6 +8,10 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.57.0** (2026-05-02)
+  - `cron(spec, fn)` builtin — Vixie 5-field cron with `*/step`, ranges, lists, OR semantics for DOM/DOW
+  - `mx routes <file.mx>` lists every registered route without booting the HTTP server
+  - Public `interpreter.RouteSummary() []RouteInfo` for embedders
 - **v0.56.0** (2026-05-02)
   - `webhooks.*` namespace: `verify_stripe`, `verify_github`, `verify_svix`, `verify_shopify`, `verify_slack`
   - Stripe & Slack reject stale timestamps (default 300s tolerance) — defends against replay

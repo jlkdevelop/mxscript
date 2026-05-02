@@ -279,6 +279,7 @@ func registerBuiltins(i *Interpreter) {
 	def("every", builtinEvery)
 	def("after", builtinAfter)
 	def("debounce", builtinDebounce)
+	def("cron", builtinCron)
 	def("render", builtinRender)
 	def("render_string", builtinRenderString)
 
@@ -4606,6 +4607,61 @@ func builtinEvery(i *Interpreter, args []Value) (Value, error) {
 			}
 		}
 	}()
+	cancel := &Function{Name: "stop", Native: func(_ *Interpreter, _ []Value) (Value, error) {
+		select {
+		case <-stop: // already closed
+		default:
+			close(stop)
+		}
+		return NullValue(), nil
+	}}
+	return FunctionValue(cancel), nil
+}
+
+// cron(spec, fn) runs fn() on a Vixie-cron schedule. Spec is the
+// standard 5-field expression: "minute hour day-of-month month day-of-week".
+// Returns a stop function that cancels the schedule.
+//
+//	let stop = cron("0 9 * * 1-5", fn() { send_daily_digest() })  // 09:00 weekdays
+//	cron("*/5 * * * *", fn() { sweep_jobs() })                    // every 5 minutes
+//	cron("0 0 1 * *",  fn() { roll_invoices() })                  // 1st of each month
+//
+// Errors in fn are logged but do not stop the schedule. The goroutine
+// exits cleanly when stop() is called.
+func builtinCron(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 2 || args[0].Kind != KindString || args[1].Kind != KindFunction {
+		return Value{}, fmt.Errorf("cron(spec, fn) requires (string, function)")
+	}
+	schedule, err := ParseCron(args[0].String)
+	if err != nil {
+		return Value{}, err
+	}
+	fn := args[1].Function
+	stop := make(chan struct{})
+
+	go func() {
+		for {
+			next := schedule.Next(time.Now())
+			if next.IsZero() {
+				fmt.Fprintf(os.Stderr, "[mx cron] schedule %q never fires within 4 years\n", args[0].String)
+				return
+			}
+			delay := time.Until(next)
+			if delay < 0 {
+				delay = 0
+			}
+			select {
+			case <-stop:
+				return
+			case <-time.After(delay):
+				if _, err := i.callFunction(nil, fn, nil); err != nil {
+					fmt.Fprintf(os.Stderr, "[mx cron %q] %v\n", args[0].String, err)
+					// Don't return — let the next firing have a chance.
+				}
+			}
+		}
+	}()
+
 	cancel := &Function{Name: "stop", Native: func(_ *Interpreter, _ []Value) (Value, error) {
 		select {
 		case <-stop: // already closed

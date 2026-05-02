@@ -500,6 +500,7 @@ var builtinDocs = map[string]builtinDoc{
 	"sign_cookie":    {"sign_cookie(secret, value) -> string", "Tamper-evident signed cookie value."},
 	"verify_cookie":  {"verify_cookie(secret, signed) -> string|null", ""},
 	"verify_webhook":           {"verify_webhook(secret, body, sig, scheme?) -> bool", "scheme: hex/base64/github/stripe."},
+	"cron":                     {"cron(spec, fn) -> stop_fn", "Vixie cron schedule. 5 fields: minute hour dom month dow. Returns a function that cancels the schedule."},
 	"webhooks.verify_stripe":   {"webhooks.verify_stripe(payload, signature_header, secret, tolerance?) -> bool", "Stripe-Signature with timestamp tolerance (default 300s)."},
 	"webhooks.verify_github":   {"webhooks.verify_github(payload, signature, secret) -> bool", "X-Hub-Signature-256 = sha256=<hex>."},
 	"webhooks.verify_svix":     {"webhooks.verify_svix(payload, msg_id, timestamp, signature, secret) -> bool", "Svix / Resend / Clerk / Discord."},
