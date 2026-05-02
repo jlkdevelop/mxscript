@@ -22,6 +22,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -142,6 +143,13 @@ func registerBuiltins(i *Interpreter) {
 	def("file_exists", builtinFileExists)
 	def("list_files", builtinListFiles)
 	def("delete_file", builtinDeleteFile)
+
+	// --- KV store (single-file JSON) ---
+	def("kv_get", builtinKVGet)
+	def("kv_set", builtinKVSet)
+	def("kv_delete", builtinKVDelete)
+	def("kv_keys", builtinKVKeys)
+	def("kv_clear", builtinKVClear)
 
 	// --- Crypto / encoding ---
 	def("hash_sha256", builtinHashSHA256)
@@ -1355,6 +1363,154 @@ func builtinDeleteFile(i *Interpreter, args []Value) (Value, error) {
 		return Value{}, err
 	}
 	return NullValue(), nil
+}
+
+// ===== KV store =====
+//
+// A tiny JSON-file-backed key/value store. Each operation reads, mutates,
+// and writes the file atomically (write to a tmp file, then rename). Good
+// enough for prototypes / hobby apps; not a replacement for SQLite at
+// scale.
+
+var kvLock sync.Mutex
+
+func loadKV(path string) (*OrderedMap, error) {
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return NewOrderedMap(), nil
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) == 0 {
+		return NewOrderedMap(), nil
+	}
+	v, err := jsonDecode(raw)
+	if err != nil {
+		return nil, err
+	}
+	if v.Kind != KindObject {
+		return nil, fmt.Errorf("kv file %s does not contain a JSON object", path)
+	}
+	return v.Object, nil
+}
+
+func saveKV(path string, om *OrderedMap) error {
+	b, err := jsonEncode(ObjectValue(om))
+	if err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, b, 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
+func builtinKVGet(i *Interpreter, args []Value) (Value, error) {
+	path, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	key, err := stringArg(args, 1)
+	if err != nil {
+		return Value{}, err
+	}
+	kvLock.Lock()
+	defer kvLock.Unlock()
+	om, err := loadKV(path)
+	if err != nil {
+		return Value{}, err
+	}
+	v, ok := om.Get(key)
+	if !ok {
+		return NullValue(), nil
+	}
+	return v, nil
+}
+
+func builtinKVSet(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 3 {
+		return Value{}, fmt.Errorf("kv_set(path, key, value) requires 3 arguments")
+	}
+	path, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	key, err := stringArg(args, 1)
+	if err != nil {
+		return Value{}, err
+	}
+	kvLock.Lock()
+	defer kvLock.Unlock()
+	om, err := loadKV(path)
+	if err != nil {
+		return Value{}, err
+	}
+	om.Set(key, args[2])
+	if err := saveKV(path, om); err != nil {
+		return Value{}, err
+	}
+	return args[2], nil
+}
+
+func builtinKVDelete(i *Interpreter, args []Value) (Value, error) {
+	path, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	key, err := stringArg(args, 1)
+	if err != nil {
+		return Value{}, err
+	}
+	kvLock.Lock()
+	defer kvLock.Unlock()
+	om, err := loadKV(path)
+	if err != nil {
+		return Value{}, err
+	}
+	if _, ok := om.Get(key); !ok {
+		return BoolValue(false), nil
+	}
+	delete(om.Values, key)
+	for k, v := range om.Keys {
+		if v == key {
+			om.Keys = append(om.Keys[:k], om.Keys[k+1:]...)
+			break
+		}
+	}
+	if err := saveKV(path, om); err != nil {
+		return Value{}, err
+	}
+	return BoolValue(true), nil
+}
+
+func builtinKVKeys(i *Interpreter, args []Value) (Value, error) {
+	path, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	kvLock.Lock()
+	defer kvLock.Unlock()
+	om, err := loadKV(path)
+	if err != nil {
+		return Value{}, err
+	}
+	out := make([]Value, len(om.Keys))
+	for k, key := range om.Keys {
+		out[k] = StringValue(key)
+	}
+	return ArrayValue(out), nil
+}
+
+func builtinKVClear(i *Interpreter, args []Value) (Value, error) {
+	path, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	kvLock.Lock()
+	defer kvLock.Unlock()
+	return NullValue(), saveKV(path, NewOrderedMap())
 }
 
 // ===== Crypto / encoding =====
