@@ -220,6 +220,7 @@ route POST /admin {
 | URL        | `parse_url`, `url_encode`, `url_decode` |
 | Time       | `now()`, `now_iso()`, `sleep(ms)`, `parse_date`, `format_date` |
 | Test       | `assert(cond, msg?)`, `assert_eq(a, b, msg?)` |
+| KV store   | `kv_get`, `kv_set`, `kv_delete`, `kv_keys`, `kv_clear` |
 | Misc       | `retry(fn, attempts, delay_ms?)` |
 | AI         | `ai.complete(prompt)`, `ai.embed(text)` |
 

@@ -4,6 +4,29 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.11.0] — 2026-05-02
+
+### Added
+- **JSON KV store** — five new built-ins for single-file persistence:
+  `kv_get`, `kv_set`, `kv_delete`, `kv_keys`, `kv_clear`. Each operation
+  reads → mutates → writes-to-tmp → renames atomically, with a process-wide
+  mutex so concurrent route handlers can't corrupt the file.
+
+  ```mx
+  let DB = "./data.json"
+  kv_set(DB, "user:${id}", { name: "Jassim" })
+  let user = kv_get(DB, "user:${id}")
+  ```
+- **`examples/todo_api.mx`** — a 100-line full-stack showcase. JWT auth,
+  CORS, access logging, KV persistence, validation. Use it as a
+  starting point or a feature tour.
+
+### Notes
+The KV store is fine for prototypes and hobby apps. For production
+scale, SQLite via `database/sql` remains on the v0.x roadmap.
+
+[0.11.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.11.0
+
 ## [0.10.0] — 2026-05-02
 
 ### Added

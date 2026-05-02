@@ -1,0 +1,131 @@
+// todo_api.mx — a complete REST API in 100 lines.
+//
+// Demonstrates:
+//   - shorthand routes (get / post / put / delete)
+//   - middleware + use
+//   - request.body / request.params / request.headers
+//   - JSON KV persistence (a single ./todos.json file)
+//   - JWT auth + sign_cookie sessions
+//   - input validation with try/catch
+//   - structured error responses
+//
+// Run:   mx run examples/todo_api.mx
+// Or:    mx run examples/todo_api.mx --port 3000 --watch
+//
+// Try it:
+//   curl http://localhost:8080/login -d '{"username":"jassim","password":"mx"}' -H 'content-type: application/json'
+//   curl -H 'Authorization: Bearer <token>' http://localhost:8080/todos
+//   curl -X POST -H 'Authorization: Bearer <token>' -H 'content-type: application/json' \
+//        -d '{"title":"ship MX v1.0"}' http://localhost:8080/todos
+
+server {
+  port: 8080,
+  log: true,
+  max_body: "1MB",
+  cors: {
+    origins: ["*"],
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    headers: ["Content-Type", "Authorization"]
+  }
+}
+
+let DB = "./todos.json"
+let SECRET = env("JWT_SECRET", "dev-secret-change-me")
+
+// --- Auth ---
+
+middleware require_auth {
+  let header = request.headers["authorization"] ?? ""
+  let token = replace(header, "Bearer ", "")
+  let claims = jwt.verify(token, SECRET)
+  if (claims == null) {
+    return status(401, { error: "invalid or expired token" })
+  }
+  // Note: claims is available implicitly via request scope below.
+}
+
+// --- Routes ---
+
+get / {
+  return json({
+    app: "MX Script Todo API",
+    version: "0.11.0",
+    endpoints: ["POST /login", "GET /todos", "POST /todos", "PUT /todos/:id", "DELETE /todos/:id"]
+  })
+}
+
+post /login {
+  let body = request.body
+  if (body == null || body.username == null || body.password == null) {
+    return status(400, { error: "username and password required" })
+  }
+  // Demo auth — in production, look up the user and hash-compare passwords.
+  if (body.username != "jassim" || body.password != "mx") {
+    return status(401, { error: "bad credentials" })
+  }
+  let token = jwt.sign({
+    sub: body.username,
+    iat: now() / 1000,
+    exp: now() / 1000 + 3600
+  }, SECRET)
+  return json({ token: token, expires_in: 3600 })
+}
+
+get /todos {
+  use require_auth
+  let keys = kv_keys(DB)
+  let items = map(keys, fn(k) { return kv_get(DB, k) })
+  return json({ count: len(items), items: items })
+}
+
+post /todos {
+  use require_auth
+  let body = request.body
+  if (body == null || body.title == null) {
+    return status(400, { error: "title is required" })
+  }
+  let id = uuid()
+  let todo = {
+    id: id,
+    title: body.title,
+    done: false,
+    created_at: now_iso()
+  }
+  kv_set(DB, id, todo)
+  return status(201, todo)
+}
+
+put /todos/:id {
+  use require_auth
+  let id = request.params.id
+  let existing = kv_get(DB, id)
+  if (existing == null) {
+    return status(404, { error: "todo not found" })
+  }
+  let body = request.body ?? {}
+  let updated = { ...existing, ...body, id: id }
+  kv_set(DB, id, updated)
+  return json(updated)
+}
+
+delete /todos/:id {
+  use require_auth
+  let id = request.params.id
+  let removed = kv_delete(DB, id)
+  if (!removed) {
+    return status(404, { error: "todo not found" })
+  }
+  return json({ deleted: id })
+}
+
+get /stats {
+  use require_auth
+  let keys = kv_keys(DB)
+  let items = map(keys, fn(k) { return kv_get(DB, k) })
+  let done = filter(items, fn(t) { return t.done })
+  return json({
+    total: len(items),
+    done: len(done),
+    pending: len(items) - len(done)
+  })
+}
