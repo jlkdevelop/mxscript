@@ -6,6 +6,7 @@ package interpreter
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,14 +16,20 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/jlkdevelop/mxscript/parser"
 )
+
+func contextWithTimeout(d time.Duration) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), d)
+}
 
 // ===== Runtime values =====
 
@@ -294,8 +301,13 @@ type Interpreter struct {
 	useGlobal   []string
 	statics     []staticMount
 
-	serverPort int
-	serverHost string
+	serverPort         int
+	serverHost         string
+	serverTLSCert      string
+	serverTLSKey       string
+	serverReadTimeout  time.Duration
+	serverWriteTimeout time.Duration
+	serverMaxBody      int64
 
 	cliPort int // when > 0, overrides anything the program sets in its `server` block.
 	file    string
@@ -308,10 +320,13 @@ type Interpreter struct {
 // New constructs an interpreter pre-populated with all built-ins.
 func New() *Interpreter {
 	i := &Interpreter{
-		globals:     NewEnv(nil),
-		middlewares: map[string]*parser.MiddlewareDecl{},
-		serverPort:  8080,
-		serverHost:  "0.0.0.0",
+		globals:            NewEnv(nil),
+		middlewares:        map[string]*parser.MiddlewareDecl{},
+		serverPort:         8080,
+		serverHost:         "0.0.0.0",
+		serverReadTimeout:  10 * time.Second,
+		serverWriteTimeout: 30 * time.Second,
+		serverMaxBody:      10 * 1024 * 1024, // 10 MiB default
 	}
 	registerBuiltins(i)
 	return i
@@ -538,9 +553,81 @@ func (i *Interpreter) execServer(n *parser.ServerBlock, env *Env) error {
 				return runtimeErrorf(n, "server.host must be a string")
 			}
 			i.serverHost = v.String
+		case "read_timeout":
+			d, err := durationFromValue(v)
+			if err != nil {
+				return runtimeErrorf(n, "server.read_timeout: %v", err)
+			}
+			i.serverReadTimeout = d
+		case "write_timeout":
+			d, err := durationFromValue(v)
+			if err != nil {
+				return runtimeErrorf(n, "server.write_timeout: %v", err)
+			}
+			i.serverWriteTimeout = d
+		case "max_body":
+			n2, err := byteSizeFromValue(v)
+			if err != nil {
+				return runtimeErrorf(n, "server.max_body: %v", err)
+			}
+			i.serverMaxBody = n2
+		case "tls":
+			if v.Kind != KindObject {
+				return runtimeErrorf(n, "server.tls must be an object with cert and key paths")
+			}
+			if cert, ok := v.Object.Get("cert"); ok && cert.Kind == KindString {
+				i.serverTLSCert = cert.String
+			}
+			if key, ok := v.Object.Get("key"); ok && key.Kind == KindString {
+				i.serverTLSKey = key.String
+			}
 		}
 	}
 	return nil
+}
+
+// durationFromValue accepts either a number of milliseconds or a string
+// like "10s", "500ms", "2m" (passed straight to time.ParseDuration).
+func durationFromValue(v Value) (time.Duration, error) {
+	switch v.Kind {
+	case KindNumber:
+		return time.Duration(v.Number) * time.Millisecond, nil
+	case KindString:
+		return time.ParseDuration(v.String)
+	}
+	return 0, fmt.Errorf("expected number (ms) or string like \"5s\", got %s", v.typeName())
+}
+
+// byteSizeFromValue accepts a raw number (bytes) or a string like
+// "10MB" / "512KB" / "1GB". Bytes only — no fractional sizes.
+func byteSizeFromValue(v Value) (int64, error) {
+	switch v.Kind {
+	case KindNumber:
+		return int64(v.Number), nil
+	case KindString:
+		s := strings.ToUpper(strings.TrimSpace(v.String))
+		multiplier := int64(1)
+		switch {
+		case strings.HasSuffix(s, "GB"):
+			multiplier = 1024 * 1024 * 1024
+			s = strings.TrimSuffix(s, "GB")
+		case strings.HasSuffix(s, "MB"):
+			multiplier = 1024 * 1024
+			s = strings.TrimSuffix(s, "MB")
+		case strings.HasSuffix(s, "KB"):
+			multiplier = 1024
+			s = strings.TrimSuffix(s, "KB")
+		case strings.HasSuffix(s, "B"):
+			s = strings.TrimSuffix(s, "B")
+		}
+		s = strings.TrimSpace(s)
+		n, err := strconv.ParseInt(s, 10, 64)
+		if err != nil {
+			return 0, fmt.Errorf("invalid byte size %q", v.String)
+		}
+		return n * multiplier, nil
+	}
+	return 0, fmt.Errorf("expected number or size string, got %s", v.typeName())
 }
 
 func (i *Interpreter) registerRoute(n *parser.RouteDecl) {
@@ -1192,7 +1279,12 @@ func (i *Interpreter) startServer() error {
 		displayHost = "localhost"
 	}
 
-	fmt.Printf("\n\033[1;32m🚀 MX Script\033[0m running at \033[1;36mhttp://%s:%d\033[0m\n\n", displayHost, i.serverPort)
+	scheme := "http"
+	if i.serverTLSCert != "" && i.serverTLSKey != "" {
+		scheme = "https"
+	}
+
+	fmt.Printf("\n\033[1;32m🚀 MX Script\033[0m running at \033[1;36m%s://%s:%d\033[0m\n\n", scheme, displayHost, i.serverPort)
 	if len(i.routes) > 0 {
 		fmt.Println("\033[1;33mRoutes:\033[0m")
 		for _, r := range i.routes {
@@ -1211,8 +1303,66 @@ func (i *Interpreter) startServer() error {
 	}
 	fmt.Println()
 
-	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 10 * time.Second}
-	return srv.ListenAndServe()
+	// Wrap the mux in a max-body limiter so unbounded requests can't OOM
+	// us. We reject with 413 *before* dispatching to the route — both via
+	// the Content-Length header (cheap) and a MaxBytesReader (catches
+	// chunked uploads).
+	handler := http.Handler(mux)
+	if i.serverMaxBody > 0 {
+		maxBody := i.serverMaxBody
+		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.ContentLength > maxBody {
+				http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+				return
+			}
+			if r.Body != nil {
+				r.Body = http.MaxBytesReader(w, r.Body, maxBody)
+			}
+			mux.ServeHTTP(w, r)
+		})
+	}
+
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       i.serverReadTimeout,
+		WriteTimeout:      i.serverWriteTimeout,
+	}
+
+	// Graceful shutdown on SIGINT / SIGTERM. We give in-flight requests
+	// up to 10 seconds to finish before forcefully closing.
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+
+	errCh := make(chan error, 1)
+	go func() {
+		var err error
+		if scheme == "https" {
+			err = srv.ListenAndServeTLS(i.serverTLSCert, i.serverTLSKey)
+		} else {
+			err = srv.ListenAndServe()
+		}
+		if err != nil && err != http.ErrServerClosed {
+			errCh <- err
+		}
+		close(errCh)
+	}()
+
+	select {
+	case sig := <-stop:
+		fmt.Printf("\n\033[1;33m[mx]\033[0m %v received — shutting down gracefully...\n", sig)
+		ctx, cancel := contextWithTimeout(10 * time.Second)
+		defer cancel()
+		if err := srv.Shutdown(ctx); err != nil {
+			fmt.Fprintf(os.Stderr, "shutdown error: %v\n", err)
+			return err
+		}
+		fmt.Printf("\033[1;32m[mx]\033[0m bye\n")
+		return nil
+	case err := <-errCh:
+		return err
+	}
 }
 
 func (i *Interpreter) dispatch(w http.ResponseWriter, r *http.Request) {
