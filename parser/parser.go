@@ -622,9 +622,20 @@ func (p *Parser) parseCall() (Expr, error) {
 			var args []Expr
 			if !p.check(lexer.TokenRParen) {
 				for {
-					a, err := p.parseExpr()
-					if err != nil {
-						return nil, err
+					var a Expr
+					var err error
+					if p.check(lexer.TokenSpread) {
+						spreadTok := p.advance()
+						inner, err := p.parseExpr()
+						if err != nil {
+							return nil, err
+						}
+						a = &SpreadExpr{pos: mkPos(spreadTok), Inner: inner}
+					} else {
+						a, err = p.parseExpr()
+						if err != nil {
+							return nil, err
+						}
 					}
 					args = append(args, a)
 					if !p.match(lexer.TokenComma) {
@@ -723,9 +734,20 @@ func (p *Parser) parseArrayLit() (Expr, error) {
 	var elems []Expr
 	if !p.check(lexer.TokenRBracket) {
 		for {
-			e, err := p.parseExpr()
-			if err != nil {
-				return nil, err
+			var e Expr
+			var err error
+			if p.check(lexer.TokenSpread) {
+				spreadTok := p.advance()
+				inner, err := p.parseExpr()
+				if err != nil {
+					return nil, err
+				}
+				e = &SpreadExpr{pos: mkPos(spreadTok), Inner: inner}
+			} else {
+				e, err = p.parseExpr()
+				if err != nil {
+					return nil, err
+				}
 			}
 			elems = append(elems, e)
 			if !p.match(lexer.TokenComma) {
@@ -747,6 +769,24 @@ func (p *Parser) parseObjectLit() (Expr, error) {
 	var pairs []ObjectPair
 	if !p.check(lexer.TokenRBrace) {
 		for {
+			// Spread: { ...source }. Encoded as a pair with empty Key so
+			// the interpreter knows to expand Value as an object.
+			if p.check(lexer.TokenSpread) {
+				p.advance()
+				v, err := p.parseExpr()
+				if err != nil {
+					return nil, err
+				}
+				pairs = append(pairs, ObjectPair{Key: "", Value: v})
+				if !p.match(lexer.TokenComma) {
+					break
+				}
+				if p.check(lexer.TokenRBrace) {
+					break
+				}
+				continue
+			}
+
 			var key string
 			switch p.cur().Type {
 			case lexer.TokenIdent:

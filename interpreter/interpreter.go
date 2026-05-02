@@ -717,6 +717,17 @@ func (i *Interpreter) evalExpr(e parser.Expr, env *Env) (Value, error) {
 	case *parser.ArrayLit:
 		var arr []Value
 		for _, el := range n.Elements {
+			if sp, ok := el.(*parser.SpreadExpr); ok {
+				inner, err := i.evalExpr(sp.Inner, env)
+				if err != nil {
+					return Value{}, err
+				}
+				if inner.Kind != KindArray {
+					return Value{}, runtimeErrorf(sp, "cannot spread %s into an array", inner.typeName())
+				}
+				arr = append(arr, inner.Array...)
+				continue
+			}
 			v, err := i.evalExpr(el, env)
 			if err != nil {
 				return Value{}, err
@@ -727,6 +738,20 @@ func (i *Interpreter) evalExpr(e parser.Expr, env *Env) (Value, error) {
 	case *parser.ObjectLit:
 		om := NewOrderedMap()
 		for _, p := range n.Pairs {
+			// Empty key marks a `...source` spread.
+			if p.Key == "" {
+				inner, err := i.evalExpr(p.Value, env)
+				if err != nil {
+					return Value{}, err
+				}
+				if inner.Kind != KindObject {
+					return Value{}, runtimeErrorf(n, "cannot spread %s into an object", inner.typeName())
+				}
+				for _, k := range inner.Object.Keys {
+					om.Set(k, inner.Object.Values[k])
+				}
+				continue
+			}
 			v, err := i.evalExpr(p.Value, env)
 			if err != nil {
 				return Value{}, err
@@ -984,6 +1009,17 @@ func (i *Interpreter) evalCall(n *parser.CallExpr, env *Env) (Value, error) {
 	}
 	var args []Value
 	for _, a := range n.Args {
+		if sp, ok := a.(*parser.SpreadExpr); ok {
+			inner, err := i.evalExpr(sp.Inner, env)
+			if err != nil {
+				return Value{}, err
+			}
+			if inner.Kind != KindArray {
+				return Value{}, runtimeErrorf(sp, "cannot spread %s as call arguments", inner.typeName())
+			}
+			args = append(args, inner.Array...)
+			continue
+		}
 		v, err := i.evalExpr(a, env)
 		if err != nil {
 			return Value{}, err

@@ -278,3 +278,12 @@ type FnLit struct {
 }
 
 func (*FnLit) exprNode() {}
+
+// SpreadExpr wraps an expression that should be expanded inline inside
+// an array literal, an object literal, or a call argument list.
+type SpreadExpr struct {
+	pos
+	Inner Expr
+}
+
+func (*SpreadExpr) exprNode() {}

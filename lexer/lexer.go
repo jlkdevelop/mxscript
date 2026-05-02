@@ -67,6 +67,7 @@ const (
 	TokenBang
 	TokenAnd
 	TokenOr
+	TokenSpread
 )
 
 var tokenNames = map[TokenType]string{
@@ -122,6 +123,7 @@ var tokenNames = map[TokenType]string{
 	TokenBang:       "!",
 	TokenAnd:        "&&",
 	TokenOr:         "||",
+	TokenSpread:     "...",
 }
 
 func (t TokenType) String() string {
@@ -425,6 +427,14 @@ func (l *Lexer) readString(quote rune, line, col int) error {
 
 func (l *Lexer) readSymbol(line, col int) error {
 	c := l.src[l.pos]
+	// Three-dot spread operator.
+	if c == '.' && l.peek(1) == '.' && l.peek(2) == '.' {
+		l.advance()
+		l.advance()
+		l.advance()
+		l.tokens = append(l.tokens, Token{Type: TokenSpread, Lexeme: "...", Line: line, Col: col})
+		return nil
+	}
 	two := ""
 	if l.pos+1 < len(l.src) {
 		two = string(c) + string(l.src[l.pos+1])
