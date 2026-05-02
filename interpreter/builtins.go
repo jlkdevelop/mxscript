@@ -5,6 +5,7 @@ package interpreter
 
 import (
 	"bytes"
+	"crypto/hmac"
 	crand "crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -113,6 +114,7 @@ func registerBuiltins(i *Interpreter) {
 
 	// --- Crypto / encoding ---
 	def("hash_sha256", builtinHashSHA256)
+	def("hmac_sha256", builtinHmacSHA256)
 	def("base64_encode", builtinBase64Encode)
 	def("base64_decode", builtinBase64Decode)
 	def("uuid", builtinUUID)
@@ -126,6 +128,13 @@ func registerBuiltins(i *Interpreter) {
 	ai.Set("embed", FunctionValue(&Function{Name: "ai.embed", Native: builtinAIEmbed}))
 	g.Set("ai", ObjectValue(ai))
 	builtinNames["ai"] = true
+
+	// --- JWT namespace ---
+	jwt := NewOrderedMap()
+	jwt.Set("sign", FunctionValue(&Function{Name: "jwt.sign", Native: builtinJWTSign}))
+	jwt.Set("verify", FunctionValue(&Function{Name: "jwt.verify", Native: builtinJWTVerify}))
+	g.Set("jwt", ObjectValue(jwt))
+	builtinNames["jwt"] = true
 }
 
 // ===== Output =====
@@ -974,6 +983,93 @@ func builtinUUID(i *Interpreter, args []Value) (Value, error) {
 
 func builtinNowISO(i *Interpreter, args []Value) (Value, error) {
 	return StringValue(time.Now().UTC().Format(time.RFC3339Nano)), nil
+}
+
+func builtinHmacSHA256(i *Interpreter, args []Value) (Value, error) {
+	secret, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	msg, err := stringArg(args, 1)
+	if err != nil {
+		return Value{}, err
+	}
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(msg))
+	return StringValue(hex.EncodeToString(mac.Sum(nil))), nil
+}
+
+// ===== JWT (HS256) =====
+
+func builtinJWTSign(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 2 {
+		return Value{}, fmt.Errorf("jwt.sign(payload, secret) requires 2 arguments")
+	}
+	if args[0].Kind != KindObject {
+		return Value{}, fmt.Errorf("jwt.sign payload must be an object")
+	}
+	if args[1].Kind != KindString {
+		return Value{}, fmt.Errorf("jwt.sign secret must be a string")
+	}
+
+	header := []byte(`{"alg":"HS256","typ":"JWT"}`)
+	payloadBytes, err := jsonEncode(args[0])
+	if err != nil {
+		return Value{}, err
+	}
+	enc := base64.RawURLEncoding
+	signingInput := enc.EncodeToString(header) + "." + enc.EncodeToString(payloadBytes)
+	mac := hmac.New(sha256.New, []byte(args[1].String))
+	mac.Write([]byte(signingInput))
+	sig := enc.EncodeToString(mac.Sum(nil))
+	return StringValue(signingInput + "." + sig), nil
+}
+
+func builtinJWTVerify(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 2 {
+		return Value{}, fmt.Errorf("jwt.verify(token, secret) requires 2 arguments")
+	}
+	if args[0].Kind != KindString || args[1].Kind != KindString {
+		return Value{}, fmt.Errorf("jwt.verify expects (string, string)")
+	}
+	token := args[0].String
+	secret := args[1].String
+
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return NullValue(), nil
+	}
+	enc := base64.RawURLEncoding
+
+	// Verify signature.
+	signingInput := parts[0] + "." + parts[1]
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(signingInput))
+	expected := mac.Sum(nil)
+	got, err := enc.DecodeString(parts[2])
+	if err != nil || !hmac.Equal(expected, got) {
+		return NullValue(), nil
+	}
+
+	// Decode payload.
+	payloadBytes, err := enc.DecodeString(parts[1])
+	if err != nil {
+		return NullValue(), nil
+	}
+	v, err := jsonDecode(payloadBytes)
+	if err != nil {
+		return NullValue(), nil
+	}
+
+	// Honor the `exp` claim if present (Unix seconds).
+	if v.Kind == KindObject {
+		if exp, ok := v.Object.Get("exp"); ok && exp.Kind == KindNumber {
+			if int64(exp.Number) < time.Now().Unix() {
+				return NullValue(), nil
+			}
+		}
+	}
+	return v, nil
 }
 
 // ===== AI namespace =====
