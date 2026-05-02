@@ -69,7 +69,7 @@ release:
   header: |
     # MX Script {{ .Tag }}
 
-    Founded by [Jassim Alkharafi](https://github.com/jlkdevelop).
+    Created by [Jassim Alkharafi](https://github.com/jlkdevelop).
 
 # Auto-bump the Homebrew formula on every tag.
 #

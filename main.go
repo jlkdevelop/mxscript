@@ -98,6 +98,8 @@ func main() {
 		cmdUpgrade(args)
 	case "doctor":
 		cmdDoctor(args)
+	case "routes":
+		cmdRoutes(args)
 	case "version", "-v", "--version":
 		fmt.Println("MX Script", Version)
 	case "help", "-h", "--help":
@@ -127,6 +129,7 @@ func printHelp() {
 	fmt.Println("  lsp                   Run the Language Server (JSON-RPC over stdio)")
 	fmt.Println("  upgrade               Self-update to the latest release")
 	fmt.Println("  doctor                Diagnose env / install / runtime")
+	fmt.Println("  routes <file.mx>      List every route the program registers (no server boot)")
 	fmt.Println("  version               Print version and exit")
 	fmt.Println("  help                  Show this help")
 	fmt.Println()
@@ -135,7 +138,7 @@ func printHelp() {
 	fmt.Println("  --watch               Restart on file changes (hot reload)")
 	fmt.Println("  --debug               Print tokens, AST, and verbose errors")
 	fmt.Println()
-	fmt.Printf("%sFounded by Jassim Alkharafi · github.com/jlkdevelop/mxscript%s\n", cGray, cReset)
+	fmt.Printf("%sCreated by Jassim Alkharafi · github.com/jlkdevelop/mxscript%s\n", cGray, cReset)
 }
 
 // ===== mx run =====

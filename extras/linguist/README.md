@@ -42,7 +42,7 @@ The PR template asks: who maintains the language? Who uses it? Link to docs / sp
 
 Answers we'll have ready:
 
-- **Maintainer:** Jassim Alkharafi (founder), [@jlkdevelop](https://github.com/jlkdevelop)
+- **Maintainer:** Jassim Alkharafi (creator), [@jlkdevelop](https://github.com/jlkdevelop)
 - **Homepage:** https://mxscript.com
 - **Repo:** https://github.com/jlkdevelop/mxscript
 - **Docs:** https://github.com/jlkdevelop/mxscript/tree/main/docs

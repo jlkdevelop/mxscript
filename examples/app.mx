@@ -13,7 +13,7 @@ server {
 let appName = "MX Script Demo"
 
 let users = [
-  { id: 1, name: "Jassim Alkharafi", role: "Founder" },
+  { id: 1, name: "Jassim Alkharafi", role: "Creator" },
   { id: 2, name: "Ada Lovelace", role: "Computing Pioneer" }
 ]
 

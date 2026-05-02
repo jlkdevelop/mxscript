@@ -442,4 +442,4 @@ go test ./...
 
 ## Credits
 
-MX Script was created by **Jassim Alkharafi** (founder & lead developer). If MX Script is useful to you, a ⭐ on GitHub goes a long way.
+MX Script was created by **Jassim Alkharafi** (creator & lead developer). If MX Script is useful to you, a ⭐ on GitHub goes a long way.

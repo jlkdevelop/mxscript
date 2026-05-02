@@ -3,7 +3,7 @@
 print("Hello from MX Script!")
 
 let name = "Jassim"
-print("Founder:", name)
+print("Creator:", name)
 
 fn greet(who) {
   return "Hello, " + who

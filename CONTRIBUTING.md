@@ -167,4 +167,4 @@ If something feels off, email the maintainer directly: jlkdevelop@gmail.com.
 
 By contributing to MX Script you agree your contributions will be licensed under the [MIT License](LICENSE), the same license that covers the rest of the project.
 
-— Jassim Alkharafi, founder
+— Jassim Alkharafi, creator

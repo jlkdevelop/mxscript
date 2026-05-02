@@ -2,7 +2,7 @@
 
 Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
-> Founded by [Jassim Alkharafi](https://github.com/jlkdevelop). MX Script is MIT-licensed and built in the open.
+> Created by [Jassim Alkharafi](https://github.com/jlkdevelop). MX Script is MIT-licensed and built in the open.
 
 ---
 
