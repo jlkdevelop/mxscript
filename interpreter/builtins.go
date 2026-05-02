@@ -141,6 +141,8 @@ func registerBuiltins(i *Interpreter) {
 	def("retry", builtinRetry)
 	def("assert", builtinAssert)
 	def("assert_eq", builtinAssertEq)
+	def("sign_cookie", builtinSignCookie)
+	def("verify_cookie", builtinVerifyCookie)
 
 	// --- AI namespace ---
 	ai := NewOrderedMap()
@@ -1297,6 +1299,52 @@ func builtinAssertEq(i *Interpreter, args []Value) (Value, error) {
 		return Value{}, fmt.Errorf("%s — left: %s, right: %s", prefix, args[0].Display(), args[1].Display())
 	}
 	return NullValue(), nil
+}
+
+// sign_cookie(secret, value) returns "value.signature" — a tamper-evident
+// signed string suitable for session cookies. Cheaper than a JWT when you
+// just need integrity.
+func builtinSignCookie(i *Interpreter, args []Value) (Value, error) {
+	secret, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	value, err := stringArg(args, 1)
+	if err != nil {
+		return Value{}, err
+	}
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(value))
+	sig := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+	return StringValue(value + "." + sig), nil
+}
+
+// verify_cookie(secret, signed) returns the original value if the signature
+// is intact, or null if the cookie has been tampered with.
+func builtinVerifyCookie(i *Interpreter, args []Value) (Value, error) {
+	secret, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	signed, err := stringArg(args, 1)
+	if err != nil {
+		return Value{}, err
+	}
+	idx := strings.LastIndex(signed, ".")
+	if idx < 0 {
+		return NullValue(), nil
+	}
+	value := signed[:idx]
+	gotSig, err := base64.RawURLEncoding.DecodeString(signed[idx+1:])
+	if err != nil {
+		return NullValue(), nil
+	}
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(value))
+	if !hmac.Equal(mac.Sum(nil), gotSig) {
+		return NullValue(), nil
+	}
+	return StringValue(value), nil
 }
 
 // retry(fn, attempts, delay_ms?) — call fn() up to `attempts` times,
