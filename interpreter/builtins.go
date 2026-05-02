@@ -171,6 +171,11 @@ func registerBuiltins(i *Interpreter) {
 	def("now_iso", builtinNowISO)
 	def("parse_date", builtinParseDate)
 	def("format_date", builtinFormatDate)
+	def("add_days", builtinAddDays)
+	def("add_hours", builtinAddHours)
+	def("add_minutes", builtinAddMinutes)
+	def("days_between", builtinDaysBetween)
+	def("weekday", builtinWeekday)
 
 	// --- URL helpers ---
 	def("parse_url", builtinParseURL)
@@ -186,6 +191,17 @@ func registerBuiltins(i *Interpreter) {
 	def("every", builtinEvery)
 	def("after", builtinAfter)
 	def("debounce", builtinDebounce)
+	def("render", builtinRender)
+	def("render_string", builtinRenderString)
+
+	// --- Logger namespace ---
+	logNS := NewOrderedMap()
+	logNS.Set("info", FunctionValue(&Function{Name: "log.info", Native: builtinLogInfo}))
+	logNS.Set("warn", FunctionValue(&Function{Name: "log.warn", Native: builtinLogWarn}))
+	logNS.Set("error", FunctionValue(&Function{Name: "log.error", Native: builtinLogError}))
+	logNS.Set("debug", FunctionValue(&Function{Name: "log.debug", Native: builtinLogDebug}))
+	g.Set("log", ObjectValue(logNS))
+	builtinNames["log"] = true
 
 	// --- AI namespace ---
 	ai := NewOrderedMap()
@@ -1917,6 +1933,210 @@ func builtinAssertEq(i *Interpreter, args []Value) (Value, error) {
 		return Value{}, fmt.Errorf("%s — left: %s, right: %s", prefix, args[0].Display(), args[1].Display())
 	}
 	return NullValue(), nil
+}
+
+// render(path, vars?) reads a template file from disk and substitutes
+// any `${expr}` placeholders. Variables come from `vars` (an object) and
+// support dotted access for nested values. Reasonably robust against
+// the most common XSS pitfalls because all substituted values are
+// auto html-escaped — call render_string for raw passthrough.
+func builtinRender(i *Interpreter, args []Value) (Value, error) {
+	path, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	src, err := os.ReadFile(path)
+	if err != nil {
+		return Value{}, err
+	}
+	var vars *OrderedMap
+	if len(args) > 1 && args[1].Kind == KindObject {
+		vars = args[1].Object
+	}
+	out, err := renderTemplate(string(src), vars, true)
+	if err != nil {
+		return Value{}, err
+	}
+	return ResponseValue(&Response{ContentType: "text/html; charset=utf-8", Body: StringValue(out)}), nil
+}
+
+// render_string(template, vars?) is the same as render() but takes the
+// template inline. Returns a plain string — caller decides what to do
+// with it (html(), text(), persistence, etc.).
+func builtinRenderString(i *Interpreter, args []Value) (Value, error) {
+	tmpl, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	var vars *OrderedMap
+	if len(args) > 1 && args[1].Kind == KindObject {
+		vars = args[1].Object
+	}
+	out, err := renderTemplate(tmpl, vars, true)
+	if err != nil {
+		return Value{}, err
+	}
+	return StringValue(out), nil
+}
+
+// renderTemplate replaces `{{ path.expr }}` placeholders with the looked-up
+// value (HTML-escaped if `escape` is true). `{{{ path }}}` is the raw form
+// — no escaping. Templates use `{{` instead of `${` so they don't collide
+// with MX's own string interpolation in the surrounding source.
+func renderTemplate(tmpl string, vars *OrderedMap, escape bool) (string, error) {
+	var b strings.Builder
+	i := 0
+	for i < len(tmpl) {
+		// Triple-brace raw form first.
+		if i+2 < len(tmpl) && tmpl[i] == '{' && tmpl[i+1] == '{' && tmpl[i+2] == '{' {
+			end := strings.Index(tmpl[i+3:], "}}}")
+			if end < 0 {
+				return "", fmt.Errorf("unterminated {{{...}}} in template")
+			}
+			expr := strings.TrimSpace(tmpl[i+3 : i+3+end])
+			val := lookupTemplateVar(vars, expr)
+			b.WriteString(val.Display())
+			i += 3 + end + 3
+			continue
+		}
+		// Standard {{ }} form (HTML-escaped).
+		if i+1 < len(tmpl) && tmpl[i] == '{' && tmpl[i+1] == '{' {
+			end := strings.Index(tmpl[i+2:], "}}")
+			if end < 0 {
+				return "", fmt.Errorf("unterminated {{...}} in template")
+			}
+			expr := strings.TrimSpace(tmpl[i+2 : i+2+end])
+			val := lookupTemplateVar(vars, expr)
+			s := val.Display()
+			if escape {
+				s = htmlEscapeString(s)
+			}
+			b.WriteString(s)
+			i += 2 + end + 2
+			continue
+		}
+		b.WriteByte(tmpl[i])
+		i++
+	}
+	return b.String(), nil
+}
+
+func lookupTemplateVar(vars *OrderedMap, expr string) Value {
+	if vars == nil || expr == "" {
+		return NullValue()
+	}
+	parts := strings.Split(expr, ".")
+	v, ok := vars.Get(parts[0])
+	if !ok {
+		return NullValue()
+	}
+	for _, p := range parts[1:] {
+		if v.Kind != KindObject {
+			return NullValue()
+		}
+		var found bool
+		v, found = v.Object.Get(p)
+		if !found {
+			return NullValue()
+		}
+	}
+	return v
+}
+
+func htmlEscapeString(s string) string {
+	r := strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;", "'", "&#39;")
+	return r.Replace(s)
+}
+
+// ===== Logger =====
+
+func logEmit(level, color string, args []Value) {
+	parts := make([]string, len(args))
+	for k, a := range args {
+		parts[k] = a.Display()
+	}
+	stamp := time.Now().UTC().Format(time.RFC3339)
+	fmt.Fprintf(os.Stderr, "%s%s%s %s%s%s %s\n",
+		"\033[0;90m", stamp, "\033[0m",
+		color, level, "\033[0m",
+		strings.Join(parts, " "))
+}
+
+func builtinLogInfo(i *Interpreter, args []Value) (Value, error) {
+	logEmit("INFO ", "\033[1;36m", args)
+	return NullValue(), nil
+}
+func builtinLogWarn(i *Interpreter, args []Value) (Value, error) {
+	logEmit("WARN ", "\033[1;33m", args)
+	return NullValue(), nil
+}
+func builtinLogError(i *Interpreter, args []Value) (Value, error) {
+	logEmit("ERROR", "\033[1;31m", args)
+	return NullValue(), nil
+}
+func builtinLogDebug(i *Interpreter, args []Value) (Value, error) {
+	logEmit("DEBUG", "\033[0;90m", args)
+	return NullValue(), nil
+}
+
+// ===== Date arithmetic =====
+
+func msToTime(ms float64) time.Time { return time.UnixMilli(int64(ms)).UTC() }
+
+func builtinAddDays(i *Interpreter, args []Value) (Value, error) {
+	ms, err := numberArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	n, err := numberArg(args, 1)
+	if err != nil {
+		return Value{}, err
+	}
+	t := msToTime(ms).AddDate(0, 0, int(n))
+	return NumberValue(float64(t.UnixMilli())), nil
+}
+func builtinAddHours(i *Interpreter, args []Value) (Value, error) {
+	ms, err := numberArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	n, err := numberArg(args, 1)
+	if err != nil {
+		return Value{}, err
+	}
+	t := msToTime(ms).Add(time.Duration(n) * time.Hour)
+	return NumberValue(float64(t.UnixMilli())), nil
+}
+func builtinAddMinutes(i *Interpreter, args []Value) (Value, error) {
+	ms, err := numberArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	n, err := numberArg(args, 1)
+	if err != nil {
+		return Value{}, err
+	}
+	t := msToTime(ms).Add(time.Duration(n) * time.Minute)
+	return NumberValue(float64(t.UnixMilli())), nil
+}
+func builtinDaysBetween(i *Interpreter, args []Value) (Value, error) {
+	a, err := numberArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	b, err := numberArg(args, 1)
+	if err != nil {
+		return Value{}, err
+	}
+	d := msToTime(b).Sub(msToTime(a))
+	return NumberValue(d.Hours() / 24), nil
+}
+func builtinWeekday(i *Interpreter, args []Value) (Value, error) {
+	ms, err := numberArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	return StringValue(msToTime(ms).Weekday().String()), nil
 }
 
 // every(duration, fn) runs fn() in a goroutine every `duration` (number=ms

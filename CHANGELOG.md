@@ -4,6 +4,47 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.14.0] — 2026-05-02
+
+### Added
+- **Templates**: `render(path, vars?)` and `render_string(tmpl, vars?)`.
+  Uses `{{ var.path }}` placeholders (HTML-escaped by default for XSS
+  safety) or `{{{ var.path }}}` for raw passthrough. Triple-brace is the
+  escape hatch when you really want unescaped HTML in.
+
+  ```mx
+  get / {
+    return render("./views/index.html", { user: { name: "Jassim" } })
+  }
+  ```
+- **Structured logger**: `log.info`, `log.warn`, `log.error`, `log.debug`
+  emit RFC 3339 UTC timestamps with colored level tags to stderr.
+- **Date arithmetic**: `add_days`, `add_hours`, `add_minutes`,
+  `days_between`, `weekday`. Operate on Unix milliseconds (the same
+  shape `now()` and `parse_date` return).
+- **Request convenience**: `request.bearer_token` (auto-stripped from
+  `Authorization: Bearer ...`), `request.is_json` (boolean), and
+  `request.ip` (honors `X-Forwarded-For` and `X-Real-IP`).
+- **Vercel adapter** (`mx build --vercel`): generate a deployable Go project
+  from any `.mx` app. Vercel's Go framework preset auto-detects the output
+  and runs it on the platform-provided `$PORT`.
+  ```bash
+  mx build --vercel app.mx
+  git add main.go go.mod vercel.json
+  git commit -m "Deploy via mx build --vercel"
+  git push   # Vercel autodeploys
+  ```
+- **Public embedder API on `Interpreter`**:
+  - `Load(prog *parser.Program) error` — evaluates the program and registers
+    routes/middleware/server config without starting a listener
+  - `Handler() http.Handler` — returns the fully-wrapped HTTP handler
+    (mux + CORS + logging + max-body)
+  - `HasRoutes() bool` — reports whether any routes or static mounts exist
+  These are the building blocks that any host (Vercel, Fly, Cloudflare,
+  in-process tests) can use to mount an MX app inside its own server.
+
+[0.14.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.14.0
+
 ## [0.13.0] — 2026-05-02
 
 ### Added

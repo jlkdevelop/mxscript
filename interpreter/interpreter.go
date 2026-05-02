@@ -31,6 +31,27 @@ func contextWithTimeout(d time.Duration) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), d)
 }
 
+// clientIP extracts the originating client IP, honoring the standard
+// proxy / load-balancer forwarding headers. Falls back to RemoteAddr.
+func clientIP(r *http.Request) string {
+	if v := r.Header.Get("X-Forwarded-For"); v != "" {
+		// Comma-separated; first entry is the original client.
+		if i := strings.Index(v, ","); i >= 0 {
+			return strings.TrimSpace(v[:i])
+		}
+		return strings.TrimSpace(v)
+	}
+	if v := r.Header.Get("X-Real-IP"); v != "" {
+		return v
+	}
+	addr := r.RemoteAddr
+	// Strip the trailing :port if present.
+	if i := strings.LastIndex(addr, ":"); i >= 0 {
+		addr = addr[:i]
+	}
+	return addr
+}
+
 // parseMultipart pulls fields and files out of a multipart/form-data
 // request. Each entry in `files` is { name, content_type, size, content }
 // where content is the raw bytes as a string. Entries in `fields` are
@@ -1864,6 +1885,16 @@ func buildRequestObject(r *http.Request, params map[string]string) Value {
 		cookies.Set(c.Name, StringValue(c.Value))
 	}
 	req.Set("cookies", ObjectValue(cookies))
+
+	// Convenience helpers most apps end up writing themselves.
+	authHeader := r.Header.Get("Authorization")
+	bearer := ""
+	if strings.HasPrefix(authHeader, "Bearer ") {
+		bearer = strings.TrimPrefix(authHeader, "Bearer ")
+	}
+	req.Set("bearer_token", StringValue(bearer))
+	req.Set("is_json", BoolValue(strings.Contains(r.Header.Get("Content-Type"), "application/json")))
+	req.Set("ip", StringValue(clientIP(r)))
 
 	bodyVal := NullValue()
 	filesVal := NullValue()

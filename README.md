@@ -288,6 +288,31 @@ try {
 
 ---
 
+## Deploy to Vercel
+
+MX Script ships a built-in Vercel adapter. From any project with an `app.mx`:
+
+```bash
+mx build --vercel
+git add main.go go.mod vercel.json
+git commit -m "Deploy via mx build --vercel"
+git push   # Vercel autodeploys on push
+```
+
+`mx build --vercel` generates three files at the project root:
+
+| File          | Role                                                                 |
+| ------------- | -------------------------------------------------------------------- |
+| `main.go`     | A 30-line Go entrypoint that `//go:embed`s `app.mx`, lexes/parses/loads it via the interpreter library, and serves the resulting handler on `$PORT`. |
+| `go.mod`      | Pins the mxscript runtime to the version of the CLI that generated the build. |
+| `vercel.json` | Declares Vercel's Go framework preset so the build is detected automatically. |
+
+Vercel does the rest: detects the Go module, compiles the binary, and runs it as a long-running serverless function on Fluid Compute. Your `.mx` source is the source of truth — re-run `mx build --vercel` anytime you upgrade the mx CLI.
+
+> **Embedding MX in your own Go server?** The same building blocks that power the Vercel adapter — `interpreter.Load(prog)`, `interpreter.Handler()`, `interpreter.HasRoutes()` — are public. Drop an MX app into any Go binary that speaks `net/http`.
+
+---
+
 ## Editor support
 
 `.mx` files have full syntax highlighting in VS Code (and any TextMate-compatible editor):

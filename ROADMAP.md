@@ -8,6 +8,13 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.14.0** (2026-05-02)
+  - Templates: `render(path, vars)` / `render_string(tmpl, vars)` with `{{ }}` and `{{{ }}}` placeholders
+  - Structured logger: `log.info` / `log.warn` / `log.error` / `log.debug`
+  - Date arithmetic: `add_days`, `add_hours`, `add_minutes`, `days_between`, `weekday`
+  - Request helpers: `request.bearer_token`, `request.is_json`, `request.ip`
+  - Vercel adapter: `mx build --vercel`
+  - Public embedder API: `Interpreter.Load`, `Interpreter.Handler`, `Interpreter.HasRoutes`
 - **v0.13.0** (2026-05-02)
   - Multipart file uploads via `request.files`
   - Schedulers: `every` / `after` / `debounce`
