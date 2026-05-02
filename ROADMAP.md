@@ -8,6 +8,10 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.4.0** (2026-05-02)
+  - Optional chaining (`?.`) and nullish coalescing (`??`)
+  - Cookies: `request.cookies` (read) and response opts (write)
+  - Pretty JSON via `json_stringify(v, true)`
 - **v0.3.0** (2026-05-02)
   - Static file serving via `static "./public"` directive
   - Spread operator (`...`) for arrays, objects, and call arguments
@@ -33,16 +37,16 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ---
 
-## Next up (v0.4 candidates)
+## Next up (v0.5 candidates)
 
 These are the things we'd most like help with.
 
-- [ ] **Cookies** — `request.cookies` (read) and chainable `cookie()` on responses (write).
 - [ ] **`mx fmt`** — opinionated formatter for `.mx` files.
 - [ ] **WebSocket routes** — `route WS /chat { ... }`.
-- [ ] **SQLite driver** — `db.query("select ...")` as a built-in.
-- [ ] **Optional chaining** — `user?.address?.street`.
+- [ ] **SQLite driver** — `db.query("select ...")` as a built-in (pure-Go driver).
 - [ ] **Pattern matching** — `match value { 1 => "one", _ => "other" }`.
+- [ ] **Sessions** — `session(request)` helper backed by signed cookies.
+- [ ] **JWT** — `jwt.sign(payload)` / `jwt.verify(token)`.
 
 ---
 

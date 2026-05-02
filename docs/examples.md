@@ -84,7 +84,34 @@ route GET /github/:user {
 }
 ```
 
-## 5. AI-powered summariser
+## 5. Login with cookies
+
+```mx
+let users = { jassim: "secret" }
+
+route POST /login {
+  let body = request.body
+  if (users[body.username] == body.password) {
+    let token = uuid()
+    return json({ ok: true }, {
+      cookies: [{ name: "session", value: token,
+                  path: "/", http_only: true,
+                  max_age: 86400, same_site: "Lax" }]
+    })
+  }
+  return status(401, { error: "bad creds" })
+}
+
+route GET /me {
+  let token = request.cookies?.session
+  if (token == null) {
+    return status(401, { error: "not logged in" })
+  }
+  return json({ session: token })
+}
+```
+
+## 6. AI-powered summariser
 
 ```mx
 route POST /summarise {

@@ -848,7 +848,18 @@ func builtinJSONStringify(i *Interpreter, args []Value) (Value, error) {
 	if err != nil {
 		return Value{}, err
 	}
-	return StringValue(string(b)), nil
+	pretty := false
+	if len(args) > 1 && args[1].IsTruthy() {
+		pretty = true
+	}
+	if !pretty {
+		return StringValue(string(b)), nil
+	}
+	var buf bytes.Buffer
+	if err := json.Indent(&buf, b, "", "  "); err != nil {
+		return Value{}, err
+	}
+	return StringValue(buf.String()), nil
 }
 
 // ===== File I/O =====

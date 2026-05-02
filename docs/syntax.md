@@ -180,17 +180,35 @@ Inside a route body, `request` is auto-injected:
 | `request.headers`  | object  | Lower-cased header names              |
 | `request.query`    | object  | Query string params                   |
 | `request.params`   | object  | Path params (`:id`)                   |
+| `request.cookies`  | object  | Name → value, parsed from `Cookie`    |
 | `request.body`     | varies  | Auto-parsed JSON, form, or raw string |
 
 ### Response helpers
 
-| Function               | Returns                                 |
-|------------------------|-----------------------------------------|
-| `json(value)`          | JSON response (`application/json`)      |
-| `text(value)`          | Plain text response                     |
-| `html(value)`          | HTML response                           |
-| `status(code, body)`   | Custom status with body                 |
-| `redirect(url, code?)` | 302 redirect (or supplied code)         |
+| Function                     | Returns                                 |
+|------------------------------|-----------------------------------------|
+| `json(value, opts?)`         | JSON response (`application/json`)      |
+| `text(value, opts?)`         | Plain text response                     |
+| `html(value, opts?)`         | HTML response                           |
+| `status(code, body?, opts?)` | Custom status with body                 |
+| `redirect(url, code?)`       | 302 redirect (or supplied code)         |
+
+`opts` may include:
+
+| Key       | Type    | Notes                                          |
+|-----------|---------|------------------------------------------------|
+| `cookies` | array   | Cookie objects (see below)                     |
+| `headers` | object  | Extra response headers                         |
+
+A cookie object:
+
+```mx
+{ name: "session", value: "abc123",
+  path: "/", domain: "example.com",
+  max_age: 3600,
+  http_only: true, secure: true,
+  same_site: "Lax" }   // "Strict" / "Lax" / "None"
+```
 
 ## Middleware
 
@@ -213,6 +231,26 @@ route GET /admin {
 ```
 
 A middleware that `return`s a value short-circuits the request — the route body is skipped.
+
+## Optional chaining
+
+`?.` short-circuits a member access if the receiver is `null`:
+
+```mx
+let user = { name: "Jassim" }
+print(user?.profile?.city)   // null — never throws
+```
+
+## Nullish coalescing
+
+`??` falls back only when the left side is `null`:
+
+```mx
+let name = config.name ?? "anonymous"
+let port = num(env("PORT")) ?? 8080
+```
+
+`??` is different from `||`: `0 || "x"` returns `"x"`, but `0 ?? "x"` returns `0`.
 
 ## Spread operator
 

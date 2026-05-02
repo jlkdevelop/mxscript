@@ -4,6 +4,32 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] — 2026-05-02
+
+### Added
+- **Optional chaining** `?.`: `user?.profile?.city` returns `null` if any
+  link in the chain is `null`, instead of throwing.
+- **Nullish coalescing** `??`: `name ?? "anonymous"` falls back only on
+  `null` (unlike `||`, which falls through on every falsy value such as
+  `0` or empty string).
+- **Cookies**:
+  - Read: `request.cookies` is an object of `name -> value`, populated
+    from the `Cookie` header on every request.
+  - Write: `json` / `text` / `html` / `status` accept an optional trailing
+    opts object with `cookies` and `headers`:
+
+    ```mx
+    return json({ ok: true }, {
+      cookies: [{ name: "session", value: "abc",
+                  path: "/", max_age: 3600, http_only: true,
+                  same_site: "Lax" }],
+      headers: { "X-Auth": "ok" }
+    })
+    ```
+- **Pretty JSON**: `json_stringify(value, true)` returns indented output.
+
+[0.4.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.4.0
+
 ## [0.3.0] — 2026-05-02
 
 ### Added

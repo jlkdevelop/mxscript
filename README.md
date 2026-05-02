@@ -127,6 +127,9 @@ let user = { id: 1, name: "Ada" }
 
 // String interpolation
 print("Hello, ${name}! Score sum: ${scores[0] + scores[1] + scores[2]}")
+
+// Optional chaining + nullish coalescing
+let city = user?.profile?.city ?? "unknown"
 ```
 
 ### Functions
