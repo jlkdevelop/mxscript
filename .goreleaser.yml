@@ -61,3 +61,28 @@ release:
     # MX Script {{ .Tag }}
 
     Founded by [Jassim Alkharafi](https://github.com/jlkdevelop).
+
+# Auto-bump the Homebrew formula on every tag.
+#
+# Setup (one-time): create a PAT with `repo` scope (or a fine-grained token
+# scoped to jlkdevelop/homebrew-tap with Contents: write) and add it to this
+# repo's Actions secrets as HOMEBREW_TAP_TOKEN. The release workflow already
+# passes it through as an env var. When the secret is unset the brews push
+# is skipped automatically — the regular GitHub release still ships.
+brews:
+  - name: mx
+    repository:
+      owner: jlkdevelop
+      name: homebrew-tap
+      branch: main
+      token: '{{ envOrDefault "HOMEBREW_TAP_TOKEN" "" }}'
+    directory: Formula
+    homepage: https://mxscript.com
+    description: "Modern open-source scripting language for building web apps and APIs"
+    license: "MIT"
+    skip_upload: '{{ eq (envOrDefault "HOMEBREW_TAP_TOKEN" "") "" }}'
+    commit_author:
+      name: Jassim Alkharafi
+      email: jlkdevelop@gmail.com
+    test: |
+      assert_match version.to_s, shell_output("#{bin}/mx version")

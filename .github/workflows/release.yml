@@ -28,3 +28,9 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Optional. Set HOMEBREW_TAP_TOKEN as a repo secret (PAT with
+          # repo scope, or fine-grained token with Contents:write on
+          # jlkdevelop/homebrew-tap) to auto-bump the Homebrew formula
+          # on every release. If unset, the brews push is skipped and
+          # the regular GitHub release still ships.
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
