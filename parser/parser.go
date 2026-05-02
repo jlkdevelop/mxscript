@@ -140,6 +140,17 @@ func (p *Parser) parseStmt() (Stmt, error) {
 			return nil, err
 		}
 		return &SpawnStmt{pos: mkPos(tok), Body: body}, nil
+	case lexer.TokenGroup:
+		tok := p.advance()
+		path, err := p.parsePath()
+		if err != nil {
+			return nil, err
+		}
+		body, err := p.parseBlock()
+		if err != nil {
+			return nil, err
+		}
+		return &GroupStmt{pos: mkPos(tok), Path: path, Body: body}, nil
 	case lexer.TokenSemicolon:
 		p.advance()
 		return nil, nil

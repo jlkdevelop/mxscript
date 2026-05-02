@@ -808,6 +808,8 @@ func (i *Interpreter) execStmt(s parser.Stmt, env *Env) error {
 		return i.execServer(n, env)
 	case *parser.RouteDecl:
 		i.registerRoute(n)
+	case *parser.GroupStmt:
+		return i.execGroup(n, env)
 	case *parser.MiddlewareDecl:
 		i.middlewares[n.Name] = n
 	case *parser.UseStmt:
@@ -1130,6 +1132,70 @@ func byteSizeFromValue(v Value) (int64, error) {
 		return n * multiplier, nil
 	}
 	return 0, fmt.Errorf("expected number or size string, got %s", v.typeName())
+}
+
+// execGroup processes a `group /prefix { ... }` block. Routes inside
+// inherit the prefix, and any `use mw` declared at the top of the
+// group attaches to every route in scope. Middlewares declared inside
+// the group itself only apply to that group (not to siblings).
+func (i *Interpreter) execGroup(n *parser.GroupStmt, env *Env) error {
+	// Snapshot the current global useGlobal so we can restore.
+	savedGlobalUse := append([]string(nil), i.useGlobal...)
+	defer func() { i.useGlobal = savedGlobalUse }()
+
+	// Local middleware list collected from `use` statements directly
+	// inside the group block (before any route).
+	var localUse []string
+	for _, s := range n.Body {
+		switch sub := s.(type) {
+		case *parser.UseStmt:
+			localUse = append(localUse, sub.Name)
+		case *parser.RouteDecl:
+			// Splice the prefix and group-level middlewares onto the route.
+			rebuilt := *sub
+			rebuilt.Path = joinPath(n.Path, sub.Path)
+			// Prepend localUse to body so they run before the route's own.
+			body := append([]parser.Stmt{}, sub.Body...)
+			useStmts := make([]parser.Stmt, 0, len(localUse))
+			for _, mw := range localUse {
+				useStmts = append(useStmts, &parser.UseStmt{Name: mw})
+			}
+			rebuilt.Body = append(useStmts, body...)
+			i.registerRoute(&rebuilt)
+		case *parser.GroupStmt:
+			// Nested group — recurse with the joined prefix.
+			nested := *sub
+			nested.Path = joinPath(n.Path, sub.Path)
+			if err := i.execGroup(&nested, env); err != nil {
+				return err
+			}
+		default:
+			// Other statements (let / fn / middleware decls) execute normally.
+			if err := i.execStmt(s, env); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// joinPath concatenates a prefix with a sub-path, normalising slashes.
+//
+//	"/api/v1" + "/users"      = "/api/v1/users"
+//	"/api/v1" + "/"           = "/api/v1"
+//	"" + "/users"             = "/users"
+func joinPath(prefix, suffix string) string {
+	prefix = strings.TrimRight(prefix, "/")
+	if !strings.HasPrefix(suffix, "/") {
+		suffix = "/" + suffix
+	}
+	if prefix == "" {
+		return suffix
+	}
+	if suffix == "/" {
+		return prefix
+	}
+	return prefix + suffix
 }
 
 func (i *Interpreter) registerRoute(n *parser.RouteDecl) {

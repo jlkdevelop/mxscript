@@ -189,6 +189,22 @@ type ImportStmt struct {
 
 func (*ImportStmt) stmtNode() {}
 
+// GroupStmt nests a set of routes under a shared path prefix and an
+// optional shared list of middlewares. e.g.:
+//
+//	group /api/v1 {
+//	  use require_auth
+//	  get /users { ... }
+//	  get /users/:id { ... }
+//	}
+type GroupStmt struct {
+	pos
+	Path string
+	Body []Stmt
+}
+
+func (*GroupStmt) stmtNode() {}
+
 // SpawnStmt runs a block in a fresh goroutine. The body shares the
 // enclosing closure (read-only by convention — writes from goroutines
 // race with the main interpreter and other spawns). Use channels for

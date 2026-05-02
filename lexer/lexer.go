@@ -44,6 +44,7 @@ const (
 	TokenMatch
 	TokenFatArrow
 	TokenSpawn
+	TokenGroup
 
 	TokenLBrace
 	TokenRBrace
@@ -108,6 +109,7 @@ var tokenNames = map[TokenType]string{
 	TokenMatch:        "match",
 	TokenFatArrow:     "=>",
 	TokenSpawn:        "spawn",
+	TokenGroup:        "group",
 	TokenLBrace:       "{",
 	TokenRBrace:       "}",
 	TokenLParen:       "(",
@@ -172,6 +174,7 @@ var keywords = map[string]TokenType{
 	"static":     TokenStatic,
 	"match":      TokenMatch,
 	"spawn":      TokenSpawn,
+	"group":      TokenGroup,
 }
 
 type Token struct {

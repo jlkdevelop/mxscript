@@ -4,6 +4,32 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.39.0] — 2026-05-02
+
+### Added
+- **Route groups** — `group /prefix { ... }` nests routes under a
+  shared path prefix and shared middlewares:
+
+  ```mx
+  group /api/v1 {
+    use require_auth          // runs on every nested route
+    get /users           { return json(users) }
+    get /users/:id       { return json(find_user(request.params.id)) }
+    post /users          { return status(201, request.body) }
+  }
+
+  group /api/v2 {
+    get /users           { return json(users_v2) }
+  }
+  ```
+
+  Groups can nest. `use` statements at the top of a group attach to
+  every route in scope; siblings outside the group are unaffected.
+  Path joining handles trailing slashes (`/api/v1` + `/users` →
+  `/api/v1/users`).
+
+[0.39.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.39.0
+
 ## [0.38.0] — 2026-05-02
 
 ### Added

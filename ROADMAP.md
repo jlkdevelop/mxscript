@@ -8,6 +8,8 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.39.0** (2026-05-02)
+  - Route groups: `group /api/v1 { use auth; get /users { ... } }` — shared path prefix + middleware
 - **v0.38.0** (2026-05-02)
   - `validate(value, schema)` — JSON-Schema-lite input validation
 - **v0.37.0** (2026-05-02)
