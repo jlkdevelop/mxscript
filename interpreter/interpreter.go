@@ -793,6 +793,9 @@ func (i *Interpreter) evalExpr(e parser.Expr, env *Env) (Value, error) {
 		if err != nil {
 			return Value{}, err
 		}
+		if n.Optional && obj.Kind == KindNull {
+			return NullValue(), nil
+		}
 		return i.memberAccess(n, obj, n.Property)
 	case *parser.FnLit:
 		return FunctionValue(&Function{Params: n.Params, Body: n.Body, Closure: env}), nil
@@ -817,6 +820,16 @@ func (i *Interpreter) evalBinary(n *parser.BinaryExpr, env *Env) (Value, error) 
 			return Value{}, err
 		}
 		if l.IsTruthy() {
+			return l, nil
+		}
+		return i.evalExpr(n.Right, env)
+	}
+	if n.Op == "??" {
+		l, err := i.evalExpr(n.Left, env)
+		if err != nil {
+			return Value{}, err
+		}
+		if l.Kind != KindNull {
 			return l, nil
 		}
 		return i.evalExpr(n.Right, env)

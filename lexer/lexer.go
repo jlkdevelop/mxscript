@@ -68,6 +68,8 @@ const (
 	TokenAnd
 	TokenOr
 	TokenSpread
+	TokenQuestionDot // ?.
+	TokenNullCoalesce // ??
 )
 
 var tokenNames = map[TokenType]string{
@@ -123,7 +125,9 @@ var tokenNames = map[TokenType]string{
 	TokenBang:       "!",
 	TokenAnd:        "&&",
 	TokenOr:         "||",
-	TokenSpread:     "...",
+	TokenSpread:       "...",
+	TokenQuestionDot:  "?.",
+	TokenNullCoalesce: "??",
 }
 
 func (t TokenType) String() string {
@@ -441,6 +445,16 @@ func (l *Lexer) readSymbol(line, col int) error {
 	}
 
 	switch two {
+	case "?.":
+		l.advance()
+		l.advance()
+		l.tokens = append(l.tokens, Token{Type: TokenQuestionDot, Lexeme: "?.", Line: line, Col: col})
+		return nil
+	case "??":
+		l.advance()
+		l.advance()
+		l.tokens = append(l.tokens, Token{Type: TokenNullCoalesce, Lexeme: "??", Line: line, Col: col})
+		return nil
 	case "==":
 		l.advance()
 		l.advance()

@@ -266,6 +266,7 @@ type MemberExpr struct {
 	pos
 	Object   Expr
 	Property string
+	Optional bool // `?.` short-circuits if Object is null
 }
 
 func (*MemberExpr) exprNode() {}

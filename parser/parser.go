@@ -500,7 +500,23 @@ func (p *Parser) parseExprStmt() (Stmt, error) {
 
 // ===== Expressions (Pratt-ish precedence climbing) =====
 
-func (p *Parser) parseExpr() (Expr, error) { return p.parseOr() }
+func (p *Parser) parseExpr() (Expr, error) { return p.parseNullCoalesce() }
+
+func (p *Parser) parseNullCoalesce() (Expr, error) {
+	left, err := p.parseOr()
+	if err != nil {
+		return nil, err
+	}
+	for p.check(lexer.TokenNullCoalesce) {
+		tok := p.advance()
+		right, err := p.parseOr()
+		if err != nil {
+			return nil, err
+		}
+		left = &BinaryExpr{pos: mkPos(tok), Op: "??", Left: left, Right: right}
+	}
+	return left, nil
+}
 
 func (p *Parser) parseOr() (Expr, error) {
 	left, err := p.parseAnd()
@@ -664,6 +680,13 @@ func (p *Parser) parseCall() (Expr, error) {
 				return nil, err
 			}
 			expr = &MemberExpr{pos: mkPos(tok), Object: expr, Property: name.Lexeme}
+		case lexer.TokenQuestionDot:
+			tok := p.advance()
+			name, err := p.expect(lexer.TokenIdent, "after `?.`")
+			if err != nil {
+				return nil, err
+			}
+			expr = &MemberExpr{pos: mkPos(tok), Object: expr, Property: name.Lexeme, Optional: true}
 		default:
 			return expr, nil
 		}
