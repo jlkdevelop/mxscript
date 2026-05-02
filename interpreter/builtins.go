@@ -75,6 +75,11 @@ func registerBuiltins(i *Interpreter) {
 	def("ends_with", builtinEndsWith)
 	def("str", builtinStr)
 	def("num", builtinNum)
+	def("pad_left", builtinPadLeft)
+	def("pad_right", builtinPadRight)
+	def("repeat", builtinRepeat)
+	def("substr", builtinSubstr)
+	def("index_of", builtinIndexOf)
 
 	// --- Array ops ---
 	def("push", builtinPush)
@@ -104,6 +109,19 @@ func registerBuiltins(i *Interpreter) {
 	def("min", builtinMin)
 	def("max", builtinMax)
 	def("random", builtinRandom)
+	def("pow", builtinPow)
+	def("sqrt", builtinSqrt)
+	def("log", builtinLog)
+	def("exp", builtinExp)
+
+	// Math constants as a namespace object so we don't pollute globals.
+	math := NewOrderedMap()
+	math.Set("PI", NumberValue(3.141592653589793))
+	math.Set("E", NumberValue(2.718281828459045))
+	math.Set("INFINITY", NumberValue(math2Inf()))
+	math.Set("NAN", NumberValue(math2NaN()))
+	g.Set("math", ObjectValue(math))
+	builtinNames["math"] = true
 
 	// --- Type checks ---
 	def("isString", builtinIsString)
@@ -660,6 +678,117 @@ func builtinNum(i *Interpreter, args []Value) (Value, error) {
 	return Value{}, fmt.Errorf("cannot convert %s to number", args[0].typeName())
 }
 
+// pad_left(s, width, ch?) pads s on the left with ch (default " ") until
+// it has at least `width` runes. If s is already wide enough, returns s.
+func builtinPadLeft(i *Interpreter, args []Value) (Value, error) {
+	s, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	w, err := numberArg(args, 1)
+	if err != nil {
+		return Value{}, err
+	}
+	ch := " "
+	if len(args) > 2 && args[2].Kind == KindString && args[2].String != "" {
+		ch = string([]rune(args[2].String)[0:1])
+	}
+	missing := int(w) - len([]rune(s))
+	if missing <= 0 {
+		return StringValue(s), nil
+	}
+	return StringValue(strings.Repeat(ch, missing) + s), nil
+}
+
+func builtinPadRight(i *Interpreter, args []Value) (Value, error) {
+	s, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	w, err := numberArg(args, 1)
+	if err != nil {
+		return Value{}, err
+	}
+	ch := " "
+	if len(args) > 2 && args[2].Kind == KindString && args[2].String != "" {
+		ch = string([]rune(args[2].String)[0:1])
+	}
+	missing := int(w) - len([]rune(s))
+	if missing <= 0 {
+		return StringValue(s), nil
+	}
+	return StringValue(s + strings.Repeat(ch, missing)), nil
+}
+
+func builtinRepeat(i *Interpreter, args []Value) (Value, error) {
+	s, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	n, err := numberArg(args, 1)
+	if err != nil {
+		return Value{}, err
+	}
+	if n < 0 {
+		return Value{}, fmt.Errorf("repeat count must be non-negative")
+	}
+	return StringValue(strings.Repeat(s, int(n))), nil
+}
+
+// substr(s, start, length?) returns a slice. Negative start counts from the end.
+func builtinSubstr(i *Interpreter, args []Value) (Value, error) {
+	s, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	startF, err := numberArg(args, 1)
+	if err != nil {
+		return Value{}, err
+	}
+	runes := []rune(s)
+	n := len(runes)
+	start := int(startF)
+	if start < 0 {
+		start += n
+	}
+	if start < 0 {
+		start = 0
+	}
+	if start > n {
+		start = n
+	}
+	end := n
+	if len(args) > 2 && args[2].Kind == KindNumber {
+		length := int(args[2].Number)
+		end = start + length
+		if end > n {
+			end = n
+		}
+		if end < start {
+			end = start
+		}
+	}
+	return StringValue(string(runes[start:end])), nil
+}
+
+// index_of(s, sub) returns the rune index of the first occurrence, or -1.
+func builtinIndexOf(i *Interpreter, args []Value) (Value, error) {
+	s, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	sub, err := stringArg(args, 1)
+	if err != nil {
+		return Value{}, err
+	}
+	byteIdx := strings.Index(s, sub)
+	if byteIdx < 0 {
+		return NumberValue(-1), nil
+	}
+	// Convert byte index to rune index for utf-8 correctness.
+	return NumberValue(float64(len([]rune(s[:byteIdx])))), nil
+}
+
 // ===== Array ops =====
 
 func builtinPush(i *Interpreter, args []Value) (Value, error) {
@@ -1050,6 +1179,41 @@ func builtinMax(i *Interpreter, args []Value) (Value, error) {
 	}
 	return NumberValue(m), nil
 }
+func builtinPow(i *Interpreter, args []Value) (Value, error) {
+	base, err := numberArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	exp, err := numberArg(args, 1)
+	if err != nil {
+		return Value{}, err
+	}
+	return NumberValue(math.Pow(base, exp)), nil
+}
+func builtinSqrt(i *Interpreter, args []Value) (Value, error) {
+	n, err := numberArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	return NumberValue(math.Sqrt(n)), nil
+}
+func builtinLog(i *Interpreter, args []Value) (Value, error) {
+	n, err := numberArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	return NumberValue(math.Log(n)), nil
+}
+func builtinExp(i *Interpreter, args []Value) (Value, error) {
+	n, err := numberArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	return NumberValue(math.Exp(n)), nil
+}
+func math2Inf() float64 { return math.Inf(1) }
+func math2NaN() float64 { return math.NaN() }
+
 func builtinRandom(i *Interpreter, args []Value) (Value, error) {
 	if len(args) == 0 {
 		return NumberValue(rand.Float64()), nil
