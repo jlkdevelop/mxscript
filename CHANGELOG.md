@@ -4,6 +4,38 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.34.0] — 2026-05-02
+
+### Added
+- **Interactive API docs out of the box**:
+
+  ```mx
+  get /openapi.json { return json(openapi({ title: "My API" })) }
+  get /docs        { return swagger_ui("/openapi.json") }   # Swagger UI
+  get /reference   { return redoc_ui("/openapi.json") }     # Redoc
+  ```
+
+  `swagger_ui(spec_url, opts?)` and `redoc_ui(spec_url, opts?)` return
+  ready-to-serve HTML pages that load the spec from the URL you pass.
+  No npm, no bundling — both pull from CDN.
+
+- **`sql.migrate(db, migrations)`** — schema versioning, idempotent.
+  Migrations is an ordered array of SQL strings. Each gets a hash
+  recorded in a `mx_migrations` bookkeeping table; reruns skip
+  already-applied migrations and refuse to run if a migration's
+  text has been edited since it was applied (corruption guard).
+
+  ```mx
+  sql.migrate(db, [
+    "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)",
+    "ALTER TABLE users ADD COLUMN email TEXT",
+    "CREATE INDEX users_name_idx ON users(name)"
+  ])
+  // returns { applied: [<n>, ...], skipped: [<m>, ...] }
+  ```
+
+[0.34.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.34.0
+
 ## [0.33.0] — 2026-05-02
 
 ### Added

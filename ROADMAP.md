@@ -8,6 +8,9 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.34.0** (2026-05-02)
+  - `swagger_ui(spec_url)` / `redoc_ui(spec_url)` interactive API docs
+  - `sql.migrate(db, [...])` schema versioning (hash-tracked, idempotent)
 - **v0.33.0** (2026-05-02)
   - Gemini AI provider (`ai.complete(prompt, { provider: "gemini" })`)
   - `sql.transaction(db, fn)` with auto-rollback on throw

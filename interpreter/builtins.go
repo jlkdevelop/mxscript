@@ -62,6 +62,8 @@ func registerBuiltins(i *Interpreter) {
 	// --- API introspection ---
 	def("openapi", builtinOpenAPI)
 	def("routes", builtinRoutesList)
+	def("swagger_ui", builtinSwaggerUI)
+	def("redoc_ui", builtinRedocUI)
 
 	// --- HTTP response helpers ---
 	def("json", builtinJSON)
@@ -263,6 +265,7 @@ func registerBuiltins(i *Interpreter) {
 	sqlNS.Set("query_one", FunctionValue(&Function{Name: "sql.query_one", Native: builtinSQLQueryOne}))
 	sqlNS.Set("close", FunctionValue(&Function{Name: "sql.close", Native: builtinSQLClose}))
 	sqlNS.Set("transaction", FunctionValue(&Function{Name: "sql.transaction", Native: builtinSQLTransaction}))
+	sqlNS.Set("migrate", FunctionValue(&Function{Name: "sql.migrate", Native: builtinSQLMigrate}))
 	g.Set("sql", ObjectValue(sqlNS))
 	builtinNames["sql"] = true
 
@@ -430,6 +433,66 @@ func builtinOpenAPI(i *Interpreter, args []Value) (Value, error) {
 	out.Set("info", ObjectValue(info))
 	out.Set("paths", ObjectValue(paths))
 	return ObjectValue(out), nil
+}
+
+// swagger_ui(spec_url, opts?) returns an HTML response that renders an
+// interactive Swagger UI for the given OpenAPI spec. Combine with
+// `openapi()` and a `/openapi.json` route for instant browsable API
+// docs:
+//
+//	get /openapi.json { return json(openapi({ title: "My API" })) }
+//	get /docs         { return swagger_ui("/openapi.json") }
+func builtinSwaggerUI(i *Interpreter, args []Value) (Value, error) {
+	specURL := "/openapi.json"
+	if len(args) > 0 && args[0].Kind == KindString {
+		specURL = args[0].String
+	}
+	title := "API docs"
+	if len(args) > 1 && args[1].Kind == KindObject {
+		if v, ok := args[1].Object.Get("title"); ok && v.Kind == KindString {
+			title = v.String
+		}
+	}
+	html := `<!doctype html>
+<html><head><meta charset=utf-8><title>` + htmlEscapeString(title) + `</title>
+<link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css">
+<style>body{margin:0}</style></head>
+<body>
+<div id="swagger-ui"></div>
+<script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+<script>
+  window.onload = () => SwaggerUIBundle({
+    url: '` + specURL + `',
+    dom_id: '#swagger-ui',
+    deepLinking: true,
+    layout: 'BaseLayout'
+  });
+</script>
+</body></html>`
+	return ResponseValue(&Response{ContentType: "text/html; charset=utf-8", Body: StringValue(html)}), nil
+}
+
+// redoc_ui(spec_url, opts?) — same idea but using Redoc, which produces
+// a much cleaner reference-style layout for read-only consumers.
+func builtinRedocUI(i *Interpreter, args []Value) (Value, error) {
+	specURL := "/openapi.json"
+	if len(args) > 0 && args[0].Kind == KindString {
+		specURL = args[0].String
+	}
+	title := "API reference"
+	if len(args) > 1 && args[1].Kind == KindObject {
+		if v, ok := args[1].Object.Get("title"); ok && v.Kind == KindString {
+			title = v.String
+		}
+	}
+	html := `<!doctype html>
+<html><head><meta charset=utf-8><title>` + htmlEscapeString(title) + `</title>
+<style>body{margin:0}</style></head>
+<body>
+<redoc spec-url="` + specURL + `"></redoc>
+<script src="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js"></script>
+</body></html>`
+	return ResponseValue(&Response{ContentType: "text/html; charset=utf-8", Body: StringValue(html)}), nil
 }
 
 // routes() returns an array of { method, path } objects for every
@@ -2969,6 +3032,83 @@ func builtinSQLClose(i *Interpreter, args []Value) (Value, error) {
 		return Value{}, err
 	}
 	return NullValue(), h.db.Close()
+}
+
+// sql.migrate(db, migrations) runs an ordered list of schema migrations,
+// tracking which have already applied in a `mx_migrations` table.
+//
+//	sql.migrate(db, [
+//	  "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)",
+//	  "ALTER TABLE users ADD COLUMN email TEXT",
+//	  "CREATE INDEX users_name_idx ON users(name)"
+//	])
+//
+// Returns { applied: [<n>, <m>], skipped: [<i>, ...] } so callers can
+// log what ran. Idempotent: running again with the same array is a no-op.
+func builtinSQLMigrate(i *Interpreter, args []Value) (Value, error) {
+	h, err := mustDBHandle(args)
+	if err != nil {
+		return Value{}, err
+	}
+	if len(args) < 2 || args[1].Kind != KindArray {
+		return Value{}, fmt.Errorf("sql.migrate(db, migrations) requires an array of SQL strings")
+	}
+	migrations := args[1].Array
+
+	// Bookkeeping table.
+	if _, err := h.runner().Exec(`CREATE TABLE IF NOT EXISTS mx_migrations (
+		id INTEGER PRIMARY KEY,
+		applied_at TEXT NOT NULL,
+		hash TEXT NOT NULL
+	)`); err != nil {
+		return Value{}, err
+	}
+
+	rows, err := h.runner().Query("SELECT id, hash FROM mx_migrations ORDER BY id")
+	if err != nil {
+		return Value{}, err
+	}
+	applied := map[int]string{}
+	for rows.Next() {
+		var id int
+		var hash string
+		if err := rows.Scan(&id, &hash); err != nil {
+			rows.Close()
+			return Value{}, err
+		}
+		applied[id] = hash
+	}
+	rows.Close()
+
+	var ranList, skippedList []Value
+	for k, m := range migrations {
+		if m.Kind != KindString {
+			return Value{}, fmt.Errorf("sql.migrate: each migration must be a string (got %s)", m.typeName())
+		}
+		hsh := computeHMACHex("mx-migrations", m.String) // deterministic checksum
+		if existing, ok := applied[k+1]; ok {
+			if existing != hsh {
+				return Value{}, fmt.Errorf("sql.migrate: migration #%d has been edited since it was applied (hash mismatch)", k+1)
+			}
+			skippedList = append(skippedList, NumberValue(float64(k+1)))
+			continue
+		}
+		if _, err := h.runner().Exec(m.String); err != nil {
+			return Value{}, fmt.Errorf("sql.migrate #%d failed: %w", k+1, err)
+		}
+		if _, err := h.runner().Exec(
+			"INSERT INTO mx_migrations (id, applied_at, hash) VALUES (?, ?, ?)",
+			k+1, time.Now().UTC().Format(time.RFC3339), hsh,
+		); err != nil {
+			return Value{}, err
+		}
+		ranList = append(ranList, NumberValue(float64(k+1)))
+	}
+
+	out := NewOrderedMap()
+	out.Set("applied", ArrayValue(ranList))
+	out.Set("skipped", ArrayValue(skippedList))
+	return ObjectValue(out), nil
 }
 
 // sql.transaction(db, fn) runs fn(db) inside a transaction. If fn
