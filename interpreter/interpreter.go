@@ -1491,14 +1491,23 @@ func (i *Interpreter) startServer() error {
 
 func (i *Interpreter) dispatch(w http.ResponseWriter, r *http.Request) {
 	for _, route := range i.routes {
-		if route.Method != r.Method {
+		// SSE routes accept GET requests but are tagged "SSE" internally.
+		if route.Method == "SSE" {
+			if r.Method != http.MethodGet {
+				continue
+			}
+		} else if route.Method != r.Method {
 			continue
 		}
 		params, ok := matchPath(route.PathParts, r.URL.Path)
 		if !ok {
 			continue
 		}
-		i.runRoute(w, r, route, params)
+		if route.Method == "SSE" {
+			i.runSSE(w, r, route, params)
+		} else {
+			i.runRoute(w, r, route, params)
+		}
 		return
 	}
 
@@ -1509,6 +1518,57 @@ func (i *Interpreter) dispatch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.NotFound(w, r)
+}
+
+// runSSE handles a server-sent-events route. The route body is executed
+// once per connection with a `send(value)` function injected. send writes
+// one SSE frame per call and flushes; the connection stays open until the
+// route body finishes or the client disconnects.
+func (i *Interpreter) runSSE(w http.ResponseWriter, r *http.Request, route registeredRoute, params map[string]string) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.WriteHeader(http.StatusOK)
+	flusher.Flush()
+
+	scope := NewEnv(i.globals)
+	scope.Set("request", buildRequestObject(r, params))
+	ctx := r.Context()
+
+	send := &Function{Name: "send", Native: func(_ *Interpreter, args []Value) (Value, error) {
+		if ctx.Err() != nil {
+			return Value{}, ctx.Err()
+		}
+		var v Value = NullValue()
+		if len(args) > 0 {
+			v = args[0]
+		}
+		body, err := jsonEncode(v)
+		if err != nil {
+			return Value{}, err
+		}
+		if _, err := fmt.Fprintf(w, "data: %s\n\n", string(body)); err != nil {
+			return Value{}, err
+		}
+		flusher.Flush()
+		return NullValue(), nil
+	}}
+	scope.Set("send", FunctionValue(send))
+
+	for _, s := range route.Body {
+		if err := i.execStmt(s, scope); err != nil {
+			if _, ok := err.(*returnSignal); ok {
+				return
+			}
+			fmt.Fprintf(os.Stderr, "[mx] sse error: %v\n", i.wrapErr(err))
+			return
+		}
+	}
 }
 
 func (i *Interpreter) serveStatic(w http.ResponseWriter, r *http.Request) bool {
