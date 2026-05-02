@@ -1,13 +1,23 @@
-# MX Script
+<p align="center">
+  <img src="assets/logo.png" alt="MX Script" width="220">
+</p>
 
-[![CI](https://github.com/jlkdevelop/mxscript/actions/workflows/ci.yml/badge.svg)](https://github.com/jlkdevelop/mxscript/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Go Report](https://goreportcard.com/badge/github.com/jlkdevelop/mxscript)](https://goreportcard.com/report/github.com/jlkdevelop/mxscript)
+<h1 align="center">MX Script</h1>
 
-> A modern, open-source scripting language for building web apps and APIs.
-> One file. Zero boilerplate. Run with `mx run app.mx`.
+<p align="center">
+  <a href="https://github.com/jlkdevelop/mxscript/actions/workflows/ci.yml"><img src="https://github.com/jlkdevelop/mxscript/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT License"></a>
+  <a href="https://goreportcard.com/report/github.com/jlkdevelop/mxscript"><img src="https://goreportcard.com/badge/github.com/jlkdevelop/mxscript" alt="Go Report"></a>
+</p>
 
-**Founded and developed by [Jassim Alkharafi](https://github.com/jlkdevelop).**
+<p align="center">
+  A modern, open-source scripting language for building web apps and APIs.<br>
+  One file. Zero boilerplate. Run with <code>mx run app.mx</code>.
+</p>
+
+<p align="center">
+  <strong>Founded and developed by <a href="https://github.com/jlkdevelop">Jassim Alkharafi</a>.</strong>
+</p>
 
 ```mx
 server {
