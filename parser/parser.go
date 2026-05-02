@@ -5,6 +5,7 @@ package parser
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/jlkdevelop/mxscript/lexer"
 )
@@ -135,9 +136,45 @@ func (p *Parser) parseStmt() (Stmt, error) {
 	case lexer.TokenSemicolon:
 		p.advance()
 		return nil, nil
+	case lexer.TokenIdent:
+		// HTTP method shorthand: `get /users { ... }` is sugar for
+		// `route GET /users { ... }`. We only treat it as a route when
+		// followed immediately by `/` so user identifiers like `get` and
+		// `post` keep working in expression position.
+		if isHTTPMethod(p.cur().Lexeme) && p.peek(1).Type == lexer.TokenSlash {
+			return p.parseShorthandRoute()
+		}
+		return p.parseExprStmt()
 	default:
 		return p.parseExprStmt()
 	}
+}
+
+// isHTTPMethod reports whether `name` is one of the HTTP verbs we accept
+// as a shorthand route prefix. Case-sensitive — lowercase only, to keep
+// the language style consistent.
+func isHTTPMethod(name string) bool {
+	switch name {
+	case "get", "post", "put", "delete", "patch", "head", "options":
+		return true
+	}
+	return false
+}
+
+// parseShorthandRoute is the `get /users { ... }` form. Method is taken
+// from the leading identifier (uppercased to match RouteDecl semantics).
+func (p *Parser) parseShorthandRoute() (Stmt, error) {
+	tok := p.advance()
+	path, err := p.parsePath()
+	if err != nil {
+		return nil, err
+	}
+	body, err := p.parseBlock()
+	if err != nil {
+		return nil, err
+	}
+	method := strings.ToUpper(tok.Lexeme)
+	return &RouteDecl{pos: mkPos(tok), Method: method, Path: path, Body: body}, nil
 }
 
 func (p *Parser) parseLet() (Stmt, error) {
