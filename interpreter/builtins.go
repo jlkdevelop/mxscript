@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -118,6 +119,12 @@ func registerBuiltins(i *Interpreter) {
 	def("base64_encode", builtinBase64Encode)
 	def("base64_decode", builtinBase64Decode)
 	def("uuid", builtinUUID)
+
+	// --- Regex ---
+	def("re_match", builtinReMatch)
+	def("re_find", builtinReFind)
+	def("re_find_all", builtinReFindAll)
+	def("re_replace", builtinReReplace)
 
 	// --- Time helpers ---
 	def("now_iso", builtinNowISO)
@@ -997,6 +1004,100 @@ func builtinHmacSHA256(i *Interpreter, args []Value) (Value, error) {
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write([]byte(msg))
 	return StringValue(hex.EncodeToString(mac.Sum(nil))), nil
+}
+
+// ===== Regex =====
+
+func compileRegex(pattern string) (*regexp.Regexp, error) {
+	return regexp.Compile(pattern)
+}
+
+// re_match(pattern, s) -> bool
+func builtinReMatch(i *Interpreter, args []Value) (Value, error) {
+	pattern, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	s, err := stringArg(args, 1)
+	if err != nil {
+		return Value{}, err
+	}
+	re, err := compileRegex(pattern)
+	if err != nil {
+		return Value{}, err
+	}
+	return BoolValue(re.MatchString(s)), nil
+}
+
+// re_find(pattern, s) -> first match string, or null
+func builtinReFind(i *Interpreter, args []Value) (Value, error) {
+	pattern, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	s, err := stringArg(args, 1)
+	if err != nil {
+		return Value{}, err
+	}
+	re, err := compileRegex(pattern)
+	if err != nil {
+		return Value{}, err
+	}
+	if m := re.FindStringSubmatch(s); m != nil {
+		// If there are capture groups, return them as an array.
+		if len(m) > 1 {
+			out := make([]Value, len(m))
+			for k, g := range m {
+				out[k] = StringValue(g)
+			}
+			return ArrayValue(out), nil
+		}
+		return StringValue(m[0]), nil
+	}
+	return NullValue(), nil
+}
+
+// re_find_all(pattern, s) -> array of all matches
+func builtinReFindAll(i *Interpreter, args []Value) (Value, error) {
+	pattern, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	s, err := stringArg(args, 1)
+	if err != nil {
+		return Value{}, err
+	}
+	re, err := compileRegex(pattern)
+	if err != nil {
+		return Value{}, err
+	}
+	matches := re.FindAllString(s, -1)
+	out := make([]Value, len(matches))
+	for k, m := range matches {
+		out[k] = StringValue(m)
+	}
+	return ArrayValue(out), nil
+}
+
+// re_replace(pattern, s, replacement) -> string
+func builtinReReplace(i *Interpreter, args []Value) (Value, error) {
+	pattern, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	s, err := stringArg(args, 1)
+	if err != nil {
+		return Value{}, err
+	}
+	repl, err := stringArg(args, 2)
+	if err != nil {
+		return Value{}, err
+	}
+	re, err := compileRegex(pattern)
+	if err != nil {
+		return Value{}, err
+	}
+	return StringValue(re.ReplaceAllString(s, repl)), nil
 }
 
 // ===== JWT (HS256) =====
