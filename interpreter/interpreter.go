@@ -581,6 +581,7 @@ func (rl *rateLimitConfig) allow(ip string) bool {
 type Interpreter struct {
 	globals     *Env
 	routes      []registeredRoute
+	routeTrie   *routeTrie // built lazily on first dispatch
 	middlewares map[string]*parser.MiddlewareDecl
 	useGlobal   []string
 	statics     []staticMount
@@ -606,6 +607,13 @@ type Interpreter struct {
 
 	// coverage records executed source lines. nil = tracking disabled.
 	coverage *Coverage
+
+	// Out / Err are the destinations for print/println/write and eprint
+	// respectively. Default to os.Stdout / os.Stderr; embedders (notably
+	// the eval() builtin and the playground) can swap in a buffer to
+	// capture output.
+	Out io.Writer
+	Err io.Writer
 }
 
 // Coverage tracks which source lines were executed during a run. Filled
@@ -663,6 +671,8 @@ func New() *Interpreter {
 		serverReadTimeout:  10 * time.Second,
 		serverWriteTimeout: 30 * time.Second,
 		serverMaxBody:      10 * 1024 * 1024, // 10 MiB default
+		Out:                os.Stdout,
+		Err:                os.Stderr,
 	}
 	registerBuiltins(i)
 	return i
@@ -2046,27 +2056,17 @@ func (i *Interpreter) startServer() error {
 }
 
 func (i *Interpreter) dispatch(w http.ResponseWriter, r *http.Request) {
-	for _, route := range i.routes {
-		// SSE / WS routes accept GET requests but are tagged in their
-		// own pseudo-method internally.
-		if route.Method == "SSE" || route.Method == "WS" {
-			if r.Method != http.MethodGet {
-				continue
-			}
-		} else if route.Method != r.Method {
-			continue
-		}
-		params, ok := matchPath(route.PathParts, r.URL.Path)
-		if !ok {
-			continue
-		}
+	if i.routeTrie == nil {
+		i.routeTrie = buildRouteTrie(i.routes)
+	}
+	if route, params, ok := i.routeTrie.match(r.Method, r.URL.Path); ok {
 		switch route.Method {
 		case "SSE":
-			i.runSSE(w, r, route, params)
+			i.runSSE(w, r, *route, params)
 		case "WS":
-			i.runWS(w, r, route, params)
+			i.runWS(w, r, *route, params)
 		default:
-			i.runRoute(w, r, route, params)
+			i.runRoute(w, r, *route, params)
 		}
 		return
 	}

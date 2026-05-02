@@ -4,6 +4,27 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.44.0] — 2026-05-02
+
+### Performance
+- **Route lookup is now O(segments)**, not O(routes). New
+  `route_trie.go` builds a path-segment trie on first request:
+  static segments live in a per-node map (O(1) hit), `:param`
+  children take a single slot, and the trie is reused across all
+  subsequent dispatches. Static-vs-`:param` precedence and the
+  SSE/WS-as-GET behavior are preserved.
+
+  For apps with hundreds of routes this is the difference between a
+  full linear scan per request and a constant-time descent.
+
+### Internal
+- Existing `matchPath` helper is unchanged but no longer on the hot
+  path; the trie's `matchSegs` is now the dispatcher.
+- Trie is rebuilt opportunistically — first request after registration
+  pays the cost once, then everything after that is cached.
+
+[0.44.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.44.0
+
 ## [0.43.0] — 2026-05-02
 
 ### Added

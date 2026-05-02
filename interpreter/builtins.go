@@ -83,6 +83,7 @@ func registerBuiltins(i *Interpreter) {
 	def("fetch", builtinFetch)
 	def("error", builtinError)
 	def("typeof", builtinTypeof)
+	def("eval", builtinEval)
 	def("now", builtinNow)
 	def("sleep", builtinSleep)
 
@@ -338,7 +339,7 @@ func builtinPrint(i *Interpreter, args []Value) (Value, error) {
 	// print() historically added a trailing newline; we keep that behavior
 	// because the bulk of MX programs in the wild rely on it. println() is
 	// just a more explicit synonym.
-	fmt.Println(strings.Join(parts, " "))
+	fmt.Fprintln(i.Out, strings.Join(parts, " "))
 	return NullValue(), nil
 }
 
@@ -351,7 +352,7 @@ func builtinWrite(i *Interpreter, args []Value) (Value, error) {
 	for k, a := range args {
 		parts[k] = a.Display()
 	}
-	fmt.Print(strings.Join(parts, " "))
+	fmt.Fprint(i.Out, strings.Join(parts, " "))
 	return NullValue(), nil
 }
 
@@ -360,7 +361,7 @@ func builtinEprint(i *Interpreter, args []Value) (Value, error) {
 	for k, a := range args {
 		parts[k] = a.Display()
 	}
-	fmt.Fprintln(os.Stderr, strings.Join(parts, " "))
+	fmt.Fprintln(i.Err, strings.Join(parts, " "))
 	return NullValue(), nil
 }
 
@@ -4837,4 +4838,101 @@ func builtinAIEmbed(i *Interpreter, args []Value) (Value, error) {
 		out[k] = NumberValue(f)
 	}
 	return ArrayValue(out), nil
+}
+
+// builtinEval — `eval(source, opts?)` parses and runs a string of MX Script
+// source in a fresh interpreter, captures everything print/println/write
+// produced, enforces a wall-clock timeout, and returns a structured result:
+//
+//	{
+//	  ok:          true,            // false if parse or runtime error
+//	  output:      "Hello, world\n",// captured stdout
+//	  error:       null,            // string when ok=false
+//	  duration_ms: 12,
+//	  timed_out:   false
+//	}
+//
+// The eval'd program runs with the same builtin surface as the host (no
+// hard sandboxing in v1). It does NOT start an HTTP server even if the
+// source contains `server { }` or route declarations — Exec only evaluates
+// top-level statements; routes get registered into the throwaway interpreter
+// and discarded.
+//
+// Options:
+//
+//	timeout_ms: number  default 5000
+//
+// This is the primitive that powers https://try.mxscript.com — the
+// browser-based playground, written in MX Script itself.
+func builtinEval(i *Interpreter, args []Value) (Value, error) {
+	src, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+
+	timeout := 5 * time.Second
+	if len(args) >= 2 && args[1].Kind == KindObject {
+		if v, ok := args[1].Object.Get("timeout_ms"); ok && v.Kind == KindNumber {
+			timeout = time.Duration(v.Number) * time.Millisecond
+			if timeout <= 0 {
+				timeout = 5 * time.Second
+			}
+		}
+	}
+
+	result := func(ok bool, output, errMsg string, durationMs int64, timedOut bool) Value {
+		o := NewOrderedMap()
+		o.Set("ok", BoolValue(ok))
+		o.Set("output", StringValue(output))
+		if errMsg == "" {
+			o.Set("error", NullValue())
+		} else {
+			o.Set("error", StringValue(errMsg))
+		}
+		o.Set("duration_ms", NumberValue(float64(durationMs)))
+		o.Set("timed_out", BoolValue(timedOut))
+		return ObjectValue(o)
+	}
+
+	prog, err := ParseSource(src)
+	if err != nil {
+		return result(false, "", err.Error(), 0, false), nil
+	}
+
+	child := New()
+	var buf bytes.Buffer
+	child.Out = &buf
+	child.Err = &buf
+
+	start := time.Now()
+	doneCh := make(chan error, 1)
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				doneCh <- fmt.Errorf("panic: %v", r)
+			}
+		}()
+		_, execErr := child.Exec(prog)
+		doneCh <- execErr
+	}()
+
+	var execErr error
+	timedOut := false
+	select {
+	case execErr = <-doneCh:
+	case <-time.After(timeout):
+		execErr = fmt.Errorf("execution exceeded %dms timeout", timeout.Milliseconds())
+		timedOut = true
+		// We can't actually kill the goroutine — the eval'd program may keep
+		// running until it returns control. For a playground deployment, run
+		// each request in a process with hard resource limits.
+	}
+
+	durationMs := time.Since(start).Milliseconds()
+	output := buf.String()
+
+	if execErr != nil {
+		return result(false, output, execErr.Error(), durationMs, timedOut), nil
+	}
+	return result(true, output, "", durationMs, false), nil
 }
