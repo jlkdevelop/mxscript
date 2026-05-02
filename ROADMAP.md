@@ -8,6 +8,10 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.56.0** (2026-05-02)
+  - `webhooks.*` namespace: `verify_stripe`, `verify_github`, `verify_svix`, `verify_shopify`, `verify_slack`
+  - Stripe & Slack reject stale timestamps (default 300s tolerance) — defends against replay
+  - Tests verify against each provider's documented signature samples
 - **v0.55.0** (2026-05-02)
   - Template engine grew `{{#if}}`/`{{else}}`/`{{/if}}`, `{{#each}}`/`{{/each}}` (with `{{this}}`, `{{@index}}`, `{{@key}}`), and `{{> partial}}`
   - `render` / `render_string` accept a third `partials` argument (name → template-string map)

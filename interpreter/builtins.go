@@ -347,6 +347,21 @@ func registerBuiltins(i *Interpreter) {
 	def("close_chan", builtinChanClose)
 	def("wait_group", builtinWaitGroup)
 
+	// --- Webhooks namespace ---
+	// Production webhook senders sign payloads in subtly different ways:
+	// HMAC-SHA256, with or without a timestamp prefix, hex or base64,
+	// header-encoded with extra metadata. The webhooks namespace handles
+	// each one in a single call so route handlers don't ship hand-rolled
+	// crypto.
+	webhooks := NewOrderedMap()
+	webhooks.Set("verify_stripe", FunctionValue(&Function{Name: "webhooks.verify_stripe", Native: builtinWebhooksVerifyStripe}))
+	webhooks.Set("verify_github", FunctionValue(&Function{Name: "webhooks.verify_github", Native: builtinWebhooksVerifyGitHub}))
+	webhooks.Set("verify_svix", FunctionValue(&Function{Name: "webhooks.verify_svix", Native: builtinWebhooksVerifySvix}))
+	webhooks.Set("verify_shopify", FunctionValue(&Function{Name: "webhooks.verify_shopify", Native: builtinWebhooksVerifyShopify}))
+	webhooks.Set("verify_slack", FunctionValue(&Function{Name: "webhooks.verify_slack", Native: builtinWebhooksVerifySlack}))
+	g.Set("webhooks", ObjectValue(webhooks))
+	builtinNames["webhooks"] = true
+
 	// --- AI namespace ---
 	ai := NewOrderedMap()
 	ai.Set("complete", FunctionValue(&Function{Name: "ai.complete", Native: builtinAIComplete}))
@@ -4205,6 +4220,216 @@ func computeHMACHex(secret, body string) string {
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write([]byte(body))
 	return hex.EncodeToString(mac.Sum(nil))
+}
+
+func computeHMACBase64(secret, body string) string {
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(body))
+	return base64.StdEncoding.EncodeToString(mac.Sum(nil))
+}
+
+// ===== Webhook namespace =====
+//
+// Each verify_* takes a payload (the raw body string), the relevant
+// header values, and the shared secret, and returns a boolean. They
+// follow each provider's documented scheme exactly so tests built from
+// the published examples pass without modification.
+
+// webhooks.verify_stripe(payload, signature_header, secret, tolerance_seconds?) -> bool
+//
+// Verifies a Stripe-Signature header in the form
+// "t=<timestamp>,v1=<hex>[,v1=<hex>...]". Returns true only if at least
+// one v1 entry matches HMAC-SHA256(secret, "<timestamp>.<payload>") AND
+// the timestamp is within `tolerance_seconds` of the current time.
+// Default tolerance is 300 seconds (5 minutes), matching Stripe's docs.
+//
+//	let ok = webhooks.verify_stripe(
+//	  request.body_text,
+//	  request.headers["stripe-signature"],
+//	  env("STRIPE_WEBHOOK_SECRET")
+//	)
+func builtinWebhooksVerifyStripe(i *Interpreter, args []Value) (Value, error) {
+	payload, sigHeader, secret, err := webhookThreeStringArgs(args, "webhooks.verify_stripe")
+	if err != nil {
+		return Value{}, err
+	}
+	tolerance := int64(300)
+	if len(args) > 3 && args[3].Kind == KindNumber {
+		tolerance = int64(args[3].Number)
+	}
+	var ts string
+	var v1s []string
+	for _, part := range strings.Split(sigHeader, ",") {
+		kv := strings.SplitN(part, "=", 2)
+		if len(kv) != 2 {
+			continue
+		}
+		switch kv[0] {
+		case "t":
+			ts = kv[1]
+		case "v1":
+			v1s = append(v1s, kv[1])
+		}
+	}
+	if ts == "" || len(v1s) == 0 {
+		return BoolValue(false), nil
+	}
+	tsNum, parseErr := strconv.ParseInt(ts, 10, 64)
+	if parseErr != nil {
+		return BoolValue(false), nil
+	}
+	if tolerance > 0 {
+		now := time.Now().Unix()
+		drift := now - tsNum
+		if drift < 0 {
+			drift = -drift
+		}
+		if drift > tolerance {
+			return BoolValue(false), nil
+		}
+	}
+	expected := computeHMACHex(secret, ts+"."+payload)
+	for _, v := range v1s {
+		if hmac.Equal([]byte(expected), []byte(v)) {
+			return BoolValue(true), nil
+		}
+	}
+	return BoolValue(false), nil
+}
+
+// webhooks.verify_github(payload, signature_header, secret) -> bool
+//
+// GitHub signs with X-Hub-Signature-256 = "sha256=<hex>".
+func builtinWebhooksVerifyGitHub(i *Interpreter, args []Value) (Value, error) {
+	payload, sig, secret, err := webhookThreeStringArgs(args, "webhooks.verify_github")
+	if err != nil {
+		return Value{}, err
+	}
+	const prefix = "sha256="
+	if !strings.HasPrefix(sig, prefix) {
+		return BoolValue(false), nil
+	}
+	expected := computeHMACHex(secret, payload)
+	return BoolValue(hmac.Equal([]byte(expected), []byte(sig[len(prefix):]))), nil
+}
+
+// webhooks.verify_svix(payload, msg_id, timestamp, signature_header, secret) -> bool
+//
+// Svix (Resend, Clerk, Discord, etc.) signs with HMAC-SHA256 of
+// "<msg_id>.<timestamp>.<payload>". The signature header is a
+// space-separated list of "v1,<base64>" entries. The secret comes from
+// the dashboard prefixed with "whsec_" — we strip and base64-decode it
+// per the Svix spec. Returns true if any signature matches.
+//
+//	let ok = webhooks.verify_svix(
+//	  request.body_text,
+//	  request.headers["svix-id"],
+//	  request.headers["svix-timestamp"],
+//	  request.headers["svix-signature"],
+//	  env("SVIX_SECRET")
+//	)
+func builtinWebhooksVerifySvix(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 5 {
+		return Value{}, fmt.Errorf("webhooks.verify_svix(payload, msg_id, timestamp, signature, secret)")
+	}
+	payload, _ := stringArg(args, 0)
+	msgID, _ := stringArg(args, 1)
+	timestamp, _ := stringArg(args, 2)
+	sigHeader, _ := stringArg(args, 3)
+	secret, _ := stringArg(args, 4)
+
+	if msgID == "" || timestamp == "" || sigHeader == "" || secret == "" {
+		return BoolValue(false), nil
+	}
+	// Strip the "whsec_" prefix and base64-decode to get the raw key.
+	keyB64 := strings.TrimPrefix(secret, "whsec_")
+	keyBytes, decErr := base64.StdEncoding.DecodeString(keyB64)
+	if decErr != nil {
+		// If the user passes the raw key directly (not base64), use it as-is.
+		keyBytes = []byte(secret)
+	}
+	signedString := msgID + "." + timestamp + "." + payload
+	mac := hmac.New(sha256.New, keyBytes)
+	mac.Write([]byte(signedString))
+	expected := base64.StdEncoding.EncodeToString(mac.Sum(nil))
+
+	for _, entry := range strings.Fields(sigHeader) {
+		// Each entry is "v1,<base64>"
+		kv := strings.SplitN(entry, ",", 2)
+		if len(kv) != 2 || kv[0] != "v1" {
+			continue
+		}
+		if hmac.Equal([]byte(expected), []byte(kv[1])) {
+			return BoolValue(true), nil
+		}
+	}
+	return BoolValue(false), nil
+}
+
+// webhooks.verify_shopify(payload, signature, secret) -> bool
+//
+// Shopify signs with X-Shopify-Hmac-Sha256 = base64(HMAC-SHA256(body)).
+func builtinWebhooksVerifyShopify(i *Interpreter, args []Value) (Value, error) {
+	payload, sig, secret, err := webhookThreeStringArgs(args, "webhooks.verify_shopify")
+	if err != nil {
+		return Value{}, err
+	}
+	expected := computeHMACBase64(secret, payload)
+	return BoolValue(hmac.Equal([]byte(expected), []byte(sig))), nil
+}
+
+// webhooks.verify_slack(payload, timestamp, signature, secret, tolerance_seconds?) -> bool
+//
+// Slack signs with X-Slack-Signature = "v0=<hex>" where the signed
+// string is "v0:<timestamp>:<payload>". The X-Slack-Request-Timestamp
+// header guards against replay; default tolerance 300s.
+func builtinWebhooksVerifySlack(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 4 {
+		return Value{}, fmt.Errorf("webhooks.verify_slack(payload, timestamp, signature, secret, tolerance?)")
+	}
+	payload, _ := stringArg(args, 0)
+	timestamp, _ := stringArg(args, 1)
+	sig, _ := stringArg(args, 2)
+	secret, _ := stringArg(args, 3)
+	tolerance := int64(300)
+	if len(args) > 4 && args[4].Kind == KindNumber {
+		tolerance = int64(args[4].Number)
+	}
+	const prefix = "v0="
+	if !strings.HasPrefix(sig, prefix) {
+		return BoolValue(false), nil
+	}
+	tsNum, parseErr := strconv.ParseInt(timestamp, 10, 64)
+	if parseErr != nil {
+		return BoolValue(false), nil
+	}
+	if tolerance > 0 {
+		now := time.Now().Unix()
+		drift := now - tsNum
+		if drift < 0 {
+			drift = -drift
+		}
+		if drift > tolerance {
+			return BoolValue(false), nil
+		}
+	}
+	expected := "v0=" + computeHMACHex(secret, "v0:"+timestamp+":"+payload)
+	return BoolValue(hmac.Equal([]byte(expected), []byte(sig))), nil
+}
+
+// webhookThreeStringArgs is a tiny shared validator: every verify_*
+// helper takes (payload, signature, secret) so we centralise the type
+// check + error message.
+func webhookThreeStringArgs(args []Value, name string) (string, string, string, error) {
+	if len(args) < 3 {
+		return "", "", "", fmt.Errorf("%s(payload, signature, secret)", name)
+	}
+	for k, a := range args[:3] {
+		if a.Kind != KindString {
+			return "", "", "", fmt.Errorf("%s: argument %d must be a string", name, k+1)
+		}
+	}
+	return args[0].String, args[1].String, args[2].String, nil
 }
 
 // ===== Logger =====

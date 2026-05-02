@@ -1,0 +1,79 @@
+// webhooks.mx — production webhook handlers for the major providers.
+// Each route verifies the incoming signature before doing anything
+// dangerous. Set the matching env vars and `mx run webhooks.mx`.
+
+server {
+  port: 8080
+}
+
+// ---- Stripe -----------------------------------------------------------
+// Stripe-Signature: t=<ts>,v1=<hex>
+// Verifies HMAC-SHA256 of "<ts>.<body>" AND that <ts> is recent.
+route POST /webhooks/stripe {
+  let ok = webhooks.verify_stripe(
+    request.body_text,
+    request.headers["stripe-signature"],
+    env("STRIPE_WEBHOOK_SECRET")
+  )
+  if (!ok) { return status(401, { error: "bad signature" }) }
+  let event = json_parse(request.body_text)
+  println("stripe event:", event.type)
+  return json({ received: true })
+}
+
+// ---- GitHub -----------------------------------------------------------
+// X-Hub-Signature-256: sha256=<hex>
+route POST /webhooks/github {
+  let ok = webhooks.verify_github(
+    request.body_text,
+    request.headers["x-hub-signature-256"],
+    env("GITHUB_WEBHOOK_SECRET")
+  )
+  if (!ok) { return status(401, { error: "bad signature" }) }
+  let event_type = request.headers["x-github-event"]
+  println("github event:", event_type)
+  return json({ received: true })
+}
+
+// ---- Svix (Resend, Clerk, Discord, …) --------------------------------
+// svix-id, svix-timestamp, svix-signature headers
+// Secrets look like "whsec_<base64>" — pass them through unchanged.
+route POST /webhooks/svix {
+  let ok = webhooks.verify_svix(
+    request.body_text,
+    request.headers["svix-id"],
+    request.headers["svix-timestamp"],
+    request.headers["svix-signature"],
+    env("SVIX_SECRET")
+  )
+  if (!ok) { return status(401, { error: "bad signature" }) }
+  return json({ received: true })
+}
+
+// ---- Shopify ----------------------------------------------------------
+// X-Shopify-Hmac-Sha256: <base64>
+route POST /webhooks/shopify {
+  let ok = webhooks.verify_shopify(
+    request.body_text,
+    request.headers["x-shopify-hmac-sha256"],
+    env("SHOPIFY_WEBHOOK_SECRET")
+  )
+  if (!ok) { return status(401, { error: "bad signature" }) }
+  return json({ received: true })
+}
+
+// ---- Slack ------------------------------------------------------------
+// X-Slack-Signature: v0=<hex>
+// X-Slack-Request-Timestamp: <unix-seconds>
+route POST /webhooks/slack {
+  let ok = webhooks.verify_slack(
+    request.body_text,
+    request.headers["x-slack-request-timestamp"],
+    request.headers["x-slack-signature"],
+    env("SLACK_SIGNING_SECRET")
+  )
+  if (!ok) { return status(401, { error: "bad signature" }) }
+  return json({ received: true })
+}
+
+println("webhook handlers up at http://localhost:8080/webhooks/*")

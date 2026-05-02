@@ -4,11 +4,17 @@
 package interpreter
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 func runWithGlobals(t *testing.T, src string) *Interpreter {
@@ -587,5 +593,174 @@ func TestTemplateNestedEachAndIf(t *testing.T) {
 	out, _ := renderTemplate(tmpl, vars, nil, true)
 	if out != "go! rust " {
 		t.Errorf("got %q", out)
+	}
+}
+
+func runVerify(t *testing.T, fn func(*Interpreter, []Value) (Value, error), args ...Value) bool {
+	t.Helper()
+	v, err := fn(nil, args)
+	if err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+	if v.Kind != KindBool {
+		t.Fatalf("verify: expected bool, got %+v", v)
+	}
+	return v.Bool
+}
+
+func TestWebhooksGitHub(t *testing.T) {
+	secret := "It's a Secret to Everybody"
+	payload := "Hello, World!"
+	// From GitHub's docs — exact published example.
+	signature := "sha256=757107ea0eb2509fc211221cce984b8a37570b6d7586c22c46f4379c8b043e17"
+
+	if !runVerify(t, builtinWebhooksVerifyGitHub,
+		StringValue(payload), StringValue(signature), StringValue(secret)) {
+		t.Error("github sig should verify")
+	}
+	// Mutated body fails.
+	if runVerify(t, builtinWebhooksVerifyGitHub,
+		StringValue(payload+"!"), StringValue(signature), StringValue(secret)) {
+		t.Error("github should reject tampered body")
+	}
+	// Missing prefix fails.
+	if runVerify(t, builtinWebhooksVerifyGitHub,
+		StringValue(payload),
+		StringValue("757107ea0eb2509fc211221cce984b8a37570b6d7586c22c46f4379c8b043e17"),
+		StringValue(secret)) {
+		t.Error("github should require sha256= prefix")
+	}
+}
+
+func TestWebhooksStripe(t *testing.T) {
+	secret := "whsec_test"
+	payload := `{"id":"evt_test","type":"customer.created"}`
+	// Build a signed header with the current timestamp so the tolerance
+	// check passes. We compute the signature ourselves the same way
+	// Stripe does so the test is a true round-trip.
+	ts := strconv.FormatInt(time.Now().Unix(), 10)
+	signedString := ts + "." + payload
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(signedString))
+	hex := fmt.Sprintf("%x", mac.Sum(nil))
+	header := "t=" + ts + ",v1=" + hex
+
+	if !runVerify(t, builtinWebhooksVerifyStripe,
+		StringValue(payload), StringValue(header), StringValue(secret)) {
+		t.Error("stripe sig should verify with current timestamp")
+	}
+
+	// Old timestamp (10 minutes ago) should fail with default tolerance.
+	oldTs := strconv.FormatInt(time.Now().Add(-10*time.Minute).Unix(), 10)
+	mac = hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(oldTs + "." + payload))
+	oldHeader := "t=" + oldTs + ",v1=" + fmt.Sprintf("%x", mac.Sum(nil))
+	if runVerify(t, builtinWebhooksVerifyStripe,
+		StringValue(payload), StringValue(oldHeader), StringValue(secret)) {
+		t.Error("stripe should reject signature with old timestamp")
+	}
+
+	// But with tolerance=0 (skip timestamp check), it should pass.
+	if !runVerify(t, builtinWebhooksVerifyStripe,
+		StringValue(payload), StringValue(oldHeader), StringValue(secret), NumberValue(0)) {
+		t.Error("stripe with tolerance=0 should accept old timestamp")
+	}
+
+	// Wrong secret: rejected.
+	if runVerify(t, builtinWebhooksVerifyStripe,
+		StringValue(payload), StringValue(header), StringValue("wrong_secret")) {
+		t.Error("stripe should reject wrong secret")
+	}
+}
+
+func TestWebhooksSlack(t *testing.T) {
+	// From Slack's official docs, with a now-recent timestamp so the
+	// tolerance check passes. Re-derive the signature so this test
+	// runs deterministically across machines.
+	secret := "8f742231b10e8888abcd99yyyzzz85a5"
+	payload := "token=xyzz0WbapA4vBCDEFasx0q6G&team_id=T1DC2JH3J&team_domain=testteamnow&channel_id=G8PSS9T3V&channel_name=foobar&user_id=U2CERLKJA&user_name=roadrunner&command=%2Fwebhook-collect&text=&response_url=https%3A%2F%2Fhooks.slack.com%2Fcommands%2FT1DC2JH3J%2F397700885554%2F96rGlfmibIGlgcZRskXaIFfN&trigger_id=398738663015.47445629121.803a0bc887a14d10d2c447fce8b6703c"
+	ts := strconv.FormatInt(time.Now().Unix(), 10)
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte("v0:" + ts + ":" + payload))
+	signature := "v0=" + fmt.Sprintf("%x", mac.Sum(nil))
+
+	if !runVerify(t, builtinWebhooksVerifySlack,
+		StringValue(payload), StringValue(ts), StringValue(signature), StringValue(secret)) {
+		t.Error("slack sig should verify")
+	}
+
+	// Tampered body fails.
+	if runVerify(t, builtinWebhooksVerifySlack,
+		StringValue(payload+"x"), StringValue(ts), StringValue(signature), StringValue(secret)) {
+		t.Error("slack should reject tampered body")
+	}
+
+	// Old timestamp fails.
+	oldTs := strconv.FormatInt(time.Now().Add(-10*time.Minute).Unix(), 10)
+	mac = hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte("v0:" + oldTs + ":" + payload))
+	oldSig := "v0=" + fmt.Sprintf("%x", mac.Sum(nil))
+	if runVerify(t, builtinWebhooksVerifySlack,
+		StringValue(payload), StringValue(oldTs), StringValue(oldSig), StringValue(secret)) {
+		t.Error("slack should reject old timestamp by default")
+	}
+}
+
+func TestWebhooksShopify(t *testing.T) {
+	secret := "shop_secret_2024"
+	payload := `{"id":12345,"order_number":1001}`
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(payload))
+	signature := base64.StdEncoding.EncodeToString(mac.Sum(nil))
+
+	if !runVerify(t, builtinWebhooksVerifyShopify,
+		StringValue(payload), StringValue(signature), StringValue(secret)) {
+		t.Error("shopify sig should verify")
+	}
+	if runVerify(t, builtinWebhooksVerifyShopify,
+		StringValue(payload), StringValue(signature), StringValue("wrong")) {
+		t.Error("shopify should reject wrong secret")
+	}
+}
+
+func TestWebhooksSvix(t *testing.T) {
+	// Svix secrets are stored as "whsec_<base64-of-key>". The library
+	// decodes them and HMACs the canonical "<id>.<ts>.<body>" string.
+	rawKey := []byte("svix-test-secret-key-abcdef123456")
+	secret := "whsec_" + base64.StdEncoding.EncodeToString(rawKey)
+	msgID := "msg_2sbB6n6T5Hm2DjGpCpqkZyMxYPC"
+	ts := "1719525600"
+	payload := `{"type":"email.delivered","data":{"to":"hi@example.com"}}`
+
+	mac := hmac.New(sha256.New, rawKey)
+	mac.Write([]byte(msgID + "." + ts + "." + payload))
+	sig := "v1," + base64.StdEncoding.EncodeToString(mac.Sum(nil))
+
+	if !runVerify(t, builtinWebhooksVerifySvix,
+		StringValue(payload), StringValue(msgID), StringValue(ts),
+		StringValue(sig), StringValue(secret)) {
+		t.Error("svix sig should verify")
+	}
+
+	// Multiple sigs in one header — at least one must match.
+	multi := "v1,bad_signature_value " + sig
+	if !runVerify(t, builtinWebhooksVerifySvix,
+		StringValue(payload), StringValue(msgID), StringValue(ts),
+		StringValue(multi), StringValue(secret)) {
+		t.Error("svix should accept any matching sig in space-separated list")
+	}
+
+	// Tampered body fails.
+	if runVerify(t, builtinWebhooksVerifySvix,
+		StringValue(payload+"!"), StringValue(msgID), StringValue(ts),
+		StringValue(sig), StringValue(secret)) {
+		t.Error("svix should reject tampered body")
+	}
+
+	// Missing required field returns false (not an error).
+	if runVerify(t, builtinWebhooksVerifySvix,
+		StringValue(payload), StringValue(""), StringValue(ts),
+		StringValue(sig), StringValue(secret)) {
+		t.Error("svix should reject empty msg_id")
 	}
 }

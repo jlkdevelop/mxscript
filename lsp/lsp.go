@@ -499,7 +499,12 @@ var builtinDocs = map[string]builtinDoc{
 	"aes_decrypt":    {"aes_decrypt(ciphertext, key) -> string", "Inverse of aes_encrypt."},
 	"sign_cookie":    {"sign_cookie(secret, value) -> string", "Tamper-evident signed cookie value."},
 	"verify_cookie":  {"verify_cookie(secret, signed) -> string|null", ""},
-	"verify_webhook": {"verify_webhook(secret, body, sig, scheme?) -> bool", "scheme: hex/base64/github/stripe."},
+	"verify_webhook":           {"verify_webhook(secret, body, sig, scheme?) -> bool", "scheme: hex/base64/github/stripe."},
+	"webhooks.verify_stripe":   {"webhooks.verify_stripe(payload, signature_header, secret, tolerance?) -> bool", "Stripe-Signature with timestamp tolerance (default 300s)."},
+	"webhooks.verify_github":   {"webhooks.verify_github(payload, signature, secret) -> bool", "X-Hub-Signature-256 = sha256=<hex>."},
+	"webhooks.verify_svix":     {"webhooks.verify_svix(payload, msg_id, timestamp, signature, secret) -> bool", "Svix / Resend / Clerk / Discord."},
+	"webhooks.verify_shopify":  {"webhooks.verify_shopify(payload, signature, secret) -> bool", "X-Shopify-Hmac-Sha256 = base64."},
+	"webhooks.verify_slack":    {"webhooks.verify_slack(payload, timestamp, signature, secret, tolerance?) -> bool", "Slack v0=<hex>, with timestamp guard."},
 
 	// Regex
 	"re_match":    {"re_match(pattern, s) -> bool", ""},

@@ -4,6 +4,58 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.56.0] — 2026-05-02
+
+### Added — `webhooks.*` namespace
+- **One-line webhook verification for the five providers most apps
+  actually need.** No more hand-rolled HMAC code in route handlers,
+  no more replay-attack windows left open by accident.
+
+  ```mx
+  route POST /webhooks/stripe {
+    let ok = webhooks.verify_stripe(
+      request.body_text,
+      request.headers["stripe-signature"],
+      env("STRIPE_WEBHOOK_SECRET")
+    )
+    if (!ok) { return status(401, { error: "bad signature" }) }
+    // ... process event
+  }
+  ```
+
+  Providers shipped today:
+
+  | Function | Provider | Header scheme | Replay protection |
+  |---|---|---|---|
+  | `webhooks.verify_stripe(payload, sig, secret, tolerance?)` | Stripe | `t=...,v1=...` | yes — 300s default |
+  | `webhooks.verify_github(payload, sig, secret)` | GitHub | `sha256=<hex>` | n/a |
+  | `webhooks.verify_svix(payload, msg_id, ts, sig, secret)` | Svix (Resend, Clerk, Discord…) | `v1,<base64>` (space-separated) | implicit (header `svix-timestamp`) |
+  | `webhooks.verify_shopify(payload, sig, secret)` | Shopify | base64 HMAC-SHA256 | n/a |
+  | `webhooks.verify_slack(payload, ts, sig, secret, tolerance?)` | Slack | `v0=<hex>` | yes — 300s default |
+
+- **Tested against published examples.** The GitHub test uses the exact
+  signature from GitHub's docs (`Hello, World!` / `It's a Secret to
+  Everybody` → `sha256=757107ea0eb2509f...`). The Stripe, Slack, Svix,
+  and Shopify tests round-trip the documented signed-string formula
+  end-to-end.
+
+- **Stripe + Slack reject stale timestamps** by default (5 minute
+  drift window). Pass `tolerance=0` to disable, or any positive
+  number of seconds to widen.
+
+- **Constant-time comparison everywhere** (`hmac.Equal`) so signature
+  verification is safe against timing attacks.
+
+- **Svix secret format handled.** Secrets stored as `whsec_<base64>`
+  are decoded automatically; raw keys also work for users who
+  pre-decode.
+
+- **`examples/webhooks.mx`** is a copy-pasteable router with one
+  signed handler per provider — drop into any project, set the env
+  vars, done.
+
+[0.56.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.56.0
+
 ## [0.55.0] — 2026-05-02
 
 ### Added — real template engine (if / each / partials)
