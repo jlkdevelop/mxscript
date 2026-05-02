@@ -4,6 +4,38 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.0] — 2026-05-02
+
+### Added
+- **String interpolation**: `"Hello, ${name}! 2 + 3 = ${2 + 3}"`. Interpolated
+  expressions are full MX expressions, including member access and function
+  calls. Escape with `\${...}` for a literal `${`.
+- **`while` loops**: `while (cond) { ... }` complements the existing
+  `loop ... as` form for cases where the iteration count isn't known up front.
+- **`break` and `continue`**: standard loop control, valid inside both
+  `loop ... as` and `while`.
+- **Pretty error messages**: parse and runtime errors now render with the
+  offending source line in red and a caret (`^`) pointing at the column.
+  Errors include a structured `--> file:line:col` location.
+- **`mx repl`**: an interactive read-eval-print loop with multi-line input,
+  expression results, and `.help` / `.exit` / `.clear` / `.vars` meta commands.
+
+### Changed
+- `parser` package now exports `ParseError` so callers (including the CLI)
+  can render structured error context. `interpreter.MXError` already had
+  `Line` / `Col` / `File` fields; both are now formatted by a single
+  `printError` helper in the CLI.
+- The `--port` flag now reliably wins over a program's `server { port: ... }`
+  block. Previously the program's setting overrode the CLI flag.
+
+### Internal
+- New `Interpreter.Globals()` and `Interpreter.Exec()` exposed for embedding
+  (used by the REPL).
+- Built-ins are tagged via an `IsBuiltin` registry so the REPL's `.vars`
+  command can hide them from output.
+
+[0.2.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.2.0
+
 ## [0.1.0] — 2026-05-02
 
 ### Added

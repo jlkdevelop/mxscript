@@ -107,6 +107,7 @@ mx run <file.mx> --watch       # restart on file changes (hot reload)
 mx run <file.mx> --debug       # print tokens and AST
 mx init [name]                 # scaffold a new project
 mx build <file.mx>             # parse & validate without running
+mx repl                        # interactive REPL
 mx version                     # print version
 mx help                        # show help
 ```
@@ -123,6 +124,9 @@ let age = 30
 let active = true
 let scores = [10, 20, 30]
 let user = { id: 1, name: "Ada" }
+
+// String interpolation
+print("Hello, ${name}! Score sum: ${scores[0] + scores[1] + scores[2]}")
 ```
 
 ### Functions
@@ -156,6 +160,12 @@ loop scores as s {
 
 loop 5 as i {
   print(i)
+}
+
+let n = 0
+while (n < 100) {
+  n = n + 1
+  if (n == 50) { break }
 }
 ```
 

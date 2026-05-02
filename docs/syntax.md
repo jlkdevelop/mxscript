@@ -23,7 +23,21 @@ let arr    = [1, 2, 3]
 let obj    = { id: 1, name: "Jassim" }
 ```
 
-Strings support `\n`, `\t`, `\"`, `\\` escapes. Numbers are 64-bit floats.
+Strings support `\n`, `\t`, `\"`, `\\`, `\$` escapes. Numbers are 64-bit floats.
+
+### String interpolation
+
+Strings support `${expr}` template syntax. The expression can be any MX expression — member access, calls, math, anything:
+
+```mx
+let name = "Jassim"
+let age = 30
+print("Hello, ${name}! You are ${age * 2 - 30} years old now.")
+print("Upper: ${upper(name)}")
+
+// Escape with backslash to write a literal ${...}
+print("\${not interpolated}")
+```
 
 ## Variables
 
@@ -99,6 +113,30 @@ loop 5 as i {       // 0, 1, 2, 3, 4
 
 loop { a: 1, b: 2 } as key {
   print(key)
+}
+```
+
+### while
+
+`while (cond) { ... }`. Use this when the iteration count isn't known up front.
+
+```mx
+let x = 0
+while (x < 100) {
+  x = x + 1
+  if (x == 50) { break }
+}
+```
+
+### break and continue
+
+`break` exits the nearest enclosing loop. `continue` skips to the next iteration. Both work inside `loop ... as` and `while`.
+
+```mx
+let evens = []
+loop 10 as n {
+  if (n % 2 != 0) { continue }
+  evens = push(evens, n)
 }
 ```
 

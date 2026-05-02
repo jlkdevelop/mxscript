@@ -8,7 +8,12 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
-- **v0.1.0** — initial release
+- **v0.2.0** (2026-05-02)
+  - String interpolation (`"hello ${name}"`)
+  - `while` loops, `break`, `continue`
+  - Pretty error messages with source-line context and caret pointers
+  - Interactive REPL (`mx repl`)
+- **v0.1.0** (2026-05-02) — initial release
   - Lexer, parser, tree-walking interpreter
   - HTTP routes (`GET` / `POST` / `PUT` / `DELETE` / `PATCH`)
   - Path params (`/users/:id`), query, headers, JSON body
@@ -22,18 +27,17 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ---
 
-## Next up
+## Next up (v0.3 candidates)
 
 These are the things we'd most like help with.
 
-- [ ] **Pre-built binaries** for macOS / Linux / Windows on every tag (GoReleaser).
+- [ ] **Pre-built binaries** for macOS / Linux / Windows on every tag (GoReleaser config exists; verify on first tag).
 - [ ] **`mx fmt`** — opinionated formatter for `.mx` files.
-- [ ] **`mx repl`** — interactive REPL.
 - [ ] **WebSocket routes** — `route WS /chat { ... }`.
 - [ ] **SQLite driver** — `db.query("select ...")` as a built-in.
 - [ ] **Cookies** — `request.cookies` and `set_cookie(name, value)`.
 - [ ] **Static file serving** — `static "./public"` directive.
-- [ ] **Better error messages** — show source line context in red, not just line numbers.
+- [ ] **Spread operator** — `let combined = [...a, ...b]`.
 
 ---
 
@@ -45,6 +49,20 @@ These are the things we'd most like help with.
 - [ ] **Native concurrency** — green-thread style `spawn { ... }`.
 - [ ] **Type hints** — optional gradual typing for IDEs.
 - [ ] **Sessions / auth helpers** — JWT, OAuth2 flows in stdlib.
+
+---
+
+## The 1.0 milestone — self-hosted MX
+
+Once the language is stable enough, the goal is to **rewrite the MX compiler in MX itself** (a process called *bootstrapping* or *self-hosting*). At that point MX no longer needs Go to exist — it can build itself. This is the milestone where MX graduates from a project-built-in-Go to a real language with its own ecosystem.
+
+Path to get there:
+
+1. v0.x — grow the language: types, modules, more stdlib, performance work
+2. v0.9 — write `mxc` (the MX-in-MX compiler) as a side project, validated against the Go reference
+3. v1.0 — `mxc` produces output bit-identical to the Go reference for the full test suite. Ship `mxc` as the canonical build, keep the Go interpreter for development.
+
+This is how every serious language graduates. Python's PyPy, Go's `gc`, Rust's `rustc`, TypeScript's `tsc` — all started life implemented in another language and self-hosted later.
 
 ---
 
