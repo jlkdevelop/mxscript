@@ -87,6 +87,14 @@ func registerBuiltins(i *Interpreter) {
 	def("range", builtinRange)
 	def("keys", builtinKeys)
 	def("values", builtinValues)
+	def("sort", builtinSort)
+	def("sort_by", builtinSortBy)
+	def("reduce", builtinReduce)
+	def("sum", builtinSum)
+	def("group_by", builtinGroupBy)
+	def("unique", builtinUnique)
+	def("flatten", builtinFlatten)
+	def("zip", builtinZip)
 
 	// --- Math ---
 	def("round", builtinRound)
@@ -783,6 +791,191 @@ func builtinValues(i *Interpreter, args []Value) (Value, error) {
 	out := make([]Value, len(args[0].Object.Keys))
 	for k, key := range args[0].Object.Keys {
 		out[k] = args[0].Object.Values[key]
+	}
+	return ArrayValue(out), nil
+}
+
+// sort(arr) returns a sorted copy. Numbers ascending, strings
+// lexicographic; mixed-kind arrays return an error.
+func builtinSort(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 1 || args[0].Kind != KindArray {
+		return Value{}, fmt.Errorf("sort(arr) requires an array")
+	}
+	a := args[0].Array
+	out := append([]Value(nil), a...)
+	if len(out) < 2 {
+		return ArrayValue(out), nil
+	}
+	kind := out[0].Kind
+	for _, v := range out {
+		if v.Kind != kind {
+			return Value{}, fmt.Errorf("sort: cannot mix %s and %s", kind, v.typeName())
+		}
+	}
+	switch kind {
+	case KindNumber:
+		// stdlib sort.Slice would be nicer, but we already imported sort.
+		simpleSortFloat(out)
+	case KindString:
+		simpleSortString(out)
+	default:
+		return Value{}, fmt.Errorf("sort: unsupported element type %s", kind)
+	}
+	return ArrayValue(out), nil
+}
+
+func simpleSortFloat(a []Value) {
+	for i := 1; i < len(a); i++ {
+		for j := i; j > 0 && a[j-1].Number > a[j].Number; j-- {
+			a[j-1], a[j] = a[j], a[j-1]
+		}
+	}
+}
+
+func simpleSortString(a []Value) {
+	for i := 1; i < len(a); i++ {
+		for j := i; j > 0 && a[j-1].String > a[j].String; j-- {
+			a[j-1], a[j] = a[j], a[j-1]
+		}
+	}
+}
+
+// sort_by(arr, key_fn) sorts using a key extractor. Stable insertion sort.
+func builtinSortBy(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 2 || args[0].Kind != KindArray || args[1].Kind != KindFunction {
+		return Value{}, fmt.Errorf("sort_by(arr, key_fn) requires (array, function)")
+	}
+	a := append([]Value(nil), args[0].Array...)
+	keys := make([]Value, len(a))
+	for k, v := range a {
+		key, err := i.callFunction(nil, args[1].Function, []Value{v})
+		if err != nil {
+			return Value{}, err
+		}
+		keys[k] = key
+	}
+	for k := 1; k < len(a); k++ {
+		for j := k; j > 0 && less(keys[j-1], keys[j]) == false && less(keys[j], keys[j-1]); j-- {
+			a[j-1], a[j] = a[j], a[j-1]
+			keys[j-1], keys[j] = keys[j], keys[j-1]
+		}
+	}
+	return ArrayValue(a), nil
+}
+
+func less(a, b Value) bool {
+	if a.Kind == KindNumber && b.Kind == KindNumber {
+		return a.Number < b.Number
+	}
+	if a.Kind == KindString && b.Kind == KindString {
+		return a.String < b.String
+	}
+	return false
+}
+
+// reduce(arr, fn, init) folds an array into a single value.
+func builtinReduce(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 3 || args[0].Kind != KindArray || args[1].Kind != KindFunction {
+		return Value{}, fmt.Errorf("reduce(arr, fn, init) requires (array, function, value)")
+	}
+	acc := args[2]
+	for _, el := range args[0].Array {
+		v, err := i.callFunction(nil, args[1].Function, []Value{acc, el})
+		if err != nil {
+			return Value{}, err
+		}
+		acc = v
+	}
+	return acc, nil
+}
+
+// sum(arr) — sum of numeric array elements.
+func builtinSum(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 1 || args[0].Kind != KindArray {
+		return Value{}, fmt.Errorf("sum(arr) requires an array")
+	}
+	total := 0.0
+	for _, v := range args[0].Array {
+		if v.Kind != KindNumber {
+			return Value{}, fmt.Errorf("sum: non-numeric element %s", v.typeName())
+		}
+		total += v.Number
+	}
+	return NumberValue(total), nil
+}
+
+// group_by(arr, key_fn) -> object mapping key -> array of items.
+func builtinGroupBy(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 2 || args[0].Kind != KindArray || args[1].Kind != KindFunction {
+		return Value{}, fmt.Errorf("group_by(arr, key_fn) requires (array, function)")
+	}
+	out := NewOrderedMap()
+	for _, v := range args[0].Array {
+		key, err := i.callFunction(nil, args[1].Function, []Value{v})
+		if err != nil {
+			return Value{}, err
+		}
+		k := key.Display()
+		bucket, _ := out.Get(k)
+		if bucket.Kind != KindArray {
+			bucket = ArrayValue(nil)
+		}
+		bucket.Array = append(bucket.Array, v)
+		out.Set(k, bucket)
+	}
+	return ObjectValue(out), nil
+}
+
+// unique(arr) returns a new array with duplicates removed (first wins).
+func builtinUnique(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 1 || args[0].Kind != KindArray {
+		return Value{}, fmt.Errorf("unique(arr) requires an array")
+	}
+	var out []Value
+	for _, v := range args[0].Array {
+		dup := false
+		for _, w := range out {
+			if valuesEqual(v, w) {
+				dup = true
+				break
+			}
+		}
+		if !dup {
+			out = append(out, v)
+		}
+	}
+	return ArrayValue(out), nil
+}
+
+// flatten(arr) flattens one level of nested arrays.
+func builtinFlatten(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 1 || args[0].Kind != KindArray {
+		return Value{}, fmt.Errorf("flatten(arr) requires an array")
+	}
+	var out []Value
+	for _, v := range args[0].Array {
+		if v.Kind == KindArray {
+			out = append(out, v.Array...)
+		} else {
+			out = append(out, v)
+		}
+	}
+	return ArrayValue(out), nil
+}
+
+// zip(a, b) -> array of [a[i], b[i]] pairs, length = min(len(a), len(b)).
+func builtinZip(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 2 || args[0].Kind != KindArray || args[1].Kind != KindArray {
+		return Value{}, fmt.Errorf("zip(a, b) requires two arrays")
+	}
+	a, b := args[0].Array, args[1].Array
+	n := len(a)
+	if len(b) < n {
+		n = len(b)
+	}
+	out := make([]Value, n)
+	for k := 0; k < n; k++ {
+		out[k] = ArrayValue([]Value{a[k], b[k]})
 	}
 	return ArrayValue(out), nil
 }
