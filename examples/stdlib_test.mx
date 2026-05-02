@@ -68,3 +68,32 @@ fn test_url_parse() {
   assert_eq(u.query.key, "value")
   assert_eq(u.fragment, "frag")
 }
+
+fn test_number_literals() {
+  assert_eq(0xFF, 255)
+  assert_eq(0b1010, 10)
+  assert_eq(0o755, 493)
+  assert_eq(1_000_000, 1000000)
+}
+
+fn test_try_as_expression() {
+  let good = try { num("42") } catch { 0 }
+  assert_eq(good, 42)
+  let bad  = try { num("xyz") } catch (e) { 0 }
+  assert_eq(bad, 0)
+}
+
+fn test_indexed_loop() {
+  let pairs = []
+  loop ["a", "b", "c"] as i, x {
+    pairs = push(pairs, "${i}:${x}")
+  }
+  assert_eq(pairs, ["0:a", "1:b", "2:c"])
+}
+
+fn test_signed_cookies() {
+  let secret = "test-key"
+  let signed = sign_cookie(secret, "user:42")
+  assert_eq(verify_cookie(secret, signed), "user:42")
+  assert_eq(verify_cookie("wrong", signed), null)
+}

@@ -8,6 +8,11 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.7.0** (2026-05-02)
+  - `try` as expression
+  - Indexed loops: `loop arr as i, item { ... }`
+  - Hex / binary / octal literals + underscore separators (`0xFF`, `1_000_000`)
+  - Signed-cookie sessions: `sign_cookie` / `verify_cookie`
 - **v0.6.0** (2026-05-02)
   - `mx test` — built-in test runner with `assert` / `assert_eq` builtins
   - URL parsing (`parse_url`, `url_encode`, `url_decode`)
@@ -48,16 +53,15 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ---
 
-## Next up (v0.7 candidates)
+## Next up (v0.8 candidates)
 
 These are the things we'd most like help with.
 
-- [ ] **`mx fmt`** — opinionated formatter for `.mx` files.
+- [ ] **`mx fmt`** — opinionated formatter for `.mx` files (needs comment-preserving lexer first).
 - [ ] **WebSocket routes** — `route WS /chat { ... }`.
-- [ ] **SQLite driver** — `db.query("select ...")` as a built-in (pure-Go driver).
-- [ ] **Sessions helper** — signed-cookie sessions backed by JWT.
-- [ ] **`try` as expression** — `let x = try { ... } catch { ... }`.
-- [ ] **Coverage** — `mx test --cover`.
+- [ ] **SQLite driver** — `db.query("select ...")` as a built-in.
+- [ ] **`mx test --cover`** — line-coverage report.
+- [ ] **`spawn { ... }`** — green-thread concurrency.
 - [ ] **GitHub linguist PR** — once we hit the public-adoption threshold.
 - [ ] **VS Code Marketplace listing** — publish the extension.
 

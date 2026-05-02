@@ -4,6 +4,22 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.7.0] — 2026-05-02
+
+### Added
+- **`try` as expression**: `let parsed = try { json_parse(s) } catch (e) { default }`.
+  The value of the last expression in whichever block ran becomes the result.
+- **Indexed loops**: `loop arr as i, item { ... }` exposes the 0-based
+  position alongside each element. The single-var form keeps working.
+- **Number literal forms**: hex `0xFF`, binary `0b1010`, octal `0o755`,
+  and underscore separators `1_000_000` for readability.
+- **Signed-cookie sessions**: `sign_cookie(secret, value)` produces a
+  tamper-evident string; `verify_cookie(secret, signed)` returns the
+  value or `null`. A cheaper alternative to JWT when you just need
+  integrity.
+
+[0.7.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.7.0
+
 ## [0.6.0] — 2026-05-02
 
 ### Added
