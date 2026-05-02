@@ -4,6 +4,44 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.18.0] — 2026-05-02
+
+### Added
+- **OAuth2 helpers** for the most common providers — Google, GitHub,
+  Discord, LinkedIn, Microsoft. Two functions cover the whole flow:
+
+  ```mx
+  // 1. Send the user to the provider's consent page
+  get /auth/google {
+    return redirect(oauth.authorize_url({
+      provider: "google",
+      client_id: env_required("GOOGLE_CLIENT_ID"),
+      redirect_uri: "https://app.example.com/auth/callback",
+      scopes: ["openid", "email", "profile"],
+      state: uuid()
+    }))
+  }
+
+  // 2. Exchange ?code= for tokens on the callback
+  get /auth/callback {
+    let tokens = oauth.exchange_code({
+      provider: "google",
+      client_id: env_required("GOOGLE_CLIENT_ID"),
+      client_secret: env_required("GOOGLE_CLIENT_SECRET"),
+      redirect_uri: "https://app.example.com/auth/callback",
+      code: request.query.code
+    })
+    // tokens.access_token, tokens.id_token, ...
+    return json(tokens)
+  }
+  ```
+
+  Custom providers: pass `authorize_url` and `token_url` instead of
+  `provider`. The token-exchange response is decoded as JSON, falling
+  back to form-urlencoded for older providers (GitHub).
+
+[0.18.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.18.0
+
 ## [0.17.0] — 2026-05-02
 
 ### Added

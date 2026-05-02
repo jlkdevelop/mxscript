@@ -8,6 +8,9 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.18.0** (2026-05-02)
+  - OAuth2 helpers: `oauth.authorize_url(opts)` / `oauth.exchange_code(opts)`
+  - Built-in providers: Google, GitHub, Discord, LinkedIn, Microsoft
 - **v0.17.0** (2026-05-02)
   - gzip compression: `server.compression: true`
   - `markdown(s)` — built-in CommonMark subset → safe HTML

@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -213,6 +214,13 @@ func registerBuiltins(i *Interpreter) {
 
 	// --- Webhook helpers ---
 	def("verify_webhook", builtinVerifyWebhook)
+
+	// --- OAuth2 namespace ---
+	oauthNS := NewOrderedMap()
+	oauthNS.Set("authorize_url", FunctionValue(&Function{Name: "oauth.authorize_url", Native: builtinOAuthAuthorizeURL}))
+	oauthNS.Set("exchange_code", FunctionValue(&Function{Name: "oauth.exchange_code", Native: builtinOAuthExchangeCode}))
+	g.Set("oauth", ObjectValue(oauthNS))
+	builtinNames["oauth"] = true
 
 	// --- Concurrency: channels ---
 	def("chan", builtinChan)
@@ -2242,6 +2250,151 @@ func lookupTemplateVar(vars *OrderedMap, expr string) Value {
 func htmlEscapeString(s string) string {
 	r := strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;", "'", "&#39;")
 	return r.Replace(s)
+}
+
+// ===== OAuth2 =====
+//
+// Generic helpers for any OAuth2 provider — Google, GitHub, Discord,
+// Auth0, etc. Two functions: build the user-facing authorize URL, then
+// exchange the callback ?code= for an access token.
+//
+//	let url = oauth.authorize_url({
+//	  provider: "google",  // or "github", or pass authorize_url explicitly
+//	  client_id: env_required("GOOGLE_CLIENT_ID"),
+//	  redirect_uri: "https://app.example.com/auth/callback",
+//	  scopes: ["openid", "email", "profile"]
+//	})
+//	// redirect user to `url`. After they consent, Google redirects back
+//	// with ?code=... Then:
+//	let tokens = oauth.exchange_code({
+//	  provider: "google",
+//	  client_id: env_required("GOOGLE_CLIENT_ID"),
+//	  client_secret: env_required("GOOGLE_CLIENT_SECRET"),
+//	  redirect_uri: "https://app.example.com/auth/callback",
+//	  code: request.query.code
+//	})
+
+var oauthProviders = map[string]struct{ Auth, Token string }{
+	"google":    {"https://accounts.google.com/o/oauth2/v2/auth", "https://oauth2.googleapis.com/token"},
+	"github":    {"https://github.com/login/oauth/authorize", "https://github.com/login/oauth/access_token"},
+	"discord":   {"https://discord.com/api/oauth2/authorize", "https://discord.com/api/oauth2/token"},
+	"linkedin":  {"https://www.linkedin.com/oauth/v2/authorization", "https://www.linkedin.com/oauth/v2/accessToken"},
+	"microsoft": {"https://login.microsoftonline.com/common/oauth2/v2.0/authorize", "https://login.microsoftonline.com/common/oauth2/v2.0/token"},
+}
+
+func resolveOAuthEndpoint(opts *OrderedMap, kind string) string {
+	if v, ok := opts.Get(kind + "_url"); ok && v.Kind == KindString {
+		return v.String
+	}
+	if v, ok := opts.Get("provider"); ok && v.Kind == KindString {
+		if p, ok := oauthProviders[strings.ToLower(v.String)]; ok {
+			if kind == "authorize" {
+				return p.Auth
+			}
+			return p.Token
+		}
+	}
+	return ""
+}
+
+func builtinOAuthAuthorizeURL(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 1 || args[0].Kind != KindObject {
+		return Value{}, fmt.Errorf("oauth.authorize_url(opts) requires an object")
+	}
+	o := args[0].Object
+	authorize := resolveOAuthEndpoint(o, "authorize")
+	if authorize == "" {
+		return Value{}, fmt.Errorf("oauth.authorize_url: pass `provider` (google/github/discord/...) or `authorize_url` explicitly")
+	}
+	clientID := ""
+	if v, ok := o.Get("client_id"); ok && v.Kind == KindString {
+		clientID = v.String
+	}
+	if clientID == "" {
+		return Value{}, fmt.Errorf("oauth.authorize_url: client_id is required")
+	}
+
+	q := neturl.Values{}
+	q.Set("client_id", clientID)
+	q.Set("response_type", "code")
+	if v, ok := o.Get("redirect_uri"); ok && v.Kind == KindString {
+		q.Set("redirect_uri", v.String)
+	}
+	if v, ok := o.Get("state"); ok && v.Kind == KindString {
+		q.Set("state", v.String)
+	}
+	if v, ok := o.Get("scopes"); ok && v.Kind == KindArray {
+		q.Set("scope", strings.Join(stringsFromArray(v.Array), " "))
+	} else if v, ok := o.Get("scope"); ok && v.Kind == KindString {
+		q.Set("scope", v.String)
+	}
+	// Provider-specific extras the user can pass through.
+	for _, k := range []string{"prompt", "access_type", "response_mode"} {
+		if v, ok := o.Get(k); ok && v.Kind == KindString {
+			q.Set(k, v.String)
+		}
+	}
+	return StringValue(authorize + "?" + q.Encode()), nil
+}
+
+func builtinOAuthExchangeCode(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 1 || args[0].Kind != KindObject {
+		return Value{}, fmt.Errorf("oauth.exchange_code(opts) requires an object")
+	}
+	o := args[0].Object
+	tokenURL := resolveOAuthEndpoint(o, "token")
+	if tokenURL == "" {
+		return Value{}, fmt.Errorf("oauth.exchange_code: pass `provider` or `token_url`")
+	}
+
+	form := neturl.Values{}
+	form.Set("grant_type", "authorization_code")
+	for _, k := range []string{"client_id", "client_secret", "redirect_uri", "code"} {
+		if v, ok := o.Get(k); ok && v.Kind == KindString {
+			form.Set(k, v.String)
+		}
+	}
+	if form.Get("client_id") == "" || form.Get("code") == "" {
+		return Value{}, fmt.Errorf("oauth.exchange_code requires client_id and code")
+	}
+
+	req, err := http.NewRequest("POST", tokenURL, strings.NewReader(form.Encode()))
+	if err != nil {
+		return Value{}, err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return Value{}, err
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return Value{}, err
+	}
+	if resp.StatusCode >= 400 {
+		return Value{}, fmt.Errorf("oauth.exchange_code failed (%d): %s", resp.StatusCode, string(raw))
+	}
+	// Response is usually JSON, sometimes form-encoded (looking at you,
+	// older GitHub). Try JSON first, fall back to form.
+	if v, err := jsonDecode(raw); err == nil && v.Kind == KindObject {
+		return v, nil
+	}
+	if vals, err := neturl.ParseQuery(string(raw)); err == nil {
+		out := NewOrderedMap()
+		keys := make([]string, 0, len(vals))
+		for k := range vals {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			out.Set(k, StringValue(vals.Get(k)))
+		}
+		return ObjectValue(out), nil
+	}
+	return Value{}, fmt.Errorf("oauth.exchange_code: cannot parse response: %s", string(raw))
 }
 
 // ===== Concurrency: channels =====
