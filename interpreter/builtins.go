@@ -16,6 +16,7 @@ import (
 	"math"
 	"math/rand"
 	"net/http"
+	neturl "net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -128,6 +129,16 @@ func registerBuiltins(i *Interpreter) {
 
 	// --- Time helpers ---
 	def("now_iso", builtinNowISO)
+	def("parse_date", builtinParseDate)
+	def("format_date", builtinFormatDate)
+
+	// --- URL helpers ---
+	def("parse_url", builtinParseURL)
+	def("url_encode", builtinURLEncode)
+	def("url_decode", builtinURLDecode)
+
+	// --- Misc ---
+	def("retry", builtinRetry)
 
 	// --- AI namespace ---
 	ai := NewOrderedMap()
@@ -992,6 +1003,37 @@ func builtinNowISO(i *Interpreter, args []Value) (Value, error) {
 	return StringValue(time.Now().UTC().Format(time.RFC3339Nano)), nil
 }
 
+// parse_date(s, layout?) -> unix milliseconds or null. The layout defaults
+// to RFC 3339; the user can pass any Go time-format reference layout.
+func builtinParseDate(i *Interpreter, args []Value) (Value, error) {
+	s, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	layout := time.RFC3339
+	if len(args) > 1 && args[1].Kind == KindString {
+		layout = args[1].String
+	}
+	t, err := time.Parse(layout, s)
+	if err != nil {
+		return NullValue(), nil
+	}
+	return NumberValue(float64(t.UnixMilli())), nil
+}
+
+// format_date(unix_ms, layout?) -> string. Default layout is RFC 3339 UTC.
+func builtinFormatDate(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 1 || args[0].Kind != KindNumber {
+		return Value{}, fmt.Errorf("format_date(unix_ms, layout?) requires a number")
+	}
+	t := time.UnixMilli(int64(args[0].Number)).UTC()
+	layout := time.RFC3339
+	if len(args) > 1 && args[1].Kind == KindString {
+		layout = args[1].String
+	}
+	return StringValue(t.Format(layout)), nil
+}
+
 func builtinHmacSHA256(i *Interpreter, args []Value) (Value, error) {
 	secret, err := stringArg(args, 0)
 	if err != nil {
@@ -1171,6 +1213,82 @@ func builtinJWTVerify(i *Interpreter, args []Value) (Value, error) {
 		}
 	}
 	return v, nil
+}
+
+// ===== URL =====
+
+// parse_url(s) -> object with scheme, host, port, path, query (object), fragment, raw
+func builtinParseURL(i *Interpreter, args []Value) (Value, error) {
+	s, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	u, err := neturl.Parse(s)
+	if err != nil {
+		return Value{}, err
+	}
+	out := NewOrderedMap()
+	out.Set("scheme", StringValue(u.Scheme))
+	out.Set("host", StringValue(u.Hostname()))
+	out.Set("port", StringValue(u.Port()))
+	out.Set("path", StringValue(u.Path))
+	q := NewOrderedMap()
+	for k, vs := range u.Query() {
+		if len(vs) > 0 {
+			q.Set(k, StringValue(vs[0]))
+		}
+	}
+	out.Set("query", ObjectValue(q))
+	out.Set("fragment", StringValue(u.Fragment))
+	out.Set("raw", StringValue(s))
+	return ObjectValue(out), nil
+}
+
+func builtinURLEncode(i *Interpreter, args []Value) (Value, error) {
+	s, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	return StringValue(neturl.QueryEscape(s)), nil
+}
+
+func builtinURLDecode(i *Interpreter, args []Value) (Value, error) {
+	s, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	out, err := neturl.QueryUnescape(s)
+	if err != nil {
+		return Value{}, err
+	}
+	return StringValue(out), nil
+}
+
+// ===== Misc =====
+
+// retry(fn, attempts, delay_ms?) — call fn() up to `attempts` times,
+// returning the first non-error result. delay_ms defaults to 100.
+func builtinRetry(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 2 || args[0].Kind != KindFunction || args[1].Kind != KindNumber {
+		return Value{}, fmt.Errorf("retry(fn, attempts, delay_ms?) requires (function, number, [number])")
+	}
+	attempts := int(args[1].Number)
+	delay := 100
+	if len(args) > 2 && args[2].Kind == KindNumber {
+		delay = int(args[2].Number)
+	}
+	var lastErr error
+	for k := 0; k < attempts; k++ {
+		v, err := i.callFunction(nil, args[0].Function, nil)
+		if err == nil {
+			return v, nil
+		}
+		lastErr = err
+		if k < attempts-1 {
+			time.Sleep(time.Duration(delay) * time.Millisecond)
+		}
+	}
+	return Value{}, lastErr
 }
 
 // ===== AI namespace =====
