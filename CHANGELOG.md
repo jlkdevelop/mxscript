@@ -4,6 +4,48 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.46.0] — 2026-05-02
+
+### Added
+- **CSRF helpers**:
+  - `csrf_token(secret, session_id)` — deterministic token bound to
+    a session. Embed in forms / app state.
+  - `verify_csrf(secret, session_id, token)` — constant-time check.
+
+  ```mx
+  post /transfer {
+    let sid = request.cookies?.sid ?? "anon"
+    if (!verify_csrf(env("CSRF_SECRET"), sid, request.body._csrf)) {
+      return status(403, { error: "csrf" })
+    }
+    ...
+  }
+  ```
+
+- **Pub/sub** for in-process broadcast — perfect for WebSocket
+  fan-out without maintaining a per-route registry:
+
+  ```mx
+  let chat = pubsub.topic()
+
+  ws /chat {
+    let sub = chat.subscribe(send)
+    while (true) {
+      let m = recv()
+      if (m == null) { break }
+      chat.publish(m)              // broadcast to every connected ws
+    }
+    sub.unsubscribe()
+  }
+  ```
+
+  `pubsub.topic()` returns an object with `subscribe(fn)`, `publish(value)`,
+  and `count()`. Subscribe returns a handle with `unsubscribe()`.
+  Subscriber errors are caught so a single bad listener can't take
+  the topic down.
+
+[0.46.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.46.0
+
 ## [0.45.0] — 2026-05-02
 
 ### Documentation

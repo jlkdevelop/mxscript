@@ -8,6 +8,9 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.46.0** (2026-05-02)
+  - CSRF helpers: `csrf_token(secret, sid)` / `verify_csrf(...)`
+  - In-process pub/sub: `pubsub.topic()` with subscribe / publish / count
 - **v0.45.0** (2026-05-02)
   - README hero refreshed for the v0.44+ surface
   - `examples/full_app.mx` — kitchen-sink showcase

@@ -255,6 +255,14 @@ func registerBuiltins(i *Interpreter) {
 	def("validate", builtinValidate)
 	def("sign_cookie", builtinSignCookie)
 	def("verify_cookie", builtinVerifyCookie)
+	def("csrf_token", builtinCSRFToken)
+	def("verify_csrf", builtinVerifyCSRF)
+
+	// --- Pub/sub for ws fan-out ---
+	pubsubNS := NewOrderedMap()
+	pubsubNS.Set("topic", FunctionValue(&Function{Name: "pubsub.topic", Native: builtinPubsubTopic}))
+	g.Set("pubsub", ObjectValue(pubsubNS))
+	builtinNames["pubsub"] = true
 	def("every", builtinEvery)
 	def("after", builtinAfter)
 	def("debounce", builtinDebounce)
@@ -4125,6 +4133,139 @@ func builtinDebounce(i *Interpreter, args []Value) (Value, error) {
 		return NullValue(), nil
 	}}
 	return FunctionValue(wrapper), nil
+}
+
+// ===== CSRF =====
+//
+// csrf_token(secret, session_id) returns a deterministic token for a
+// given (secret, session_id) pair. Embed it in your forms / JS state,
+// then verify on every state-changing request:
+//
+//	get / {
+//	  let sid = request.cookies?.sid ?? "anon"
+//	  return html("<form method=POST><input name=_csrf value='" + csrf_token(env("CSRF_SECRET"), sid) + "'>...</form>")
+//	}
+//
+//	post /transfer {
+//	  let sid = request.cookies?.sid ?? "anon"
+//	  if (!verify_csrf(env("CSRF_SECRET"), sid, request.body._csrf)) {
+//	    return status(403, { error: "csrf token mismatch" })
+//	  }
+//	  ...
+//	}
+
+func builtinCSRFToken(i *Interpreter, args []Value) (Value, error) {
+	secret, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	sessionID := ""
+	if len(args) > 1 && args[1].Kind == KindString {
+		sessionID = args[1].String
+	}
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(sessionID))
+	return StringValue(base64.RawURLEncoding.EncodeToString(mac.Sum(nil))), nil
+}
+
+func builtinVerifyCSRF(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 3 {
+		return Value{}, fmt.Errorf("verify_csrf(secret, session_id, token) requires 3 args")
+	}
+	secret, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	sessionID, err := stringArg(args, 1)
+	if err != nil {
+		return Value{}, err
+	}
+	token, err := stringArg(args, 2)
+	if err != nil {
+		return Value{}, err
+	}
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(sessionID))
+	expected := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+	return BoolValue(hmac.Equal([]byte(expected), []byte(token))), nil
+}
+
+// ===== Pub/sub =====
+//
+// pubsub.topic(name?) returns an object with .subscribe(fn) and
+// .publish(value). Subscriptions are in-process, fan-out to every live
+// subscriber. Use it to broadcast WebSocket messages across all
+// connected clients without a per-route registry:
+//
+//	let chat = pubsub.topic("chat")
+//
+//	ws /chat {
+//	  let sub = chat.subscribe(send)
+//	  while (true) {
+//	    let m = recv()
+//	    if (m == null) { break }
+//	    chat.publish(m)
+//	  }
+//	  sub.unsubscribe()
+//	}
+
+type pubsubTopic struct {
+	mu    sync.Mutex
+	subs  map[int64]*Function
+	nextI int64
+}
+
+func newPubsubTopic() *pubsubTopic { return &pubsubTopic{subs: map[int64]*Function{}} }
+
+func builtinPubsubTopic(i *Interpreter, args []Value) (Value, error) {
+	t := newPubsubTopic()
+	out := NewOrderedMap()
+	out.Set("subscribe", FunctionValue(&Function{Name: "topic.subscribe", Native: func(_ *Interpreter, a []Value) (Value, error) {
+		if len(a) < 1 || a[0].Kind != KindFunction {
+			return Value{}, fmt.Errorf("subscribe(fn) requires a function")
+		}
+		t.mu.Lock()
+		t.nextI++
+		id := t.nextI
+		t.subs[id] = a[0].Function
+		t.mu.Unlock()
+		// Return an object with .unsubscribe()
+		sub := NewOrderedMap()
+		sub.Set("unsubscribe", FunctionValue(&Function{Name: "subscription.unsubscribe", Native: func(_ *Interpreter, _ []Value) (Value, error) {
+			t.mu.Lock()
+			delete(t.subs, id)
+			t.mu.Unlock()
+			return NullValue(), nil
+		}}))
+		return ObjectValue(sub), nil
+	}}))
+	out.Set("publish", FunctionValue(&Function{Name: "topic.publish", Native: func(interp *Interpreter, a []Value) (Value, error) {
+		if len(a) < 1 {
+			return Value{}, fmt.Errorf("publish(value) requires a value")
+		}
+		// Snapshot subscribers so callbacks can unsubscribe without
+		// mutating the map mid-iteration.
+		t.mu.Lock()
+		subs := make([]*Function, 0, len(t.subs))
+		for _, f := range t.subs {
+			subs = append(subs, f)
+		}
+		t.mu.Unlock()
+		for _, f := range subs {
+			if _, err := interp.callFunction(nil, f, []Value{a[0]}); err != nil {
+				// Swallow errors — a bad subscriber shouldn't take down the topic.
+				fmt.Fprintf(os.Stderr, "[mx pubsub] subscriber error: %v\n", err)
+			}
+		}
+		return NumberValue(float64(len(subs))), nil
+	}}))
+	out.Set("count", FunctionValue(&Function{Name: "topic.count", Native: func(_ *Interpreter, _ []Value) (Value, error) {
+		t.mu.Lock()
+		n := len(t.subs)
+		t.mu.Unlock()
+		return NumberValue(float64(n)), nil
+	}}))
+	return ObjectValue(out), nil
 }
 
 // sign_cookie(secret, value) returns "value.signature" — a tamper-evident
