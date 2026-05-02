@@ -31,6 +31,41 @@ func contextWithTimeout(d time.Duration) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), d)
 }
 
+// statusRecorder captures the response status for the access logger.
+type statusRecorder struct {
+	http.ResponseWriter
+	code int
+}
+
+func (r *statusRecorder) WriteHeader(code int) {
+	r.code = code
+	r.ResponseWriter.WriteHeader(code)
+}
+
+// pickAllowedOrigin returns the first matching allowed origin (or "*" if
+// the wildcard is configured). Empty result means the request origin is
+// not allowed; the caller omits the Access-Control-Allow-Origin header.
+func pickAllowedOrigin(allowed []string, origin string) string {
+	if origin == "" {
+		// Server-to-server / curl — still echo the wildcard if configured.
+		for _, a := range allowed {
+			if a == "*" {
+				return "*"
+			}
+		}
+		return ""
+	}
+	for _, a := range allowed {
+		if a == "*" {
+			return "*"
+		}
+		if a == origin {
+			return origin
+		}
+	}
+	return ""
+}
+
 // ===== Runtime values =====
 
 type ValueKind int
@@ -294,6 +329,14 @@ type staticMount struct {
 	Dir   string // local filesystem directory
 }
 
+type corsConfig struct {
+	Origins     []string
+	Methods     []string
+	Headers     []string
+	Credentials bool
+	MaxAge      int
+}
+
 type Interpreter struct {
 	globals     *Env
 	routes      []registeredRoute
@@ -308,6 +351,8 @@ type Interpreter struct {
 	serverReadTimeout  time.Duration
 	serverWriteTimeout time.Duration
 	serverMaxBody      int64
+	serverLog          bool
+	serverCORS         *corsConfig
 
 	cliPort int // when > 0, overrides anything the program sets in its `server` block.
 	file    string
@@ -581,9 +626,49 @@ func (i *Interpreter) execServer(n *parser.ServerBlock, env *Env) error {
 			if key, ok := v.Object.Get("key"); ok && key.Kind == KindString {
 				i.serverTLSKey = key.String
 			}
+		case "log":
+			if v.Kind != KindBool {
+				return runtimeErrorf(n, "server.log must be true or false")
+			}
+			i.serverLog = v.Bool
+		case "cors":
+			if v.Kind != KindObject {
+				return runtimeErrorf(n, "server.cors must be an object")
+			}
+			cfg := &corsConfig{
+				Origins: []string{"*"},
+				Methods: []string{"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"},
+				MaxAge:  3600,
+			}
+			if v2, ok := v.Object.Get("origins"); ok && v2.Kind == KindArray {
+				cfg.Origins = stringsFromArray(v2.Array)
+			}
+			if v2, ok := v.Object.Get("methods"); ok && v2.Kind == KindArray {
+				cfg.Methods = stringsFromArray(v2.Array)
+			}
+			if v2, ok := v.Object.Get("headers"); ok && v2.Kind == KindArray {
+				cfg.Headers = stringsFromArray(v2.Array)
+			}
+			if v2, ok := v.Object.Get("credentials"); ok && v2.Kind == KindBool {
+				cfg.Credentials = v2.Bool
+			}
+			if v2, ok := v.Object.Get("max_age"); ok && v2.Kind == KindNumber {
+				cfg.MaxAge = int(v2.Number)
+			}
+			i.serverCORS = cfg
 		}
 	}
 	return nil
+}
+
+func stringsFromArray(arr []Value) []string {
+	out := make([]string, 0, len(arr))
+	for _, v := range arr {
+		if v.Kind == KindString {
+			out = append(out, v.String)
+		}
+	}
+	return out
 }
 
 // durationFromValue accepts either a number of milliseconds or a string
@@ -1303,13 +1388,11 @@ func (i *Interpreter) startServer() error {
 	}
 	fmt.Println()
 
-	// Wrap the mux in a max-body limiter so unbounded requests can't OOM
-	// us. We reject with 413 *before* dispatching to the route — both via
-	// the Content-Length header (cheap) and a MaxBytesReader (catches
-	// chunked uploads).
+	// Compose the handler chain: cors -> logger -> max-body -> mux.
 	handler := http.Handler(mux)
 	if i.serverMaxBody > 0 {
 		maxBody := i.serverMaxBody
+		inner := handler
 		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.ContentLength > maxBody {
 				http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
@@ -1318,7 +1401,48 @@ func (i *Interpreter) startServer() error {
 			if r.Body != nil {
 				r.Body = http.MaxBytesReader(w, r.Body, maxBody)
 			}
-			mux.ServeHTTP(w, r)
+			inner.ServeHTTP(w, r)
+		})
+	}
+	if i.serverLog {
+		inner := handler
+		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			start := time.Now()
+			rec := &statusRecorder{ResponseWriter: w, code: 200}
+			inner.ServeHTTP(rec, r)
+			fmt.Printf("\033[0;90m[%s]\033[0m %s %s \033[1;36m%d\033[0m \033[0;90m(%s)\033[0m\n",
+				start.Format("15:04:05"), r.Method, r.URL.Path, rec.code, time.Since(start).Round(time.Microsecond))
+		})
+	}
+	if i.serverCORS != nil {
+		cfg := i.serverCORS
+		inner := handler
+		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			origin := r.Header.Get("Origin")
+			allowOrigin := pickAllowedOrigin(cfg.Origins, origin)
+			if allowOrigin != "" {
+				w.Header().Set("Access-Control-Allow-Origin", allowOrigin)
+				if allowOrigin != "*" {
+					w.Header().Set("Vary", "Origin")
+				}
+				if cfg.Credentials {
+					w.Header().Set("Access-Control-Allow-Credentials", "true")
+				}
+			}
+			if r.Method == http.MethodOptions {
+				w.Header().Set("Access-Control-Allow-Methods", strings.Join(cfg.Methods, ", "))
+				if len(cfg.Headers) > 0 {
+					w.Header().Set("Access-Control-Allow-Headers", strings.Join(cfg.Headers, ", "))
+				} else if h := r.Header.Get("Access-Control-Request-Headers"); h != "" {
+					w.Header().Set("Access-Control-Allow-Headers", h)
+				}
+				if cfg.MaxAge > 0 {
+					w.Header().Set("Access-Control-Max-Age", strconv.Itoa(cfg.MaxAge))
+				}
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			inner.ServeHTTP(w, r)
 		})
 	}
 
