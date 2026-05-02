@@ -8,6 +8,9 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.20.0** (2026-05-02)
+  - `mx fmt` — opinionated formatter (token-based, comment-preserving)
+  - Lexer `CollectComments` flag for tooling
 - **v0.19.0** (2026-05-02)
   - `image.info` / `image.resize` / `image.convert` (PNG / JPEG, GIF input)
 - **v0.18.0** (2026-05-02)

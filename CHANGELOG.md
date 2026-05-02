@@ -4,6 +4,33 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.20.0] — 2026-05-02
+
+### Added
+- **`mx fmt`** — opinionated formatter for `.mx` files.
+
+  ```bash
+  mx fmt path/to/file.mx           # print to stdout
+  mx fmt -w path/to/file.mx        # rewrite in place
+  mx fmt --check path/to/file.mx   # exit 1 if anything would change
+  mx fmt examples/                 # recursive on a directory
+  cat foo.mx | mx fmt              # stdin → stdout
+  ```
+
+  Conventions:
+  - 2-space indent
+  - Standard operator spacing (`a + b`, `a == b`, `a && b`)
+  - `{` stays on the line it opens; block contents indent on the next
+    line; `}` on its own line
+  - Object literals stay tight on a single line when short
+  - Route paths (`get /users/:id`) keep tight spacing
+  - Comments and intentional blank lines are preserved
+- **Lexer's `CollectComments` flag** preserves `//`, `#`, `/* */` as
+  `TokenComment` and line breaks as `TokenNewline`. The parser still
+  ignores them; tooling (formatter, future LSP) can opt in.
+
+[0.20.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.20.0
+
 ## [0.19.0] — 2026-05-02
 
 ### Added

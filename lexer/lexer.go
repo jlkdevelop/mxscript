@@ -73,6 +73,8 @@ const (
 	TokenSpread
 	TokenQuestionDot  // ?.
 	TokenNullCoalesce // ??
+	TokenComment      // // line, # line, or /* block */ — only emitted when CollectComments is true
+	TokenNewline      // line break — only emitted when CollectComments is true
 )
 
 var tokenNames = map[TokenType]string{
@@ -134,6 +136,8 @@ var tokenNames = map[TokenType]string{
 	TokenSpread:       "...",
 	TokenQuestionDot:  "?.",
 	TokenNullCoalesce: "??",
+	TokenComment:      "COMMENT",
+	TokenNewline:      "NEWLINE",
 }
 
 func (t TokenType) String() string {
@@ -190,10 +194,24 @@ type Lexer struct {
 	line   int
 	col    int
 	tokens []Token
+
+	// CollectComments controls whether // / # / /* ... */ are kept as
+	// TokenComment in the output, and whether \n is emitted as TokenNewline.
+	// Defaults to false (the parser doesn't want them); the formatter sets
+	// it to true so it can preserve comments and blank lines.
+	CollectComments bool
 }
 
 func New(src string) *Lexer {
 	return &Lexer{src: []rune(src), line: 1, col: 1}
+}
+
+// NewWithComments returns a lexer that retains comment tokens for the
+// formatter (and any future tooling that wants source fidelity).
+func NewWithComments(src string) *Lexer {
+	l := New(src)
+	l.CollectComments = true
+	return l
 }
 
 // Tokenize runs the lexer over the source and returns the full token stream.
@@ -237,12 +255,23 @@ func (l *Lexer) skipWhitespaceAndComments() {
 		case c == ' ' || c == '\t' || c == '\r':
 			l.advance()
 		case c == '\n':
+			line, col := l.line, l.col
 			l.advance()
+			if l.CollectComments {
+				l.tokens = append(l.tokens, Token{Type: TokenNewline, Lexeme: "\n", Line: line, Col: col})
+			}
 		case c == '/' && l.peek(1) == '/':
+			startLine, startCol := l.line, l.col
+			start := l.pos
 			for l.pos < len(l.src) && l.src[l.pos] != '\n' {
 				l.advance()
 			}
+			if l.CollectComments {
+				l.tokens = append(l.tokens, Token{Type: TokenComment, Lexeme: string(l.src[start:l.pos]), Line: startLine, Col: startCol})
+			}
 		case c == '/' && l.peek(1) == '*':
+			startLine, startCol := l.line, l.col
+			start := l.pos
 			l.advance()
 			l.advance()
 			for l.pos < len(l.src) && !(l.src[l.pos] == '*' && l.peek(1) == '/') {
@@ -252,9 +281,17 @@ func (l *Lexer) skipWhitespaceAndComments() {
 				l.advance()
 				l.advance()
 			}
+			if l.CollectComments {
+				l.tokens = append(l.tokens, Token{Type: TokenComment, Lexeme: string(l.src[start:l.pos]), Line: startLine, Col: startCol})
+			}
 		case c == '#':
+			startLine, startCol := l.line, l.col
+			start := l.pos
 			for l.pos < len(l.src) && l.src[l.pos] != '\n' {
 				l.advance()
+			}
+			if l.CollectComments {
+				l.tokens = append(l.tokens, Token{Type: TokenComment, Lexeme: string(l.src[start:l.pos]), Line: startLine, Col: startCol})
 			}
 		default:
 			return

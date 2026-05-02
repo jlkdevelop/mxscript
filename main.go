@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jlkdevelop/mxscript/formatter"
 	"github.com/jlkdevelop/mxscript/interpreter"
 	"github.com/jlkdevelop/mxscript/lexer"
 	"github.com/jlkdevelop/mxscript/parser"
@@ -45,7 +46,7 @@ func (rr *replReader) ReadLine() (string, bool) {
 // Version is bumped at release time. Override at build with:
 //
 //	go build -ldflags "-X main.Version=v0.2.0"
-var Version = "v0.19.0"
+var Version = "v0.20.0"
 
 const (
 	cReset  = "\033[0m"
@@ -77,6 +78,8 @@ func main() {
 		cmdRepl(args)
 	case "test":
 		cmdTest(args)
+	case "fmt":
+		cmdFmt(args)
 	case "version", "-v", "--version":
 		fmt.Println("MX Script", Version)
 	case "help", "-h", "--help":
@@ -100,6 +103,7 @@ func printHelp() {
 	fmt.Println("  build --vercel        Generate a Vercel-deployable Go project from app.mx")
 	fmt.Println("  repl                  Start an interactive REPL")
 	fmt.Println("  test [path]           Run *_test.mx files (default: current dir)")
+	fmt.Println("  fmt [paths]           Format .mx files (-w writes, --check exits 1 on diffs)")
 	fmt.Println("  version               Print version and exit")
 	fmt.Println("  help                  Show this help")
 	fmt.Println()
@@ -566,6 +570,110 @@ func globalUserKeys(g *interpreter.Env) []string {
 		out = append(out, k)
 	}
 	return out
+}
+
+// ===== mx fmt =====
+
+func cmdFmt(args []string) {
+	check := false
+	write := false
+	var paths []string
+	for _, a := range args {
+		switch a {
+		case "--check":
+			check = true
+		case "-w", "--write":
+			write = true
+		default:
+			paths = append(paths, a)
+		}
+	}
+
+	// No paths -> read stdin, write to stdout.
+	if len(paths) == 0 {
+		buf, err := os.ReadFile("/dev/stdin")
+		if err != nil {
+			fatal("cannot read stdin: %v", err)
+		}
+		out, err := formatter.Format(string(buf))
+		if err != nil {
+			printError("<stdin>", err)
+			os.Exit(1)
+		}
+		fmt.Print(out)
+		return
+	}
+
+	files, err := expandFmtPaths(paths)
+	if err != nil {
+		fatal("%v", err)
+	}
+	hadDiff := false
+	for _, file := range files {
+		src, err := os.ReadFile(file)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%scannot read %s:%s %v\n", cRed, file, cReset, err)
+			os.Exit(1)
+		}
+		out, err := formatter.Format(string(src))
+		if err != nil {
+			printError(file, err)
+			os.Exit(1)
+		}
+		switch {
+		case check:
+			if string(src) != out {
+				fmt.Println(file)
+				hadDiff = true
+			}
+		case write:
+			if string(src) != out {
+				if err := os.WriteFile(file, []byte(out), 0o644); err != nil {
+					fatal("cannot write %s: %v", file, err)
+				}
+				fmt.Printf("%s✓%s formatted %s\n", cGreen, cReset, file)
+			}
+		default:
+			fmt.Print(out)
+		}
+	}
+	if check && hadDiff {
+		fmt.Fprintf(os.Stderr, "\n%sfiles above are not formatted — run `mx fmt -w <path>`%s\n", cYellow, cReset)
+		os.Exit(1)
+	}
+}
+
+func expandFmtPaths(paths []string) ([]string, error) {
+	var out []string
+	for _, p := range paths {
+		info, err := os.Stat(p)
+		if err != nil {
+			return nil, err
+		}
+		if info.IsDir() {
+			err := filepath.Walk(p, func(path string, fi os.FileInfo, err error) error {
+				if err != nil {
+					return nil
+				}
+				if fi.IsDir() {
+					if strings.HasPrefix(fi.Name(), ".") && path != p {
+						return filepath.SkipDir
+					}
+					return nil
+				}
+				if strings.HasSuffix(path, ".mx") {
+					out = append(out, path)
+				}
+				return nil
+			})
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			out = append(out, p)
+		}
+	}
+	return out, nil
 }
 
 // ===== mx test =====
