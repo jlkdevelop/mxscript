@@ -1,7 +1,7 @@
 // vm.go — experimental bytecode VM for the hot paths of MX Script.
-// Compiles a useful subset of the AST (arithmetic, comparison, logical,
-// `let`, `if`, `while`, function calls on closures) into a flat slice
-// of stack-machine instructions, then runs them on a tight loop.
+// Compiles a useful subset of the AST (arithmetic, comparison, unary,
+// `let`, `=`, `if`, `while`) into a flat slice of stack-machine
+// instructions, then runs them on a tight loop.
 //
 // Why a subset? Programs that mix routes / spawn / channels / SSE /
 // tool-calling AI / SQLite still want full interpreter semantics
@@ -22,36 +22,34 @@ import (
 	"github.com/jlkdevelop/mxscript/parser"
 )
 
-// errBytecodeFallback is returned by tryBytecode when the expression uses
-// a node the VM doesn't lower. Callers fall back to the tree-walker.
+// errBytecodeFallback is returned when the compiler refuses to lower
+// a node. Callers fall back to the tree-walker.
 var errBytecodeFallback = errors.New("bytecode fallback")
 
-// Op is a single VM instruction. The encoding is deliberately tiny —
-// one byte for the opcode plus one int operand encoded as int32 in the
-// `arg` slot. Constants and identifiers live in side tables.
 type Op uint8
 
 const (
-	OpConst Op = iota // push consts[arg]
-	OpLoadVar
-	OpStoreVar
-	OpAdd
-	OpSub
-	OpMul
-	OpDiv
-	OpMod
-	OpEq
-	OpNeq
-	OpLt
-	OpGt
-	OpLte
-	OpGte
-	OpNot
-	OpNeg
-	OpJump        // pc += arg
-	OpJumpIfFalse // pop; if !truthy: pc += arg
-	OpPop
-	OpReturn
+	OpConst       Op = iota // push consts[arg]
+	OpLoadVar               // push env.Get(varNames[arg])
+	OpStoreVar              // env.Set(varNames[arg], pop()) — for `let`
+	OpAssignVar             // env.Assign(varNames[arg], pop()) — for `=`
+	OpAdd                   // a + b (numeric or string concat)
+	OpSub                   // a - b
+	OpMul                   // a * b
+	OpDiv                   // a / b
+	OpMod                   // a % b
+	OpEq                    // a == b
+	OpNeq                   // a != b
+	OpLt                    // a < b
+	OpGt                    // a > b
+	OpLte                   // a <= b
+	OpGte                   // a >= b
+	OpNot                   // !a
+	OpNeg                   // -a
+	OpJump                  // pc = arg (absolute)
+	OpJumpIfFalse           // pop; if !truthy: pc = arg
+	OpPop                   // discard top
+	OpReturn                // halt; return top of stack (or null)
 )
 
 type Instr struct {
@@ -68,16 +66,41 @@ type Compiled struct {
 	VarNames []string
 }
 
-// CompileExpr lowers a single expression node. Returns (nil, false)
-// when the node uses something the VM doesn't understand yet, in
-// which case callers should fall back to evalExpr.
+// CompileExpr lowers a single expression node into a self-contained
+// program that pushes the value and returns. Used for ad-hoc
+// expression statements at the top level.
 func CompileExpr(e parser.Expr) (*Compiled, bool) {
 	c := &Compiled{}
 	if !c.compileExpr(e) {
 		return nil, false
 	}
-	c.Code = append(c.Code, Instr{Op: OpReturn})
+	c.emit(OpReturn, 0)
 	return c, true
+}
+
+// CompileBlock lowers a list of statements. Used for the body of
+// `if`, `while`, and (eventually) functions. Returns (nil, false) if
+// any statement uses something the compiler doesn't understand yet.
+func CompileBlock(stmts []parser.Stmt) (*Compiled, bool) {
+	c := &Compiled{}
+	if !c.compileStmts(stmts) {
+		return nil, false
+	}
+	c.emit(OpReturn, 0)
+	return c, true
+}
+
+func (c *Compiled) emit(op Op, arg int32) int {
+	c.Code = append(c.Code, Instr{Op: op, Arg: arg})
+	return len(c.Code) - 1
+}
+
+func (c *Compiled) here() int32 { return int32(len(c.Code)) }
+
+// patch rewrites the Arg of an already-emitted jump instruction.
+// Used to backfill forward jumps once we know the destination.
+func (c *Compiled) patch(at int, target int32) {
+	c.Code[at].Arg = target
 }
 
 func (c *Compiled) addConst(v Value) int32 {
@@ -98,19 +121,19 @@ func (c *Compiled) addVar(name string) int32 {
 func (c *Compiled) compileExpr(e parser.Expr) bool {
 	switch n := e.(type) {
 	case *parser.NumberLit:
-		c.Code = append(c.Code, Instr{Op: OpConst, Arg: c.addConst(NumberValue(n.Value))})
+		c.emit(OpConst, c.addConst(NumberValue(n.Value)))
 		return true
 	case *parser.StringLit:
-		c.Code = append(c.Code, Instr{Op: OpConst, Arg: c.addConst(StringValue(n.Value))})
+		c.emit(OpConst, c.addConst(StringValue(n.Value)))
 		return true
 	case *parser.BoolLit:
-		c.Code = append(c.Code, Instr{Op: OpConst, Arg: c.addConst(BoolValue(n.Value))})
+		c.emit(OpConst, c.addConst(BoolValue(n.Value)))
 		return true
 	case *parser.NullLit:
-		c.Code = append(c.Code, Instr{Op: OpConst, Arg: c.addConst(NullValue())})
+		c.emit(OpConst, c.addConst(NullValue()))
 		return true
 	case *parser.Identifier:
-		c.Code = append(c.Code, Instr{Op: OpLoadVar, Arg: c.addVar(n.Name)})
+		c.emit(OpLoadVar, c.addVar(n.Name))
 		return true
 	case *parser.UnaryExpr:
 		if !c.compileExpr(n.Operand) {
@@ -118,9 +141,9 @@ func (c *Compiled) compileExpr(e parser.Expr) bool {
 		}
 		switch n.Op {
 		case "-":
-			c.Code = append(c.Code, Instr{Op: OpNeg})
+			c.emit(OpNeg, 0)
 		case "!":
-			c.Code = append(c.Code, Instr{Op: OpNot})
+			c.emit(OpNot, 0)
 		default:
 			return false
 		}
@@ -139,27 +162,27 @@ func (c *Compiled) compileExpr(e parser.Expr) bool {
 		}
 		switch n.Op {
 		case "+":
-			c.Code = append(c.Code, Instr{Op: OpAdd})
+			c.emit(OpAdd, 0)
 		case "-":
-			c.Code = append(c.Code, Instr{Op: OpSub})
+			c.emit(OpSub, 0)
 		case "*":
-			c.Code = append(c.Code, Instr{Op: OpMul})
+			c.emit(OpMul, 0)
 		case "/":
-			c.Code = append(c.Code, Instr{Op: OpDiv})
+			c.emit(OpDiv, 0)
 		case "%":
-			c.Code = append(c.Code, Instr{Op: OpMod})
+			c.emit(OpMod, 0)
 		case "==":
-			c.Code = append(c.Code, Instr{Op: OpEq})
+			c.emit(OpEq, 0)
 		case "!=":
-			c.Code = append(c.Code, Instr{Op: OpNeq})
+			c.emit(OpNeq, 0)
 		case "<":
-			c.Code = append(c.Code, Instr{Op: OpLt})
+			c.emit(OpLt, 0)
 		case ">":
-			c.Code = append(c.Code, Instr{Op: OpGt})
+			c.emit(OpGt, 0)
 		case "<=":
-			c.Code = append(c.Code, Instr{Op: OpLte})
+			c.emit(OpLte, 0)
 		case ">=":
-			c.Code = append(c.Code, Instr{Op: OpGte})
+			c.emit(OpGte, 0)
 		default:
 			return false
 		}
@@ -168,92 +191,192 @@ func (c *Compiled) compileExpr(e parser.Expr) bool {
 	return false
 }
 
-// Run executes a compiled instruction stream against the given env.
-// Returns the last value left on the stack and whether execution
-// completed normally.
-func (c *Compiled) Run(env *Env) (Value, error) {
-	stack := make([]Value, 0, 16)
-	push := func(v Value) { stack = append(stack, v) }
-	pop := func() Value {
-		v := stack[len(stack)-1]
-		stack = stack[:len(stack)-1]
-		return v
+func (c *Compiled) compileStmts(stmts []parser.Stmt) bool {
+	for _, s := range stmts {
+		if !c.compileStmt(s) {
+			return false
+		}
 	}
+	return true
+}
 
+func (c *Compiled) compileStmt(s parser.Stmt) bool {
+	switch n := s.(type) {
+	case *parser.LetStmt:
+		// Destructuring is too complex for the MVP — fall back.
+		if n.Pattern != nil || n.Name == "" {
+			return false
+		}
+		if !c.compileExpr(n.Value) {
+			return false
+		}
+		c.emit(OpStoreVar, c.addVar(n.Name))
+		return true
+
+	case *parser.AssignStmt:
+		// Only simple identifier targets — `a.b = x` and `a[0] = x` need
+		// object/array machinery the VM doesn't have yet.
+		ident, ok := n.Target.(*parser.Identifier)
+		if !ok {
+			return false
+		}
+		if !c.compileExpr(n.Value) {
+			return false
+		}
+		c.emit(OpAssignVar, c.addVar(ident.Name))
+		return true
+
+	case *parser.ExprStmt:
+		if !c.compileExpr(n.Expr) {
+			return false
+		}
+		// Expression statements leave a value on the stack; discard it
+		// so the stack stays balanced across iterations.
+		c.emit(OpPop, 0)
+		return true
+
+	case *parser.IfStmt:
+		if !c.compileExpr(n.Cond) {
+			return false
+		}
+		jumpToElse := c.emit(OpJumpIfFalse, 0)
+		if !c.compileStmts(n.Then) {
+			return false
+		}
+		jumpOverElse := c.emit(OpJump, 0)
+		c.patch(jumpToElse, c.here())
+		if len(n.Else) > 0 {
+			if !c.compileStmts(n.Else) {
+				return false
+			}
+		}
+		c.patch(jumpOverElse, c.here())
+		return true
+
+	case *parser.WhileStmt:
+		loopStart := c.here()
+		if !c.compileExpr(n.Cond) {
+			return false
+		}
+		jumpOut := c.emit(OpJumpIfFalse, 0)
+		if !c.compileStmts(n.Body) {
+			return false
+		}
+		c.emit(OpJump, loopStart)
+		c.patch(jumpOut, c.here())
+		return true
+	}
+	return false
+}
+
+// Run executes the compiled program against the given environment.
+// Variables are read from / written to the env via name lookup, so
+// the VM shares state with the tree-walker for free.
+func (c *Compiled) Run(env *Env) (Value, error) {
+	stack := make([]Value, 0, 32)
 	pc := 0
 	for pc < len(c.Code) {
 		ins := c.Code[pc]
 		pc++
 		switch ins.Op {
 		case OpConst:
-			push(c.Consts[ins.Arg])
+			stack = append(stack, c.Consts[ins.Arg])
 		case OpLoadVar:
 			name := c.VarNames[ins.Arg]
 			v, ok := env.Get(name)
 			if !ok {
 				return Value{}, fmt.Errorf("undefined identifier %q", name)
 			}
-			push(v)
+			stack = append(stack, v)
+		case OpStoreVar:
+			v := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			env.Set(c.VarNames[ins.Arg], v)
+		case OpAssignVar:
+			v := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			env.Assign(c.VarNames[ins.Arg], v)
 		case OpAdd:
-			b := pop()
-			a := pop()
+			b := stack[len(stack)-1]
+			a := stack[len(stack)-2]
+			stack = stack[:len(stack)-2]
 			if a.Kind == KindNumber && b.Kind == KindNumber {
-				push(NumberValue(a.Number + b.Number))
+				stack = append(stack, NumberValue(a.Number+b.Number))
 			} else {
-				push(StringValue(a.Display() + b.Display()))
+				stack = append(stack, StringValue(a.Display()+b.Display()))
 			}
 		case OpSub:
-			b := pop()
-			a := pop()
-			push(NumberValue(a.Number - b.Number))
+			b := stack[len(stack)-1]
+			a := stack[len(stack)-2]
+			stack = stack[:len(stack)-2]
+			stack = append(stack, NumberValue(a.Number-b.Number))
 		case OpMul:
-			b := pop()
-			a := pop()
-			push(NumberValue(a.Number * b.Number))
+			b := stack[len(stack)-1]
+			a := stack[len(stack)-2]
+			stack = stack[:len(stack)-2]
+			stack = append(stack, NumberValue(a.Number*b.Number))
 		case OpDiv:
-			b := pop()
-			a := pop()
+			b := stack[len(stack)-1]
+			a := stack[len(stack)-2]
+			stack = stack[:len(stack)-2]
 			if b.Number == 0 {
 				return Value{}, fmt.Errorf("division by zero")
 			}
-			push(NumberValue(a.Number / b.Number))
+			stack = append(stack, NumberValue(a.Number/b.Number))
 		case OpMod:
-			b := pop()
-			a := pop()
+			b := stack[len(stack)-1]
+			a := stack[len(stack)-2]
+			stack = stack[:len(stack)-2]
 			if b.Number == 0 {
 				return Value{}, fmt.Errorf("modulo by zero")
 			}
-			push(NumberValue(float64(int64(a.Number) % int64(b.Number))))
+			stack = append(stack, NumberValue(float64(int64(a.Number)%int64(b.Number))))
 		case OpEq:
-			b := pop()
-			a := pop()
-			push(BoolValue(valuesEqual(a, b)))
+			b := stack[len(stack)-1]
+			a := stack[len(stack)-2]
+			stack = stack[:len(stack)-2]
+			stack = append(stack, BoolValue(valuesEqual(a, b)))
 		case OpNeq:
-			b := pop()
-			a := pop()
-			push(BoolValue(!valuesEqual(a, b)))
+			b := stack[len(stack)-1]
+			a := stack[len(stack)-2]
+			stack = stack[:len(stack)-2]
+			stack = append(stack, BoolValue(!valuesEqual(a, b)))
 		case OpLt:
-			b := pop()
-			a := pop()
-			push(BoolValue(a.Number < b.Number))
+			b := stack[len(stack)-1]
+			a := stack[len(stack)-2]
+			stack = stack[:len(stack)-2]
+			stack = append(stack, BoolValue(a.Number < b.Number))
 		case OpGt:
-			b := pop()
-			a := pop()
-			push(BoolValue(a.Number > b.Number))
+			b := stack[len(stack)-1]
+			a := stack[len(stack)-2]
+			stack = stack[:len(stack)-2]
+			stack = append(stack, BoolValue(a.Number > b.Number))
 		case OpLte:
-			b := pop()
-			a := pop()
-			push(BoolValue(a.Number <= b.Number))
+			b := stack[len(stack)-1]
+			a := stack[len(stack)-2]
+			stack = stack[:len(stack)-2]
+			stack = append(stack, BoolValue(a.Number <= b.Number))
 		case OpGte:
-			b := pop()
-			a := pop()
-			push(BoolValue(a.Number >= b.Number))
+			b := stack[len(stack)-1]
+			a := stack[len(stack)-2]
+			stack = stack[:len(stack)-2]
+			stack = append(stack, BoolValue(a.Number >= b.Number))
 		case OpNot:
-			a := pop()
-			push(BoolValue(!a.IsTruthy()))
+			a := stack[len(stack)-1]
+			stack[len(stack)-1] = BoolValue(!a.IsTruthy())
 		case OpNeg:
-			a := pop()
-			push(NumberValue(-a.Number))
+			a := stack[len(stack)-1]
+			stack[len(stack)-1] = NumberValue(-a.Number)
+		case OpJump:
+			pc = int(ins.Arg)
+		case OpJumpIfFalse:
+			cond := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			if !cond.IsTruthy() {
+				pc = int(ins.Arg)
+			}
+		case OpPop:
+			stack = stack[:len(stack)-1]
 		case OpReturn:
 			if len(stack) == 0 {
 				return NullValue(), nil
@@ -267,17 +390,16 @@ func (c *Compiled) Run(env *Env) (Value, error) {
 	return stack[len(stack)-1], nil
 }
 
-// tryBytecode lowers an expression to bytecode (using the per-interpreter
-// cache so we only compile each AST node once) and runs it. Returns
-// errBytecodeFallback when the compiler refuses to lower the node, in
-// which case the caller should re-evaluate via the tree-walker.
+// tryBytecode lowers an expression and runs it on the VM, using the
+// per-interpreter cache so each AST node only pays the compile cost
+// once. errBytecodeFallback signals the caller to use the tree-walker.
 func (i *Interpreter) tryBytecode(e parser.Expr, env *Env) (Value, error) {
 	c, hit := i.bcCache[e]
 	if !hit {
 		var ok bool
 		c, ok = CompileExpr(e)
 		if !ok {
-			i.bcCache[e] = nil // negative cache so we don't try again
+			i.bcCache[e] = nil
 			return Value{}, errBytecodeFallback
 		}
 		i.bcCache[e] = c
@@ -286,4 +408,25 @@ func (i *Interpreter) tryBytecode(e parser.Expr, env *Env) (Value, error) {
 		return Value{}, errBytecodeFallback
 	}
 	return c.Run(env)
+}
+
+// tryBytecodeStmt lowers a statement (and any nested statements) to
+// bytecode and runs it. Caches both successes and refusals against the
+// AST node so we only attempt compilation once per node.
+func (i *Interpreter) tryBytecodeStmt(s parser.Stmt, env *Env) error {
+	c, hit := i.bcStmtCache[s]
+	if !hit {
+		var ok bool
+		c, ok = CompileBlock([]parser.Stmt{s})
+		if !ok {
+			i.bcStmtCache[s] = nil
+			return errBytecodeFallback
+		}
+		i.bcStmtCache[s] = c
+	}
+	if c == nil {
+		return errBytecodeFallback
+	}
+	_, err := c.Run(env)
+	return err
 }

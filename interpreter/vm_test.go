@@ -137,6 +137,101 @@ func TestVMDivideByZero(t *testing.T) {
 	}
 }
 
+func TestVMCompilesLetAndAssign(t *testing.T) {
+	src := `let x = 10
+x = x + 5`
+	tokens, err := lexer.New(src).Tokenize()
+	if err != nil {
+		t.Fatalf("lex: %v", err)
+	}
+	prog, err := parser.New(tokens).Parse()
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	c, ok := CompileBlock(prog.Stmts)
+	if !ok {
+		t.Fatal("compile refused let+assign")
+	}
+	env := NewEnv(nil)
+	if _, err := c.Run(env); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	v, ok := env.Get("x")
+	if !ok || v.Kind != KindNumber || v.Number != 15 {
+		t.Errorf("x: want 15, got %+v", v)
+	}
+}
+
+func TestVMCompilesIfStatement(t *testing.T) {
+	src := `let x = 10
+if x > 5 {
+  x = 100
+} else {
+  x = -1
+}`
+	tokens, _ := lexer.New(src).Tokenize()
+	prog, _ := parser.New(tokens).Parse()
+	c, ok := CompileBlock(prog.Stmts)
+	if !ok {
+		t.Fatal("compile refused if")
+	}
+	env := NewEnv(nil)
+	if _, err := c.Run(env); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	v, _ := env.Get("x")
+	if v.Number != 100 {
+		t.Errorf("x: want 100, got %v", v.Number)
+	}
+}
+
+func TestVMCompilesWhileLoop(t *testing.T) {
+	src := `let total = 0
+let i = 0
+while i < 100 {
+  total = total + i
+  i = i + 1
+}`
+	tokens, _ := lexer.New(src).Tokenize()
+	prog, _ := parser.New(tokens).Parse()
+	c, ok := CompileBlock(prog.Stmts)
+	if !ok {
+		t.Fatal("compile refused while")
+	}
+	env := NewEnv(nil)
+	if _, err := c.Run(env); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	v, _ := env.Get("total")
+	if v.Number != 4950 { // 0+1+...+99
+		t.Errorf("total: want 4950, got %v", v.Number)
+	}
+}
+
+func TestVMRefusesUnsupportedStmt(t *testing.T) {
+	// `loop`, `try`, `return`, function calls in body, destructuring lets
+	// should all be refused so the tree-walker handles them.
+	cases := []string{
+		`let { a, b } = { a: 1, b: 2 }`, // destructuring
+		`return 5`,                      // return outside fn
+		`try { 1 } catch e { 2 }`,       // try
+		`loop [1,2,3] as x { }`,         // loop
+	}
+	for _, src := range cases {
+		tokens, err := lexer.New(src).Tokenize()
+		if err != nil {
+			continue
+		}
+		prog, err := parser.New(tokens).Parse()
+		if err != nil {
+			continue
+		}
+		if _, ok := CompileBlock(prog.Stmts); ok {
+			t.Errorf("%q: expected compile refusal", src)
+		}
+	}
+}
+
 func TestInterpreterBytecodeFlag(t *testing.T) {
 	// End-to-end: enabling the flag must not change observable behaviour
 	// for programs the VM lowers. Run the same expression through both

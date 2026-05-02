@@ -607,10 +607,15 @@ type Interpreter struct {
 	// the tree-walker for every node.
 	useBytecode bool
 
-	// bcCache memoises compiled bytecode for expression statements so
-	// hot expressions (the body of a bench function, the inside of a
-	// while loop) only pay the compilation cost once.
+	// bcCache memoises compiled bytecode for expression nodes so
+	// hot expressions (a comparison inside a while loop) only pay
+	// the compilation cost once.
 	bcCache map[parser.Expr]*Compiled
+
+	// bcStmtCache does the same for whole statement subtrees —
+	// `let`, `=`, `if`, `while` get compiled in one shot, including
+	// any nested statements, and run on the VM as a single program.
+	bcStmtCache map[parser.Stmt]*Compiled
 
 	// callStack tracks active user-defined function calls so runtime
 	// errors can include a traceback.
@@ -698,8 +703,13 @@ func (i *Interpreter) SetFile(path string) { i.file = path }
 // transparently. Off by default.
 func (i *Interpreter) SetBytecode(on bool) {
 	i.useBytecode = on
-	if on && i.bcCache == nil {
-		i.bcCache = map[parser.Expr]*Compiled{}
+	if on {
+		if i.bcCache == nil {
+			i.bcCache = map[parser.Expr]*Compiled{}
+		}
+		if i.bcStmtCache == nil {
+			i.bcStmtCache = map[parser.Stmt]*Compiled{}
+		}
 	}
 }
 
@@ -832,6 +842,19 @@ func (i *Interpreter) execStmt(s parser.Stmt, env *Env) error {
 	if i.coverage != nil {
 		line, _ := s.Pos()
 		i.coverage.hit(line)
+	}
+	if i.useBytecode {
+		switch s.(type) {
+		case *parser.LetStmt, *parser.AssignStmt, *parser.IfStmt, *parser.WhileStmt:
+			err := i.tryBytecodeStmt(s, env)
+			if err == nil {
+				return nil
+			}
+			if err != errBytecodeFallback {
+				return err
+			}
+			// fall through to tree-walker
+		}
 	}
 	switch n := s.(type) {
 	case *parser.LetStmt:

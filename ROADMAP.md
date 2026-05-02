@@ -8,6 +8,10 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.53.0** (2026-05-02)
+  - VM lowers `let`, `=`, `if`, `while` — tight loops now run 2–3× faster on `--bytecode`
+  - New opcodes: `OpStoreVar`, `OpAssignVar`; jumps moved to absolute PC addressing
+  - Public `interpreter.CompileBlock` and statement-level compile cache
 - **v0.52.0** (2026-05-02)
   - Experimental stack-machine bytecode VM behind `mx run --bytecode` and `mx bench --bytecode`
   - Per-interpreter compile cache; transparent fall-back to the tree-walker for unsupported nodes

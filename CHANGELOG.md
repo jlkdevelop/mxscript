@@ -4,6 +4,44 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.53.0] — 2026-05-02
+
+### Added — VM lowers control flow (2–3× faster on tight loops)
+- **`let`, `=`, `if`, `while` are now lowered to bytecode.** The VM
+  compiler grew a statement compiler that handles single-binding
+  `let`, identifier-target `=`, and `if`/`while` with proper forward
+  and backward jumps. Loop bodies and conditional branches run on the
+  stack machine instead of the tree-walker.
+
+  ```bash
+  $ mx bench /tmp/loop.mx          #  6109 us/op  (tree-walker)
+  $ mx bench --bytecode /tmp/loop.mx #  2165 us/op  (bytecode — 2.82× faster)
+  ```
+
+  A 1000-iteration arithmetic loop went from 398us/op to 183us/op
+  (2.17×). A 10k-iteration loop with `if`/`else` branching went from
+  6.1ms/op to 2.2ms/op (2.82×).
+
+- **New opcodes.** `OpStoreVar` (for `let`), `OpAssignVar` (for `=`,
+  walks parent scopes), `OpJump` and `OpJumpIfFalse` now use absolute
+  PC addressing (cleaner forward-patching).
+
+- **`CompileBlock([]parser.Stmt)` is exported** alongside `CompileExpr`.
+  Embedders can now ahead-of-time compile any block of statements that
+  fits the supported subset.
+
+- **Statement-level compile cache** (`bcStmtCache`). Whole `if`/`while`
+  subtrees compile once per AST node and run as a single program for
+  every subsequent execution. Negative results are cached so refusal
+  doesn't repeat the compile attempt.
+
+- **Refusal still works correctly.** Destructuring `let`, member-target
+  assignments (`a.b = x`), `loop`, `try`, `return`, function calls in
+  statement position — all fall back to the tree-walker silently. The
+  VM is purely opt-in via `--bytecode` until parity lands.
+
+[0.53.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.53.0
+
 ## [0.52.0] — 2026-05-02
 
 ### Added — experimental bytecode VM
