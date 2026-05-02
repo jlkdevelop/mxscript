@@ -834,8 +834,53 @@ func (i *Interpreter) evalExpr(e parser.Expr, env *Env) (Value, error) {
 			}
 		}
 		return NullValue(), nil
+	case *parser.TryExpr:
+		tryEnv := NewEnv(env)
+		v, err := i.execBlockAsValue(n.Try, tryEnv)
+		if err == nil {
+			return v, nil
+		}
+		if _, ok := err.(*returnSignal); ok {
+			return Value{}, err
+		}
+		catchEnv := NewEnv(env)
+		if n.CatchVar != "" {
+			msg := err.Error()
+			var mx *MXError
+			if errors.As(err, &mx) {
+				msg = mx.Message
+			}
+			errObj := NewOrderedMap()
+			errObj.Set("message", StringValue(msg))
+			catchEnv.Set(n.CatchVar, ObjectValue(errObj))
+		}
+		return i.execBlockAsValue(n.Catch, catchEnv)
 	}
 	return Value{}, fmt.Errorf("unknown expression node %T", e)
+}
+
+// execBlockAsValue runs a sequence of statements and returns the value of
+// the last expression statement (or null if there isn't one). Used by
+// `try` in expression position so the body can yield a value.
+func (i *Interpreter) execBlockAsValue(stmts []parser.Stmt, env *Env) (Value, error) {
+	var last Value = NullValue()
+	for _, s := range stmts {
+		if es, ok := s.(*parser.ExprStmt); ok {
+			v, err := i.evalExpr(es.Expr, env)
+			if err != nil {
+				return Value{}, err
+			}
+			last = v
+			continue
+		}
+		if err := i.execStmt(s, env); err != nil {
+			if rs, ok := err.(*returnSignal); ok {
+				return rs.Value, nil
+			}
+			return Value{}, err
+		}
+	}
+	return last, nil
 }
 
 func (i *Interpreter) evalBinary(n *parser.BinaryExpr, env *Env) (Value, error) {

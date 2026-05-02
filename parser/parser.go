@@ -747,8 +747,21 @@ func (p *Parser) parsePrimary() (Expr, error) {
 		return p.parseFnLit()
 	case lexer.TokenMatch:
 		return p.parseMatch()
+	case lexer.TokenTry:
+		return p.parseTryExpr()
 	}
 	return nil, p.errorf("unexpected token %s (%q) in expression", t.Type, t.Lexeme)
+}
+
+// parseTryExpr is the expression form of try/catch. Mirrors parseTry but
+// emits a TryExpr instead of a TryStmt.
+func (p *Parser) parseTryExpr() (Expr, error) {
+	stmt, err := p.parseTry()
+	if err != nil {
+		return nil, err
+	}
+	t := stmt.(*TryStmt)
+	return &TryExpr{pos: t.pos, Try: t.Try, CatchVar: t.CatchVar, Catch: t.Catch}, nil
 }
 
 // parseMatch parses `match <expr> { pat => expr, pat => expr, _ => expr }`.

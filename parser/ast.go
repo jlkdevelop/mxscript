@@ -303,6 +303,19 @@ type MatchExpr struct {
 
 func (*MatchExpr) exprNode() {}
 
+// TryExpr is the expression form of try/catch. The value of the last
+// expression statement in whichever block ran becomes the result.
+//
+//   let parsed = try { json_parse(input) } catch (e) { { error: e.message } }
+type TryExpr struct {
+	pos
+	Try      []Stmt
+	CatchVar string
+	Catch    []Stmt
+}
+
+func (*TryExpr) exprNode() {}
+
 type MatchArm struct {
 	Pattern Expr // nil means wildcard `_`
 	Body    Expr
