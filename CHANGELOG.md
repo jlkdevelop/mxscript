@@ -4,6 +4,30 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.50.0] — 2026-05-02
+
+### Added — LSP polish (v1.0 of the editor experience)
+- **Signature help** — when your cursor is inside a function call, the
+  editor now shows the call signature with the active parameter
+  highlighted. Counts commas at the cursor's nesting depth so it works
+  through nested calls.
+
+  ```
+  json_stringify(v, pretty?) -> string
+                    ^^^^^^^^ (active)
+  ```
+
+- **Snippet completions** — 16 curated snippets covering common
+  patterns: `route`, `post`, `group`, `mw`, `ws`, `sse`, `fn`, `match`,
+  `try`, `spawn`, `test`, `bench`, `server`, `sql.migrate`, `session`,
+  `openapi`. Each has tab-stops (`$1`, `$2`, …) so you can fill in
+  blanks fluidly.
+
+  Type `route` + Tab and you get a complete `get /path { return json({}) }`
+  block with the path pre-selected for editing.
+
+[0.50.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.50.0
+
 ## [0.49.0] — 2026-05-02
 
 ### Added

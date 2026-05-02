@@ -123,6 +123,10 @@ func (s *server) handle(body []byte) error {
 				"completionProvider": map[string]any{
 					"triggerCharacters": []string{".", " "},
 				},
+				"signatureHelpProvider": map[string]any{
+					"triggerCharacters":   []string{"(", ","},
+					"retriggerCharacters": []string{","},
+				},
 			},
 			"serverInfo": map[string]string{
 				"name":    "mx-lsp",
@@ -236,9 +240,8 @@ func (s *server) handle(body []byte) error {
 		return s.respond(req.ID, nil)
 
 	case "textDocument/completion":
-		// Lazy completion: every builtin name + every keyword gets offered.
-		// Editors filter by prefix client-side, so we don't have to.
-		items := make([]map[string]any, 0, len(builtinDocs)+len(keywords))
+		// Lazy completion: every builtin name + every keyword + curated snippets.
+		items := make([]map[string]any, 0, len(builtinDocs)+len(keywords)+len(snippets))
 		for name, doc := range builtinDocs {
 			items = append(items, map[string]any{
 				"label":  name,
@@ -256,9 +259,65 @@ func (s *server) handle(body []byte) error {
 				"kind":  14, // Keyword
 			})
 		}
+		for _, sn := range snippets {
+			items = append(items, map[string]any{
+				"label":            sn.Prefix,
+				"kind":             15, // Snippet
+				"detail":           sn.Description,
+				"insertText":       sn.Body,
+				"insertTextFormat": 2, // Snippet (with $1, $2 tabstops)
+			})
+		}
 		return s.respond(req.ID, map[string]any{
 			"isIncomplete": false,
 			"items":        items,
+		})
+
+	case "textDocument/signatureHelp":
+		var p struct {
+			TextDocument struct {
+				URI string `json:"uri"`
+			} `json:"textDocument"`
+			Position struct {
+				Line, Character int
+			} `json:"position"`
+		}
+		if err := json.Unmarshal(req.Params, &p); err != nil {
+			return err
+		}
+		text := s.getDoc(p.TextDocument.URI)
+		fn, paramIdx := signatureContextAt(text, p.Position.Line, p.Position.Character)
+		doc, ok := builtinDocs[fn]
+		if !ok {
+			return s.respond(req.ID, nil)
+		}
+		// Best-effort param parsing from the signature string:
+		// "name(arg1, arg2?, ...args) -> ret" → ["arg1", "arg2?", "...args"]
+		var paramLabels []map[string]any
+		if open := strings.Index(doc.Signature, "("); open >= 0 {
+			if close := strings.Index(doc.Signature[open:], ")"); close >= 0 {
+				args := strings.TrimSpace(doc.Signature[open+1 : open+close])
+				if args != "" {
+					for _, a := range strings.Split(args, ",") {
+						paramLabels = append(paramLabels, map[string]any{
+							"label": strings.TrimSpace(a),
+						})
+					}
+				}
+			}
+		}
+		return s.respond(req.ID, map[string]any{
+			"signatures": []map[string]any{{
+				"label": doc.Signature,
+				"documentation": map[string]string{
+					"kind":  "markdown",
+					"value": doc.Summary,
+				},
+				"parameters":      paramLabels,
+				"activeParameter": paramIdx,
+			}},
+			"activeSignature": 0,
+			"activeParameter": paramIdx,
 		})
 	}
 
@@ -488,6 +547,81 @@ var builtinDocs = map[string]builtinDoc{
 	// Misc
 	"retry": {"retry(fn, attempts, delay_ms?) -> any", "Call fn up to attempts times until non-error."},
 	"error": {"error(msg)", "Throw a runtime error (catchable with try/catch)."},
+}
+
+// snippets are common-pattern completions. Editors render them with
+// $1 / $2 / $0 as tab stops the way VS Code / Helix / Zed expect.
+type snippet struct {
+	Prefix      string
+	Description string
+	Body        string
+}
+
+var snippets = []snippet{
+	{Prefix: "route", Description: "GET route", Body: "get ${1:/path} {\n\treturn json(${2:{}})\n}\n"},
+	{Prefix: "post", Description: "POST route with validation", Body: "post ${1:/path} {\n\tlet r = validate(request.body, {\n\t\ttype: \"object\",\n\t\trequired: [${2:\"name\"}],\n\t\tproperties: {\n\t\t\t${3}\n\t\t}\n\t})\n\tif (!r.valid) { return status(400, { errors: r.errors }) }\n\t${0}\n}\n"},
+	{Prefix: "group", Description: "Route group with auth", Body: "group ${1:/api/v1} {\n\tuse ${2:require_auth}\n\n\t${0}\n}\n"},
+	{Prefix: "mw", Description: "middleware definition", Body: "middleware ${1:require_auth} {\n\tlet claims = jwt.verify(request.bearer_token, env_required(\"JWT_SECRET\"))\n\tif (claims == null) {\n\t\treturn status(401, { error: \"unauthorized\" })\n\t}\n}\n"},
+	{Prefix: "ws", Description: "WebSocket route", Body: "ws ${1:/chat} {\n\twhile (true) {\n\t\tlet msg = recv()\n\t\tif (msg == null) { break }\n\t\t${0:send(\"echo: \" + msg)}\n\t}\n}\n"},
+	{Prefix: "sse", Description: "SSE route", Body: "sse ${1:/events} {\n\twhile (true) {\n\t\tsend({ ${2:tick: now()} })\n\t\tsleep(${3:1000})\n\t}\n}\n"},
+	{Prefix: "fn", Description: "function declaration", Body: "fn ${1:name}(${2:args}) {\n\t${0}\n}\n"},
+	{Prefix: "match", Description: "match expression", Body: "match ${1:value} {\n\t${2:1} => ${3:\"one\"}\n\t${4:_} => ${5:\"other\"}\n}\n"},
+	{Prefix: "try", Description: "try/catch block", Body: "try {\n\t${1}\n} catch (e) {\n\t${0:return status(500, { error: e.message })}\n}\n"},
+	{Prefix: "spawn", Description: "spawn block", Body: "spawn {\n\t${0}\n}\n"},
+	{Prefix: "test", Description: "test_* function", Body: "fn test_${1:name}() {\n\tassert_eq(${2:actual}, ${3:expected})\n}\n"},
+	{Prefix: "bench", Description: "bench_* function", Body: "fn bench_${1:name}() {\n\t${0}\n}\n"},
+	{Prefix: "server", Description: "server config block", Body: "server {\n\tport: ${1:8080},\n\tlog: ${2:true},\n\tcors: { origins: [\"*\"] }\n}\n"},
+	{Prefix: "sql.migrate", Description: "schema migrations", Body: "sql.migrate(db, [\n\t\"CREATE TABLE IF NOT EXISTS ${1:users} (id INTEGER PRIMARY KEY, ${2:name TEXT})\"\n])\n"},
+	{Prefix: "session", Description: "session.create / read", Body: "post /login {\n\treturn session.create({ user_id: ${1:user.id} }, { secret: env_required(\"SESSION_SECRET\") })\n}\n\nget /me {\n\tlet claims = session.read(request, env(\"SESSION_SECRET\"))\n\tif (claims == null) { return status(401) }\n\treturn json(claims)\n}\n"},
+	{Prefix: "openapi", Description: "OpenAPI + Swagger UI", Body: "get /openapi.json { return json(openapi({ title: \"${1:My API}\" })) }\nget /docs        { return swagger_ui(\"/openapi.json\") }\n"},
+}
+
+// signatureContextAt walks back from the cursor to find the enclosing
+// `name(...` call, returning the function name and the active parameter
+// index (0-based, counted by commas at the same nesting depth).
+func signatureContextAt(text string, line, col int) (string, int) {
+	lines := strings.Split(text, "\n")
+	if line < 0 || line >= len(lines) {
+		return "", 0
+	}
+	row := lines[line]
+	if col > len(row) {
+		col = len(row)
+	}
+	depth := 0
+	commaCount := 0
+	for i := col - 1; i >= 0; i-- {
+		c := row[i]
+		switch {
+		case c == ')' || c == ']' || c == '}':
+			depth++
+		case c == '(':
+			if depth == 0 {
+				// Walk back to grab the identifier just before the paren.
+				name := identBefore(row, i)
+				return name, commaCount
+			}
+			depth--
+		case c == '[' || c == '{':
+			depth--
+		case c == ',' && depth == 0:
+			commaCount++
+		}
+	}
+	return "", 0
+}
+
+func identBefore(s string, end int) string {
+	start := end
+	for start > 0 {
+		c := s[start-1]
+		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '.' {
+			start--
+			continue
+		}
+		break
+	}
+	return s[start:end]
 }
 
 // keywords are offered as completions too, alongside builtins.
