@@ -219,6 +219,16 @@ func registerBuiltins(i *Interpreter) {
 	// --- Webhook helpers ---
 	def("verify_webhook", builtinVerifyWebhook)
 
+	// --- SQL (SQLite) namespace ---
+	sqlNS := NewOrderedMap()
+	sqlNS.Set("open", FunctionValue(&Function{Name: "sql.open", Native: builtinSQLOpen}))
+	sqlNS.Set("exec", FunctionValue(&Function{Name: "sql.exec", Native: builtinSQLExec}))
+	sqlNS.Set("query", FunctionValue(&Function{Name: "sql.query", Native: builtinSQLQuery}))
+	sqlNS.Set("query_one", FunctionValue(&Function{Name: "sql.query_one", Native: builtinSQLQueryOne}))
+	sqlNS.Set("close", FunctionValue(&Function{Name: "sql.close", Native: builtinSQLClose}))
+	g.Set("sql", ObjectValue(sqlNS))
+	builtinNames["sql"] = true
+
 	// --- Image namespace ---
 	imageNS := NewOrderedMap()
 	imageNS.Set("info", FunctionValue(&Function{Name: "image.info", Native: builtinImageInfo}))
@@ -2262,6 +2272,74 @@ func lookupTemplateVar(vars *OrderedMap, expr string) Value {
 func htmlEscapeString(s string) string {
 	r := strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;", "'", "&#39;")
 	return r.Replace(s)
+}
+
+// ===== SQL (SQLite) =====
+
+func builtinSQLOpen(i *Interpreter, args []Value) (Value, error) {
+	path, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	h, err := sqlOpen(path)
+	if err != nil {
+		return Value{}, err
+	}
+	return HandleValue(h), nil
+}
+
+func mustDBHandle(args []Value) (*dbHandle, error) {
+	if len(args) < 1 || args[0].Kind != KindHandle {
+		return nil, fmt.Errorf("expected a sql.open handle as first argument")
+	}
+	h, ok := args[0].Handle.(*dbHandle)
+	if !ok {
+		return nil, fmt.Errorf("argument is not a SQL handle")
+	}
+	return h, nil
+}
+
+func builtinSQLExec(i *Interpreter, args []Value) (Value, error) {
+	h, err := mustDBHandle(args)
+	if err != nil {
+		return Value{}, err
+	}
+	query, err := stringArg(args, 1)
+	if err != nil {
+		return Value{}, err
+	}
+	return sqlExec(h, query, args[2:])
+}
+
+func builtinSQLQuery(i *Interpreter, args []Value) (Value, error) {
+	h, err := mustDBHandle(args)
+	if err != nil {
+		return Value{}, err
+	}
+	query, err := stringArg(args, 1)
+	if err != nil {
+		return Value{}, err
+	}
+	return sqlQuery(h, query, args[2:])
+}
+
+func builtinSQLQueryOne(i *Interpreter, args []Value) (Value, error) {
+	v, err := builtinSQLQuery(i, args)
+	if err != nil {
+		return Value{}, err
+	}
+	if v.Kind != KindArray || len(v.Array) == 0 {
+		return NullValue(), nil
+	}
+	return v.Array[0], nil
+}
+
+func builtinSQLClose(i *Interpreter, args []Value) (Value, error) {
+	h, err := mustDBHandle(args)
+	if err != nil {
+		return Value{}, err
+	}
+	return NullValue(), h.db.Close()
 }
 
 // ===== Image =====

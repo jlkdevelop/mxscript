@@ -4,6 +4,38 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.22.0] — 2026-05-02
+
+### Added — SQL
+- **`sql` namespace** for SQLite via the pure-Go `modernc.org/sqlite`
+  driver (no CGo required). The first external Go dependency MX has
+  added — added because real apps need real persistence and KV alone
+  doesn't cut it. CONTRIBUTING.md now documents the exception.
+
+  ```mx
+  let db = sql.open("./data.db")
+
+  sql.exec(db, "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT)")
+  let r = sql.exec(db, "INSERT INTO users (name) VALUES (?)", "Jassim")
+  print("inserted id:", r.last_insert_id)
+
+  let users = sql.query(db, "SELECT * FROM users WHERE name LIKE ?", "Jass%")
+  loop users as u { print(u.id, u.name) }
+
+  let one = sql.query_one(db, "SELECT * FROM users WHERE id = ?", 1)
+  if (one == null) { /* not found */ }
+
+  sql.close(db)
+  ```
+- **`KindHandle` value kind** — opaque resource carrier. SQLite uses it
+  today; future helpers (Postgres, file streams) can reuse the shape.
+
+### Changed
+- Go module bumped to 1.22 minimum, toolchain auto-fetches 1.25.0+ as
+  required by the new SQLite dep. CI builds against 1.25.
+
+[0.22.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.22.0
+
 ## [0.21.0] — 2026-05-02
 
 ### Added — WebSockets

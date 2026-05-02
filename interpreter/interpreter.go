@@ -167,6 +167,7 @@ const (
 	KindFunction
 	KindResponse
 	KindChannel
+	KindHandle
 )
 
 // Channel wraps a Go channel of MX values. Allocated by chan(); operated
@@ -188,7 +189,13 @@ type Value struct {
 	Function *Function
 	Response *Response
 	Channel  *Channel
+	// Handle is a generic opaque pointer for resources that don't fit
+	// the standard value shapes — DB connections, future file handles,
+	// etc. Treated as a black box by the interpreter.
+	Handle any
 }
+
+func HandleValue(h any) Value { return Value{Kind: KindHandle, Handle: h} }
 
 func ChannelValue(c *Channel) Value { return Value{Kind: KindChannel, Channel: c} }
 
@@ -279,6 +286,8 @@ func (v Value) typeName() string {
 		return "response"
 	case KindChannel:
 		return "channel"
+	case KindHandle:
+		return "handle"
 	}
 	return "unknown"
 }
@@ -310,6 +319,8 @@ func (v Value) Display() string {
 		return "<fn>"
 	case KindChannel:
 		return "<channel>"
+	case KindHandle:
+		return "<handle>"
 	}
 	return ""
 }

@@ -119,7 +119,7 @@ The fastest path to landing your first PR: pick a built-in function on the roadm
 - Run `gofmt -w .` before committing.
 - Keep new files short and focused. The interpreter is intentionally one file you can read in an evening.
 - Every Go file has a comment header explaining what it does.
-- Avoid adding external Go dependencies. The standard library is the standard library.
+- Avoid adding external Go dependencies. The standard library is the standard library. (One exception: `modernc.org/sqlite` for the SQL builtins — pure Go, no CGo.)
 - Keep error messages user-friendly: include line numbers, file paths, and what was expected.
 
 ---
