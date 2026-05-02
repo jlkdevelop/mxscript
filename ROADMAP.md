@@ -8,6 +8,9 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.23.0** (2026-05-02)
+  - Docs site at mxscript.com (`site/`, GitHub Pages)
+  - Landing page + single-page docs with sticky sidebar
 - **v0.22.0** (2026-05-02)
   - SQLite via `sql.open / exec / query / query_one / close` (modernc.org/sqlite, pure Go)
   - New `KindHandle` value type for opaque resources

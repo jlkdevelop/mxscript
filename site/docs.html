@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Docs — MX Script</title>
+<link rel="icon" href="assets/favicon-32.png" type="image/png">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="docs.css">
+</head>
+<body>
+<nav class="docs-nav">
+  <a href="/" class="brand">
+    <img src="assets/logo-mark.png" alt="">
+    <span>mx script</span>
+  </a>
+  <div class="links">
+    <a href="/">home</a>
+    <a href="https://github.com/jlkdevelop/mxscript">github</a>
+  </div>
+</nav>
+
+<div class="docs-layout">
+  <aside class="docs-side">
+    <h4>Getting started</h4>
+    <ul>
+      <li><a href="#install">Install</a></li>
+      <li><a href="#hello">Hello world</a></li>
+      <li><a href="#api">First API</a></li>
+    </ul>
+    <h4>Language</h4>
+    <ul>
+      <li><a href="#syntax">Syntax</a></li>
+      <li><a href="#routes">Routes</a></li>
+      <li><a href="#middleware">Middleware</a></li>
+      <li><a href="#concurrency">Concurrency</a></li>
+    </ul>
+    <h4>Stdlib</h4>
+    <ul>
+      <li><a href="#http">HTTP</a></li>
+      <li><a href="#sql">SQL</a></li>
+      <li><a href="#auth">JWT &amp; OAuth</a></li>
+      <li><a href="#ai">AI</a></li>
+      <li><a href="#realtime">Real-time</a></li>
+    </ul>
+    <h4>CLI</h4>
+    <ul>
+      <li><a href="#cli">Commands</a></li>
+    </ul>
+    <p class="more">For the full reference, see <a href="https://github.com/jlkdevelop/mxscript/tree/main/docs">/docs on GitHub</a>.</p>
+  </aside>
+
+  <main class="docs-main">
+    <h1>MX Script Documentation</h1>
+    <p class="lead">A modern open-source scripting language for web apps and APIs. Routes, JSON, JWT, SQL, WebSockets, and AI are all built into the language. Run with <code>mx run app.mx</code>.</p>
+
+    <h2 id="install">Install</h2>
+    <p>Pre-built binaries for macOS / Linux / Windows ship on every <a href="https://github.com/jlkdevelop/mxscript/releases">tagged release</a>. From source:</p>
+<pre><code>git clone https://github.com/jlkdevelop/mxscript.git
+cd mxscript
+go build -o mx .   <span class="comment"># requires Go 1.25+</span>
+./mx version</code></pre>
+
+    <h2 id="hello">Hello world</h2>
+<pre><code>$ mx run --eval 'print("hello, " + uuid())'
+hello, 4c5e3a17-...
+</code></pre>
+
+    <h2 id="api">Your first API</h2>
+<pre><code>server { port: 8080 }
+
+let users = [
+  { id: 1, name: "Jassim" },
+  { id: 2, name: "Ada" }
+]
+
+get /users {
+  return json(users)
+}
+
+get /users/:id {
+  let id = num(request.params.id)
+  let user = find(users, fn(u) { return u.id == id })
+  if (user == null) {
+    return status(404, { error: "not found" })
+  }
+  return json(user)
+}</code></pre>
+    <p>Save as <code>app.mx</code>. Run <code>mx run app.mx</code>. <code>curl localhost:8080/users/1</code>.</p>
+
+    <h2 id="syntax">Syntax</h2>
+    <p>Variables, control flow, functions:</p>
+<pre><code>let name = "Jassim"
+let user = { id: 1, name: name, scores: [10, 20, 30] }
+
+// String interpolation
+print("Hello, ${user.name}! Sum: ${sum(user.scores)}")
+
+// Optional chaining + nullish coalescing
+let city = user?.profile?.city ?? "unknown"
+
+// Pattern matching
+let label = match user.role {
+  "admin" => "all access"
+  "user"  => "read-only"
+  _       => "anonymous"
+}
+
+// Loops
+loop user.scores as i, score { print(i, score) }
+while (count &lt; 100) { count = count + 1 }
+
+// try as expression
+let parsed = try { json_parse(input) } catch (e) { { error: e.message } }</code></pre>
+
+    <h2 id="routes">Routes</h2>
+<pre><code>get /             { return text("hello") }
+get /users/:id    { return json({ id: request.params.id }) }
+post /users       { return status(201, request.body) }
+delete /users/:id { return json({ deleted: true }) }
+
+// Verbose form
+route GET /admin  { ... }
+
+// Real-time
+sse /events       { send({ tick: now() }); sleep(1000) }
+ws /chat          { while (true) { send("echo: " + recv()) } }</code></pre>
+
+    <h2 id="middleware">Middleware</h2>
+<pre><code>middleware require_auth {
+  let claims = jwt.verify(request.bearer_token, env("JWT_SECRET"))
+  if (claims == null) {
+    return status(401, { error: "unauthorized" })
+  }
+}
+
+post /admin {
+  use require_auth
+  return json({ ok: true })
+}</code></pre>
+
+    <h2 id="concurrency">Concurrency</h2>
+<pre><code>let ch = chan(10)
+spawn {
+  loop 5 as i { send(ch, i * 2) }
+  close_chan(ch)
+}
+while (true) {
+  let v = recv(ch)
+  if (v == null) { break }
+  print(v)
+}
+
+// Fan-out / wait-all
+let wg = wait_group()
+loop urls as u {
+  wg.add(1)
+  spawn { fetch(u); wg.done() }
+}
+wg.wait()</code></pre>
+
+    <h2 id="http">HTTP</h2>
+<pre><code>// Outbound
+let res = fetch("https://api.example.com/users", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: { name: "Jassim" }
+})
+print(res.status, res.body)
+
+// Server config
+server {
+  port: 8080,
+  read_timeout: "5s",
+  max_body: "10MB",
+  cors: { origins: ["*"] },
+  rate_limit: { requests: 60, per: "1m" },
+  compression: true,
+  log: true,
+  tls: { cert: "./cert.pem", key: "./key.pem" }
+}</code></pre>
+
+    <h2 id="sql">SQL</h2>
+<pre><code>let db = sql.open("./data.db")
+
+sql.exec(db, "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT)")
+let r = sql.exec(db, "INSERT INTO users (name) VALUES (?)", "Jassim")
+print(r.last_insert_id)
+
+let users = sql.query(db, "SELECT * FROM users WHERE name LIKE ?", "Jass%")
+loop users as u { print(u.id, u.name) }
+
+sql.close(db)</code></pre>
+
+    <h2 id="auth">JWT &amp; OAuth</h2>
+<pre><code>// JWT
+let token = jwt.sign({ sub: "jassim", exp: now() / 1000 + 3600 }, env("JWT_SECRET"))
+let claims = jwt.verify(token, env("JWT_SECRET"))   // null on bad sig / expired
+
+// OAuth2 — Google login in two routes
+get /auth/google {
+  return redirect(oauth.authorize_url({
+    provider: "google",
+    client_id: env_required("GOOGLE_CLIENT_ID"),
+    redirect_uri: "https://app.example.com/auth/callback",
+    scopes: ["openid", "email", "profile"]
+  }))
+}
+
+get /auth/callback {
+  let tokens = oauth.exchange_code({
+    provider: "google",
+    client_id: env_required("GOOGLE_CLIENT_ID"),
+    client_secret: env_required("GOOGLE_CLIENT_SECRET"),
+    redirect_uri: "https://app.example.com/auth/callback",
+    code: request.query.code
+  })
+  return json(tokens)
+}</code></pre>
+
+    <h2 id="ai">AI</h2>
+<pre><code>// OpenAI (default)
+let answer = ai.complete("In one sentence, what is MX Script?")
+
+// Anthropic Claude
+let claudeAnswer = ai.complete("Same question", {
+  provider: "anthropic",
+  model: "claude-haiku-4-5-20251001"
+})
+
+// Embeddings
+let vec = ai.embed("hello world")</code></pre>
+
+    <h2 id="realtime">Real-time</h2>
+<pre><code>sse /events {
+  while (true) {
+    send({ time: now_iso() })
+    sleep(1000)
+  }
+}
+
+ws /chat {
+  while (true) {
+    let msg = recv()
+    if (msg == null) { break }
+    send("echo: " + msg)
+  }
+}</code></pre>
+
+    <h2 id="cli">CLI</h2>
+<pre><code>mx run &lt;file.mx&gt;             <span class="comment"># run a program</span>
+mx run &lt;file.mx&gt; --watch     <span class="comment"># hot reload</span>
+mx run --eval '&lt;snippet&gt;'    <span class="comment"># inline one-liner</span>
+mx test [path]               <span class="comment"># run *_test.mx files</span>
+mx fmt -w &lt;file.mx&gt;          <span class="comment"># format in place</span>
+mx repl                      <span class="comment"># interactive REPL</span>
+mx init [name]               <span class="comment"># scaffold a new project</span>
+mx build &lt;file.mx&gt;           <span class="comment"># validate without running</span>
+mx build --vercel app.mx     <span class="comment"># generate a Vercel-deployable Go project</span>
+mx version
+mx help</code></pre>
+
+    <hr>
+    <p><strong>Founded by <a href="https://github.com/jlkdevelop">Jassim Alkharafi</a>.</strong> MIT licensed. <a href="https://github.com/jlkdevelop/mxscript">github.com/jlkdevelop/mxscript</a></p>
+  </main>
+</div>
+</body>
+</html>

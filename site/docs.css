@@ -1,0 +1,88 @@
+/* Docs-specific styles. Layered on top of style.css. */
+.docs-nav {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 16px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+}
+.docs-layout {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 48px;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 32px 24px 80px;
+}
+.docs-side {
+  position: sticky;
+  top: 24px;
+  align-self: start;
+  font-size: 14px;
+}
+.docs-side h4 {
+  margin: 24px 0 8px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.docs-side h4:first-child { margin-top: 0; }
+.docs-side ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.docs-side li { padding: 4px 0; }
+.docs-side a { color: var(--fg); }
+.docs-side a:hover { color: var(--brand); text-decoration: none; }
+.docs-side .more { margin-top: 32px; color: var(--muted); font-size: 12px; }
+
+.docs-main { min-width: 0; }
+.docs-main h1 {
+  font-size: 36px;
+  letter-spacing: -0.02em;
+  margin: 0 0 8px;
+}
+.docs-main .lead {
+  font-size: 17px;
+  color: var(--muted);
+  margin: 0 0 32px;
+}
+.docs-main h2 {
+  font-size: 22px;
+  margin: 48px 0 16px;
+  scroll-margin-top: 24px;
+  border-top: 1px solid var(--line);
+  padding-top: 32px;
+}
+.docs-main h2:first-of-type { border-top: none; padding-top: 0; }
+.docs-main pre {
+  background: var(--code-bg);
+  color: var(--code-fg);
+  padding: 16px 20px;
+  border-radius: var(--radius);
+  overflow-x: auto;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.docs-main pre code .comment { color: var(--comment); }
+.docs-main p code, .docs-main li code {
+  background: var(--bg-alt);
+  border: 1px solid var(--line);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 13px;
+}
+.docs-main hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 48px 0 24px;
+}
+
+@media (max-width: 720px) {
+  .docs-layout { grid-template-columns: 1fr; gap: 24px; }
+  .docs-side { position: static; }
+}

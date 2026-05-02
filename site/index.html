@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MX Script — A modern open-source language for web apps and APIs</title>
+<meta name="description" content="MX Script is a modern open-source scripting language for building web apps and APIs. One file. Zero boilerplate. Routes, JSON, JWT, WebSockets, AI, and SQLite — all built into the language.">
+<meta property="og:title" content="MX Script">
+<meta property="og:description" content="A modern open-source language for web apps and APIs. Routes, JSON, JWT, WebSockets, AI, and SQLite built in.">
+<meta property="og:image" content="https://mxscript.com/assets/logo@2x.png">
+<meta property="og:url" content="https://mxscript.com">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="assets/favicon-32.png" type="image/png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="hero">
+  <nav>
+    <a href="/" class="brand">
+      <img src="assets/logo-mark.png" alt="">
+      <span>mx script</span>
+    </a>
+    <div class="links">
+      <a href="docs.html">docs</a>
+      <a href="https://github.com/jlkdevelop/mxscript">github</a>
+      <a href="https://github.com/jlkdevelop/mxscript/releases">releases</a>
+    </div>
+  </nav>
+
+  <div class="hero-inner">
+    <img class="hero-logo" src="assets/logo-mark.png" alt="MX Script">
+    <h1>The language is the framework.</h1>
+    <p class="tagline">
+      A modern open-source scripting language for web apps and APIs.<br>
+      One file. Zero boilerplate. Run with <code>mx run app.mx</code>.
+    </p>
+    <div class="cta">
+      <a href="#install" class="btn primary">Install</a>
+      <a href="docs.html" class="btn">Read the docs</a>
+    </div>
+    <p class="founder">
+      Founded and developed by <a href="https://github.com/jlkdevelop">Jassim Alkharafi</a>.
+    </p>
+  </div>
+</header>
+
+<section class="demo">
+  <div class="container">
+    <h2>A real JSON API in five lines.</h2>
+<pre><code class="mx"><span class="kw">server</span> { <span class="prop">port:</span> <span class="num">8080</span> }
+
+<span class="kw">get</span> <span class="path">/users/:id</span> {
+  <span class="kw">let</span> id = <span class="fn">num</span>(request.params.id)
+  <span class="kw">return</span> <span class="fn">json</span>({ <span class="prop">id:</span> id, <span class="prop">name:</span> <span class="str">"Jassim"</span> })
+}</code></pre>
+    <p class="caption">No framework imports. No middleware setup. No <code>package.json</code>. <code>mx run app.mx</code> and you have a JSON API on <code>localhost:8080</code>.</p>
+  </div>
+</section>
+
+<section class="features">
+  <div class="container">
+    <h2>Batteries included.</h2>
+    <div class="grid">
+      <div class="feature">
+        <h3>HTTP framework</h3>
+        <p>Routes, middleware, static files, cookies, request body parsing, CORS, gzip, rate limiting, graceful shutdown — all first-class language constructs.</p>
+      </div>
+      <div class="feature">
+        <h3>Real-time</h3>
+        <p>Server-sent events <code>sse /events</code> and WebSockets <code>ws /chat</code> as native route types. RFC 6455 in pure stdlib.</p>
+      </div>
+      <div class="feature">
+        <h3>SQLite</h3>
+        <p><code>sql.open / exec / query</code> — proper SQL persistence built in. Pure Go driver, no CGo.</p>
+      </div>
+      <div class="feature">
+        <h3>Concurrency</h3>
+        <p><code>spawn { ... }</code> for goroutines, channels for coordination. Modern async without callbacks or promises.</p>
+      </div>
+      <div class="feature">
+        <h3>Auth</h3>
+        <p>JWT, signed cookies, OAuth2 helpers for Google / GitHub / Discord / Microsoft / LinkedIn — write a login flow in 20 lines.</p>
+      </div>
+      <div class="feature">
+        <h3>AI built in</h3>
+        <p><code>ai.complete(prompt)</code> — OpenAI or Anthropic Claude. Add an LLM endpoint to your app in one line.</p>
+      </div>
+      <div class="feature">
+        <h3>Tooling</h3>
+        <p>REPL, test runner, watch mode, formatter, pretty error messages with stack traces, GoReleaser binaries on every tag.</p>
+      </div>
+      <div class="feature">
+        <h3>Single binary</h3>
+        <p>One Go binary with one runtime dep (SQLite). No virtual machine. No <code>node_modules</code>. No GC tuning.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="install" id="install">
+  <div class="container">
+    <h2>Install</h2>
+    <h3>From source (Go 1.25+)</h3>
+<pre><code><span class="comment">$</span> git clone https://github.com/jlkdevelop/mxscript.git
+<span class="comment">$</span> cd mxscript
+<span class="comment">$</span> go build -o mx .
+<span class="comment">$</span> ./mx version</code></pre>
+    <h3>Pre-built binaries</h3>
+    <p>macOS, Linux, and Windows binaries on every tagged release: <a href="https://github.com/jlkdevelop/mxscript/releases">github.com/jlkdevelop/mxscript/releases</a>.</p>
+    <h3>Hello world</h3>
+<pre><code><span class="comment">$</span> mx run --eval 'print("Hello, " + uuid())'
+Hello, 4c5e3...</code></pre>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <p>MIT licensed. Built in the open by <a href="https://github.com/jlkdevelop">Jassim Alkharafi</a>.</p>
+    <p><a href="https://github.com/jlkdevelop/mxscript">github</a> · <a href="docs.html">docs</a> · <a href="https://github.com/jlkdevelop/mxscript/blob/main/CHANGELOG.md">changelog</a> · <a href="https://github.com/jlkdevelop/mxscript/blob/main/ROADMAP.md">roadmap</a></p>
+  </div>
+</footer>
+</body>
+</html>

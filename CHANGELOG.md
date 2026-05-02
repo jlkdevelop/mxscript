@@ -4,6 +4,30 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.23.0] — 2026-05-02
+
+### Added
+- **Docs site** at <https://mxscript.com> — landing page + full
+  reference. Built as a static site under `site/` and deployed on
+  every push to `main` via the new `pages.yml` GitHub Actions
+  workflow. Light + dark theme, mobile-friendly, no client-side
+  framework — just hand-written HTML and CSS.
+  Assets:
+  - `site/index.html` — landing page (hero, demo block, feature grid, install)
+  - `site/docs.html` — single-page docs with sticky sidebar
+  - `site/style.css` + `site/docs.css` — design system using brand
+    colors (`#2B54A8` blue, `#FDC02E` yellow)
+  - `site/CNAME` — `mxscript.com` (point your DNS to GitHub Pages
+    once the workflow has run once)
+
+### Notes
+DNS: in Cloudflare / your registrar, add a CNAME record
+`mxscript.com` → `jlkdevelop.github.io`. After the first Pages
+deploy succeeds, GitHub will provision the TLS certificate
+automatically.
+
+[0.23.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.23.0
+
 ## [0.22.0] — 2026-05-02
 
 ### Added — SQL
