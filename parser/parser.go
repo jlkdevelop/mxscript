@@ -1,0 +1,715 @@
+// Package parser implements a recursive-descent parser that converts a
+// stream of tokens (produced by the lexer) into an MX Script AST.
+package parser
+
+import (
+	"fmt"
+	"strconv"
+
+	"github.com/jlkdevelop/mxscript/lexer"
+)
+
+type Parser struct {
+	tokens []lexer.Token
+	pos    int
+}
+
+func New(tokens []lexer.Token) *Parser {
+	return &Parser{tokens: tokens}
+}
+
+// Parse consumes the full token stream and returns a Program AST. Any
+// syntax error is returned with file-relative line/column information.
+func (p *Parser) Parse() (*Program, error) {
+	prog := &Program{}
+	for !p.isAtEnd() {
+		stmt, err := p.parseStmt()
+		if err != nil {
+			return nil, err
+		}
+		if stmt != nil {
+			prog.Stmts = append(prog.Stmts, stmt)
+		}
+	}
+	return prog, nil
+}
+
+// ===== Token helpers =====
+
+func (p *Parser) cur() lexer.Token { return p.tokens[p.pos] }
+func (p *Parser) peek(n int) lexer.Token {
+	if p.pos+n >= len(p.tokens) {
+		return p.tokens[len(p.tokens)-1]
+	}
+	return p.tokens[p.pos+n]
+}
+
+func (p *Parser) isAtEnd() bool { return p.cur().Type == lexer.TokenEOF }
+
+func (p *Parser) advance() lexer.Token {
+	t := p.tokens[p.pos]
+	if !p.isAtEnd() {
+		p.pos++
+	}
+	return t
+}
+
+func (p *Parser) check(tt lexer.TokenType) bool {
+	return p.cur().Type == tt
+}
+
+func (p *Parser) match(types ...lexer.TokenType) bool {
+	for _, tt := range types {
+		if p.check(tt) {
+			p.advance()
+			return true
+		}
+	}
+	return false
+}
+
+func (p *Parser) expect(tt lexer.TokenType, ctx string) (lexer.Token, error) {
+	if p.check(tt) {
+		return p.advance(), nil
+	}
+	return lexer.Token{}, p.errorf("expected %s %s, got %s (%q)", tt, ctx, p.cur().Type, p.cur().Lexeme)
+}
+
+func (p *Parser) errorf(format string, args ...any) error {
+	t := p.cur()
+	return fmt.Errorf("parse error at line %d col %d: %s", t.Line, t.Col, fmt.Sprintf(format, args...))
+}
+
+func mkPos(t lexer.Token) pos { return pos{Line: t.Line, Col: t.Col} }
+
+// ===== Statements =====
+
+func (p *Parser) parseStmt() (Stmt, error) {
+	switch p.cur().Type {
+	case lexer.TokenLet:
+		return p.parseLet()
+	case lexer.TokenFn:
+		return p.parseFn()
+	case lexer.TokenServer:
+		return p.parseServer()
+	case lexer.TokenRoute:
+		return p.parseRoute()
+	case lexer.TokenMiddleware:
+		return p.parseMiddleware()
+	case lexer.TokenUse:
+		return p.parseUse()
+	case lexer.TokenIf:
+		return p.parseIf()
+	case lexer.TokenLoop:
+		return p.parseLoop()
+	case lexer.TokenTry:
+		return p.parseTry()
+	case lexer.TokenReturn:
+		return p.parseReturn()
+	case lexer.TokenImport:
+		return p.parseImport()
+	case lexer.TokenSemicolon:
+		p.advance()
+		return nil, nil
+	default:
+		return p.parseExprStmt()
+	}
+}
+
+func (p *Parser) parseLet() (Stmt, error) {
+	tok := p.advance()
+	name, err := p.expect(lexer.TokenIdent, "after `let`")
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(lexer.TokenAssign, "after let name"); err != nil {
+		return nil, err
+	}
+	val, err := p.parseExpr()
+	if err != nil {
+		return nil, err
+	}
+	p.match(lexer.TokenSemicolon)
+	return &LetStmt{pos: mkPos(tok), Name: name.Lexeme, Value: val}, nil
+}
+
+func (p *Parser) parseFn() (Stmt, error) {
+	tok := p.advance()
+	name, err := p.expect(lexer.TokenIdent, "after `fn`")
+	if err != nil {
+		return nil, err
+	}
+	params, err := p.parseParamList()
+	if err != nil {
+		return nil, err
+	}
+	body, err := p.parseBlock()
+	if err != nil {
+		return nil, err
+	}
+	return &FnDecl{pos: mkPos(tok), Name: name.Lexeme, Params: params, Body: body}, nil
+}
+
+func (p *Parser) parseParamList() ([]string, error) {
+	if _, err := p.expect(lexer.TokenLParen, "to start parameter list"); err != nil {
+		return nil, err
+	}
+	var params []string
+	if !p.check(lexer.TokenRParen) {
+		for {
+			id, err := p.expect(lexer.TokenIdent, "as parameter name")
+			if err != nil {
+				return nil, err
+			}
+			params = append(params, id.Lexeme)
+			if !p.match(lexer.TokenComma) {
+				break
+			}
+		}
+	}
+	if _, err := p.expect(lexer.TokenRParen, "to close parameter list"); err != nil {
+		return nil, err
+	}
+	return params, nil
+}
+
+func (p *Parser) parseBlock() ([]Stmt, error) {
+	if _, err := p.expect(lexer.TokenLBrace, "to start block"); err != nil {
+		return nil, err
+	}
+	var stmts []Stmt
+	for !p.check(lexer.TokenRBrace) && !p.isAtEnd() {
+		s, err := p.parseStmt()
+		if err != nil {
+			return nil, err
+		}
+		if s != nil {
+			stmts = append(stmts, s)
+		}
+	}
+	if _, err := p.expect(lexer.TokenRBrace, "to close block"); err != nil {
+		return nil, err
+	}
+	return stmts, nil
+}
+
+func (p *Parser) parseServer() (Stmt, error) {
+	tok := p.advance()
+	if _, err := p.expect(lexer.TokenLBrace, "after `server`"); err != nil {
+		return nil, err
+	}
+	var pairs []ObjectPair
+	for !p.check(lexer.TokenRBrace) && !p.isAtEnd() {
+		key, err := p.expect(lexer.TokenIdent, "as server setting key")
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.expect(lexer.TokenColon, "after server setting key"); err != nil {
+			return nil, err
+		}
+		val, err := p.parseExpr()
+		if err != nil {
+			return nil, err
+		}
+		pairs = append(pairs, ObjectPair{Key: key.Lexeme, Value: val})
+		p.match(lexer.TokenComma)
+		p.match(lexer.TokenSemicolon)
+	}
+	if _, err := p.expect(lexer.TokenRBrace, "to close server block"); err != nil {
+		return nil, err
+	}
+	return &ServerBlock{pos: mkPos(tok), Settings: pairs}, nil
+}
+
+func (p *Parser) parseRoute() (Stmt, error) {
+	tok := p.advance()
+	method, err := p.expect(lexer.TokenIdent, "as HTTP method")
+	if err != nil {
+		return nil, err
+	}
+	path, err := p.parsePath()
+	if err != nil {
+		return nil, err
+	}
+	body, err := p.parseBlock()
+	if err != nil {
+		return nil, err
+	}
+	return &RouteDecl{pos: mkPos(tok), Method: method.Lexeme, Path: path, Body: body}, nil
+}
+
+// parsePath consumes tokens that form a route path like `/users/:id`. It
+// stops at the first `{`, since that starts the route body.
+func (p *Parser) parsePath() (string, error) {
+	if !p.check(lexer.TokenSlash) {
+		return "", p.errorf("expected `/` to start route path, got %s", p.cur().Type)
+	}
+	var s string
+	for !p.check(lexer.TokenLBrace) && !p.isAtEnd() {
+		t := p.cur()
+		switch t.Type {
+		case lexer.TokenSlash:
+			s += "/"
+		case lexer.TokenColon:
+			s += ":"
+		case lexer.TokenMinus:
+			s += "-"
+		case lexer.TokenDot:
+			s += "."
+		case lexer.TokenIdent, lexer.TokenNumber:
+			s += t.Lexeme
+		case lexer.TokenStar:
+			s += "*"
+		default:
+			return s, nil
+		}
+		p.advance()
+	}
+	return s, nil
+}
+
+func (p *Parser) parseMiddleware() (Stmt, error) {
+	tok := p.advance()
+	name, err := p.expect(lexer.TokenIdent, "as middleware name")
+	if err != nil {
+		return nil, err
+	}
+	var params []string
+	if p.check(lexer.TokenLParen) {
+		params, err = p.parseParamList()
+		if err != nil {
+			return nil, err
+		}
+	}
+	body, err := p.parseBlock()
+	if err != nil {
+		return nil, err
+	}
+	return &MiddlewareDecl{pos: mkPos(tok), Name: name.Lexeme, Params: params, Body: body}, nil
+}
+
+func (p *Parser) parseUse() (Stmt, error) {
+	tok := p.advance()
+	name, err := p.expect(lexer.TokenIdent, "as middleware name in `use`")
+	if err != nil {
+		return nil, err
+	}
+	p.match(lexer.TokenSemicolon)
+	return &UseStmt{pos: mkPos(tok), Name: name.Lexeme}, nil
+}
+
+func (p *Parser) parseIf() (Stmt, error) {
+	tok := p.advance()
+	hadParen := p.match(lexer.TokenLParen)
+	cond, err := p.parseExpr()
+	if err != nil {
+		return nil, err
+	}
+	if hadParen {
+		if _, err := p.expect(lexer.TokenRParen, "to close `if` condition"); err != nil {
+			return nil, err
+		}
+	}
+	thenBranch, err := p.parseBlock()
+	if err != nil {
+		return nil, err
+	}
+	var elseBranch []Stmt
+	if p.match(lexer.TokenElse) {
+		if p.check(lexer.TokenIf) {
+			nested, err := p.parseIf()
+			if err != nil {
+				return nil, err
+			}
+			elseBranch = []Stmt{nested}
+		} else {
+			elseBranch, err = p.parseBlock()
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	return &IfStmt{pos: mkPos(tok), Cond: cond, Then: thenBranch, Else: elseBranch}, nil
+}
+
+func (p *Parser) parseLoop() (Stmt, error) {
+	tok := p.advance()
+	iter, err := p.parseExpr()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(lexer.TokenAs, "after loop iterable"); err != nil {
+		return nil, err
+	}
+	varName, err := p.expect(lexer.TokenIdent, "as loop variable")
+	if err != nil {
+		return nil, err
+	}
+	body, err := p.parseBlock()
+	if err != nil {
+		return nil, err
+	}
+	return &LoopStmt{pos: mkPos(tok), Iterable: iter, Var: varName.Lexeme, Body: body}, nil
+}
+
+func (p *Parser) parseTry() (Stmt, error) {
+	tok := p.advance()
+	tryBody, err := p.parseBlock()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(lexer.TokenCatch, "after try block"); err != nil {
+		return nil, err
+	}
+	var catchVar string
+	if p.match(lexer.TokenLParen) {
+		id, err := p.expect(lexer.TokenIdent, "as catch variable")
+		if err != nil {
+			return nil, err
+		}
+		catchVar = id.Lexeme
+		if _, err := p.expect(lexer.TokenRParen, "to close catch parameter"); err != nil {
+			return nil, err
+		}
+	} else if p.check(lexer.TokenIdent) {
+		catchVar = p.advance().Lexeme
+	}
+	catchBody, err := p.parseBlock()
+	if err != nil {
+		return nil, err
+	}
+	return &TryStmt{pos: mkPos(tok), Try: tryBody, CatchVar: catchVar, Catch: catchBody}, nil
+}
+
+func (p *Parser) parseReturn() (Stmt, error) {
+	tok := p.advance()
+	stmt := &ReturnStmt{pos: mkPos(tok)}
+	// A bare `return` is signalled by the next token being a block terminator
+	// or another statement-starting keyword that can't begin an expression.
+	if !p.check(lexer.TokenRBrace) && !p.check(lexer.TokenSemicolon) && !p.isAtEnd() {
+		switch p.cur().Type {
+		case lexer.TokenLet, lexer.TokenIf, lexer.TokenLoop,
+			lexer.TokenRoute, lexer.TokenServer, lexer.TokenMiddleware,
+			lexer.TokenUse, lexer.TokenTry, lexer.TokenReturn, lexer.TokenImport:
+			// no value — these tokens can't start an expression.
+		default:
+			val, err := p.parseExpr()
+			if err != nil {
+				return nil, err
+			}
+			stmt.Value = val
+		}
+	}
+	p.match(lexer.TokenSemicolon)
+	return stmt, nil
+}
+
+func (p *Parser) parseImport() (Stmt, error) {
+	tok := p.advance()
+	path, err := p.expect(lexer.TokenString, "as import path")
+	if err != nil {
+		return nil, err
+	}
+	p.match(lexer.TokenSemicolon)
+	return &ImportStmt{pos: mkPos(tok), Path: path.Lexeme}, nil
+}
+
+func (p *Parser) parseExprStmt() (Stmt, error) {
+	startTok := p.cur()
+	expr, err := p.parseExpr()
+	if err != nil {
+		return nil, err
+	}
+	// Assignment: target = value
+	if p.check(lexer.TokenAssign) {
+		p.advance()
+		val, err := p.parseExpr()
+		if err != nil {
+			return nil, err
+		}
+		p.match(lexer.TokenSemicolon)
+		return &AssignStmt{pos: mkPos(startTok), Target: expr, Value: val}, nil
+	}
+	p.match(lexer.TokenSemicolon)
+	return &ExprStmt{pos: mkPos(startTok), Expr: expr}, nil
+}
+
+// ===== Expressions (Pratt-ish precedence climbing) =====
+
+func (p *Parser) parseExpr() (Expr, error) { return p.parseOr() }
+
+func (p *Parser) parseOr() (Expr, error) {
+	left, err := p.parseAnd()
+	if err != nil {
+		return nil, err
+	}
+	for p.check(lexer.TokenOr) {
+		tok := p.advance()
+		right, err := p.parseAnd()
+		if err != nil {
+			return nil, err
+		}
+		left = &BinaryExpr{pos: mkPos(tok), Op: "||", Left: left, Right: right}
+	}
+	return left, nil
+}
+
+func (p *Parser) parseAnd() (Expr, error) {
+	left, err := p.parseEquality()
+	if err != nil {
+		return nil, err
+	}
+	for p.check(lexer.TokenAnd) {
+		tok := p.advance()
+		right, err := p.parseEquality()
+		if err != nil {
+			return nil, err
+		}
+		left = &BinaryExpr{pos: mkPos(tok), Op: "&&", Left: left, Right: right}
+	}
+	return left, nil
+}
+
+func (p *Parser) parseEquality() (Expr, error) {
+	left, err := p.parseComparison()
+	if err != nil {
+		return nil, err
+	}
+	for p.check(lexer.TokenEq) || p.check(lexer.TokenNotEq) {
+		tok := p.advance()
+		right, err := p.parseComparison()
+		if err != nil {
+			return nil, err
+		}
+		left = &BinaryExpr{pos: mkPos(tok), Op: tok.Lexeme, Left: left, Right: right}
+	}
+	return left, nil
+}
+
+func (p *Parser) parseComparison() (Expr, error) {
+	left, err := p.parseAddition()
+	if err != nil {
+		return nil, err
+	}
+	for p.check(lexer.TokenLT) || p.check(lexer.TokenGT) || p.check(lexer.TokenLTEq) || p.check(lexer.TokenGTEq) {
+		tok := p.advance()
+		right, err := p.parseAddition()
+		if err != nil {
+			return nil, err
+		}
+		left = &BinaryExpr{pos: mkPos(tok), Op: tok.Lexeme, Left: left, Right: right}
+	}
+	return left, nil
+}
+
+func (p *Parser) parseAddition() (Expr, error) {
+	left, err := p.parseMultiplication()
+	if err != nil {
+		return nil, err
+	}
+	for p.check(lexer.TokenPlus) || p.check(lexer.TokenMinus) {
+		tok := p.advance()
+		right, err := p.parseMultiplication()
+		if err != nil {
+			return nil, err
+		}
+		left = &BinaryExpr{pos: mkPos(tok), Op: tok.Lexeme, Left: left, Right: right}
+	}
+	return left, nil
+}
+
+func (p *Parser) parseMultiplication() (Expr, error) {
+	left, err := p.parseUnary()
+	if err != nil {
+		return nil, err
+	}
+	for p.check(lexer.TokenStar) || p.check(lexer.TokenSlash) || p.check(lexer.TokenPercent) {
+		tok := p.advance()
+		right, err := p.parseUnary()
+		if err != nil {
+			return nil, err
+		}
+		left = &BinaryExpr{pos: mkPos(tok), Op: tok.Lexeme, Left: left, Right: right}
+	}
+	return left, nil
+}
+
+func (p *Parser) parseUnary() (Expr, error) {
+	if p.check(lexer.TokenBang) || p.check(lexer.TokenMinus) {
+		tok := p.advance()
+		operand, err := p.parseUnary()
+		if err != nil {
+			return nil, err
+		}
+		return &UnaryExpr{pos: mkPos(tok), Op: tok.Lexeme, Operand: operand}, nil
+	}
+	return p.parseCall()
+}
+
+func (p *Parser) parseCall() (Expr, error) {
+	expr, err := p.parsePrimary()
+	if err != nil {
+		return nil, err
+	}
+	for {
+		switch p.cur().Type {
+		case lexer.TokenLParen:
+			tok := p.advance()
+			var args []Expr
+			if !p.check(lexer.TokenRParen) {
+				for {
+					a, err := p.parseExpr()
+					if err != nil {
+						return nil, err
+					}
+					args = append(args, a)
+					if !p.match(lexer.TokenComma) {
+						break
+					}
+				}
+			}
+			if _, err := p.expect(lexer.TokenRParen, "to close call args"); err != nil {
+				return nil, err
+			}
+			expr = &CallExpr{pos: mkPos(tok), Callee: expr, Args: args}
+		case lexer.TokenLBracket:
+			tok := p.advance()
+			idx, err := p.parseExpr()
+			if err != nil {
+				return nil, err
+			}
+			if _, err := p.expect(lexer.TokenRBracket, "to close index"); err != nil {
+				return nil, err
+			}
+			expr = &IndexExpr{pos: mkPos(tok), Object: expr, Index: idx}
+		case lexer.TokenDot:
+			tok := p.advance()
+			name, err := p.expect(lexer.TokenIdent, "after `.`")
+			if err != nil {
+				return nil, err
+			}
+			expr = &MemberExpr{pos: mkPos(tok), Object: expr, Property: name.Lexeme}
+		default:
+			return expr, nil
+		}
+	}
+}
+
+func (p *Parser) parsePrimary() (Expr, error) {
+	t := p.cur()
+	switch t.Type {
+	case lexer.TokenNumber:
+		p.advance()
+		v, err := strconv.ParseFloat(t.Lexeme, 64)
+		if err != nil {
+			return nil, p.errorf("invalid number %q", t.Lexeme)
+		}
+		return &NumberLit{pos: mkPos(t), Value: v}, nil
+	case lexer.TokenString:
+		p.advance()
+		return &StringLit{pos: mkPos(t), Value: t.Lexeme}, nil
+	case lexer.TokenTrue:
+		p.advance()
+		return &BoolLit{pos: mkPos(t), Value: true}, nil
+	case lexer.TokenFalse:
+		p.advance()
+		return &BoolLit{pos: mkPos(t), Value: false}, nil
+	case lexer.TokenNull:
+		p.advance()
+		return &NullLit{pos: mkPos(t)}, nil
+	case lexer.TokenIdent:
+		p.advance()
+		return &Identifier{pos: mkPos(t), Name: t.Lexeme}, nil
+	case lexer.TokenLParen:
+		p.advance()
+		e, err := p.parseExpr()
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.expect(lexer.TokenRParen, "to close grouping"); err != nil {
+			return nil, err
+		}
+		return e, nil
+	case lexer.TokenLBracket:
+		return p.parseArrayLit()
+	case lexer.TokenLBrace:
+		return p.parseObjectLit()
+	case lexer.TokenFn:
+		return p.parseFnLit()
+	}
+	return nil, p.errorf("unexpected token %s (%q) in expression", t.Type, t.Lexeme)
+}
+
+// parseFnLit parses an anonymous function literal: fn(params) { ... }.
+func (p *Parser) parseFnLit() (Expr, error) {
+	tok := p.advance() // consume fn
+	params, err := p.parseParamList()
+	if err != nil {
+		return nil, err
+	}
+	body, err := p.parseBlock()
+	if err != nil {
+		return nil, err
+	}
+	return &FnLit{pos: mkPos(tok), Params: params, Body: body}, nil
+}
+
+func (p *Parser) parseArrayLit() (Expr, error) {
+	tok := p.advance() // [
+	var elems []Expr
+	if !p.check(lexer.TokenRBracket) {
+		for {
+			e, err := p.parseExpr()
+			if err != nil {
+				return nil, err
+			}
+			elems = append(elems, e)
+			if !p.match(lexer.TokenComma) {
+				break
+			}
+			if p.check(lexer.TokenRBracket) {
+				break
+			}
+		}
+	}
+	if _, err := p.expect(lexer.TokenRBracket, "to close array"); err != nil {
+		return nil, err
+	}
+	return &ArrayLit{pos: mkPos(tok), Elements: elems}, nil
+}
+
+func (p *Parser) parseObjectLit() (Expr, error) {
+	tok := p.advance() // {
+	var pairs []ObjectPair
+	if !p.check(lexer.TokenRBrace) {
+		for {
+			var key string
+			switch p.cur().Type {
+			case lexer.TokenIdent:
+				key = p.advance().Lexeme
+			case lexer.TokenString:
+				key = p.advance().Lexeme
+			default:
+				return nil, p.errorf("expected object key, got %s", p.cur().Type)
+			}
+			if _, err := p.expect(lexer.TokenColon, "after object key"); err != nil {
+				return nil, err
+			}
+			v, err := p.parseExpr()
+			if err != nil {
+				return nil, err
+			}
+			pairs = append(pairs, ObjectPair{Key: key, Value: v})
+			if !p.match(lexer.TokenComma) {
+				break
+			}
+			if p.check(lexer.TokenRBrace) {
+				break
+			}
+		}
+	}
+	if _, err := p.expect(lexer.TokenRBrace, "to close object literal"); err != nil {
+		return nil, err
+	}
+	return &ObjectLit{pos: mkPos(tok), Pairs: pairs}, nil
+}

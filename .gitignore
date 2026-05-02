@@ -1,0 +1,26 @@
+# Compiled binary
+mx
+mx.exe
+mxscript
+mxscript.exe
+*.bin
+
+# Test artifacts
+*.test
+*.out
+coverage.txt
+coverage.html
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
+
+# Local secrets
+.env
+.env.local
+
+# GoReleaser
+dist/

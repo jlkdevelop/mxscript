@@ -1,0 +1,53 @@
+// app.mx — a tour of MX Script as a web framework.
+// Run with:  mx run examples/app.mx
+//   curl http://localhost:8080/
+//   curl http://localhost:8080/users
+//   curl http://localhost:8080/users/1
+//   curl -X POST http://localhost:8080/users -d '{"name":"Ada"}' -H "content-type: application/json"
+
+server {
+  port: 8080
+  host: "0.0.0.0"
+}
+
+let appName = "MX Script Demo"
+
+let users = [
+  { id: 1, name: "Jassim Alkharafi", role: "Founder" },
+  { id: 2, name: "Ada Lovelace", role: "Computing Pioneer" }
+]
+
+route GET / {
+  return json({
+    app: appName,
+    version: "0.1.0",
+    docs: "https://github.com/jlkdevelop/mxscript"
+  })
+}
+
+route GET /users {
+  return json(users)
+}
+
+route GET /users/:id {
+  let wanted = num(request.params.id)
+  let found = find(users, fn(u) { return u.id == wanted })
+  if (found == null) {
+    return status(404, { error: "user not found", id: wanted })
+  }
+  return json(found)
+}
+
+route POST /users {
+  let body = request.body
+  if (body == null || body.name == null) {
+    return status(400, { error: "name is required" })
+  }
+  let nextId = len(users) + 1
+  let created = { id: nextId, name: body.name, role: "Member" }
+  return status(201, created)
+}
+
+route GET /health {
+  return json({ status: "ok", uptime_ms: now() })
+}

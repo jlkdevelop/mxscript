@@ -1,0 +1,270 @@
+// interpreter_test.go covers end-to-end evaluation of MX Script programs.
+// Each test parses a source string, runs it, and checks observable behavior
+// (return values, side effects, error messages).
+package interpreter
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+)
+
+func runWithGlobals(t *testing.T, src string) *Interpreter {
+	t.Helper()
+	prog, err := ParseSource(src)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	interp := New()
+	for _, s := range prog.Stmts {
+		if err := interp.execStmt(s, interp.globals); err != nil {
+			if _, ok := err.(*returnSignal); ok {
+				continue
+			}
+			t.Fatalf("exec: %v", err)
+		}
+	}
+	return interp
+}
+
+func evalExpr(t *testing.T, src string) Value {
+	t.Helper()
+	interp := runWithGlobals(t, "let __result = "+src)
+	v, ok := interp.globals.Get("__result")
+	if !ok {
+		t.Fatal("no __result in globals")
+	}
+	return v
+}
+
+func TestArithmetic(t *testing.T) {
+	cases := map[string]float64{
+		"1 + 2":       3,
+		"10 - 3":      7,
+		"4 * 5":       20,
+		"20 / 4":      5,
+		"10 % 3":      1,
+		"2 + 3 * 4":   14,
+		"(2 + 3) * 4": 20,
+		"-5 + 10":     5,
+	}
+	for src, want := range cases {
+		v := evalExpr(t, src)
+		if v.Kind != KindNumber || v.Number != want {
+			t.Errorf("%s: got %v, want %v", src, v, want)
+		}
+	}
+}
+
+func TestStringConcat(t *testing.T) {
+	v := evalExpr(t, `"hello, " + "world"`)
+	if v.Kind != KindString || v.String != "hello, world" {
+		t.Errorf("got %v, want hello, world", v)
+	}
+	v = evalExpr(t, `"answer: " + 42`)
+	if v.Kind != KindString || v.String != "answer: 42" {
+		t.Errorf("got %v", v)
+	}
+}
+
+func TestBooleanLogic(t *testing.T) {
+	cases := map[string]bool{
+		"true && false": false,
+		"true || false": true,
+		"!true":         false,
+		"1 == 1":        true,
+		"1 != 2":        true,
+		"3 < 5":         true,
+		"5 >= 5":        true,
+	}
+	for src, want := range cases {
+		v := evalExpr(t, src)
+		if v.Kind != KindBool || v.Bool != want {
+			t.Errorf("%s: got %v, want %v", src, v, want)
+		}
+	}
+}
+
+func TestFunctionsAndClosures(t *testing.T) {
+	interp := runWithGlobals(t, `
+fn make_counter() {
+  let count = 0
+  return fn() {
+    count = count + 1
+    return count
+  }
+}
+let c = make_counter()
+let a = c()
+let b = c()
+let cc = c()
+`)
+	for name, want := range map[string]float64{"a": 1, "b": 2, "cc": 3} {
+		v, _ := interp.globals.Get(name)
+		if v.Kind != KindNumber || v.Number != want {
+			t.Errorf("%s: got %v, want %v", name, v, want)
+		}
+	}
+}
+
+func TestIfElse(t *testing.T) {
+	interp := runWithGlobals(t, `
+let x = 10
+let label = ""
+if (x > 5) {
+  label = "big"
+} else {
+  label = "small"
+}
+`)
+	v, _ := interp.globals.Get("label")
+	if v.Kind != KindString || v.String != "big" {
+		t.Errorf("got %v, want big", v)
+	}
+}
+
+func TestLoopOverArray(t *testing.T) {
+	interp := runWithGlobals(t, `
+let total = 0
+loop [1, 2, 3, 4] as n {
+  total = total + n
+}
+`)
+	v, _ := interp.globals.Get("total")
+	if v.Kind != KindNumber || v.Number != 10 {
+		t.Errorf("got %v, want 10", v)
+	}
+}
+
+func TestArrayBuiltins(t *testing.T) {
+	v := evalExpr(t, `len([1, 2, 3])`)
+	if v.Number != 3 {
+		t.Errorf("len: got %v, want 3", v)
+	}
+	v = evalExpr(t, `map([1, 2, 3], fn(n) { return n * 2 })`)
+	if v.Kind != KindArray || len(v.Array) != 3 || v.Array[1].Number != 4 {
+		t.Errorf("map: got %v", v)
+	}
+	v = evalExpr(t, `filter([1, 2, 3, 4], fn(n) { return n > 2 })`)
+	if v.Kind != KindArray || len(v.Array) != 2 {
+		t.Errorf("filter: got %v", v)
+	}
+	v = evalExpr(t, `find([1, 2, 3], fn(n) { return n == 2 })`)
+	if v.Number != 2 {
+		t.Errorf("find: got %v", v)
+	}
+}
+
+func TestStringBuiltins(t *testing.T) {
+	if v := evalExpr(t, `upper("hello")`); v.String != "HELLO" {
+		t.Errorf("upper: got %v", v)
+	}
+	if v := evalExpr(t, `trim("  hi  ")`); v.String != "hi" {
+		t.Errorf("trim: got %v", v)
+	}
+	if v := evalExpr(t, `contains("hello world", "world")`); !v.Bool {
+		t.Errorf("contains: got %v", v)
+	}
+	if v := evalExpr(t, `len(split("a,b,c", ","))`); v.Number != 3 {
+		t.Errorf("split: got %v", v)
+	}
+}
+
+func TestObjectAccess(t *testing.T) {
+	v := evalExpr(t, `({ id: 1, name: "Jassim" }).name`)
+	if v.Kind != KindString || v.String != "Jassim" {
+		t.Errorf("got %v", v)
+	}
+	v = evalExpr(t, `({ id: 1 })["id"]`)
+	if v.Number != 1 {
+		t.Errorf("got %v", v)
+	}
+}
+
+func TestTryCatch(t *testing.T) {
+	interp := runWithGlobals(t, `
+let msg = ""
+try {
+  let n = num("not a number")
+} catch (e) {
+  msg = e.message
+}
+`)
+	v, _ := interp.globals.Get("msg")
+	if v.Kind != KindString || v.String == "" {
+		t.Errorf("msg should be non-empty error message, got %v", v)
+	}
+}
+
+func TestRouteDispatch(t *testing.T) {
+	interp := runWithGlobals(t, `
+route GET /hello/:name {
+  return json({ greeting: "Hi " + request.params.name })
+}
+`)
+	if len(interp.routes) != 1 {
+		t.Fatalf("expected 1 route, got %d", len(interp.routes))
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/hello/jassim", nil)
+	interp.dispatch(rec, req)
+	body := rec.Body.String()
+	if rec.Code != 200 {
+		t.Errorf("status: got %d, want 200", rec.Code)
+	}
+	if !strings.Contains(body, "Hi jassim") {
+		t.Errorf("body: got %q", body)
+	}
+}
+
+func TestMiddlewareShortCircuit(t *testing.T) {
+	interp := runWithGlobals(t, `
+middleware auth {
+  if (request.headers["x-key"] != "secret") {
+    return status(401, { error: "denied" })
+  }
+}
+route GET /private {
+  use auth
+  return json({ ok: true })
+}
+`)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/private", nil)
+	interp.dispatch(rec, req)
+	if rec.Code != 401 {
+		t.Errorf("expected 401, got %d (%s)", rec.Code, rec.Body.String())
+	}
+
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest("GET", "/private", nil)
+	req.Header.Set("X-Key", "secret")
+	interp.dispatch(rec, req)
+	if rec.Code != 200 {
+		t.Errorf("expected 200 with auth, got %d (%s)", rec.Code, rec.Body.String())
+	}
+}
+
+func TestNotFound(t *testing.T) {
+	interp := runWithGlobals(t, `route GET / { return json({ ok: true }) }`)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/missing", nil)
+	interp.dispatch(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", rec.Code)
+	}
+}
+
+func TestJSONOrderPreserved(t *testing.T) {
+	v := evalExpr(t, `{ z: 1, a: 2, m: 3 }`)
+	out, err := jsonEncode(v)
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	got := string(out)
+	want := `{"z":1,"a":2,"m":3}`
+	if got != want {
+		t.Errorf("ordered JSON: got %s, want %s", got, want)
+	}
+}

@@ -1,0 +1,61 @@
+// crud.mx — full CRUD example showing if/else, loops, middleware, and errors.
+// Run with:  mx run examples/crud.mx --port 3000
+
+server {
+  port: 3000
+}
+
+let posts = []
+let nextId = 1
+
+middleware logger {
+  print("[" + request.method + "]", request.path)
+}
+
+middleware auth {
+  let token = request.headers["authorization"]
+  if (token != "Bearer secret") {
+    return status(401, { error: "unauthorized" })
+  }
+}
+
+route GET /posts {
+  use logger
+  return json(posts)
+}
+
+route POST /posts {
+  use logger
+  use auth
+  let body = request.body
+  if (body == null || body.title == null) {
+    return status(400, { error: "title required" })
+  }
+  let post = { id: nextId, title: body.title, body: body.body }
+  posts = push(posts, post)
+  nextId = nextId + 1
+  return status(201, post)
+}
+
+route GET /posts/:id {
+  use logger
+  let want = num(request.params.id)
+  let found = null
+  loop posts as p {
+    if (p.id == want) {
+      found = p
+    }
+  }
+  if (found == null) {
+    return status(404, { error: "not found" })
+  }
+  return json(found)
+}
+
+route DELETE /posts/:id {
+  use logger
+  use auth
+  let want = num(request.params.id)
+  posts = filter(posts, fn(p) { return p.id != want })
+  return json({ deleted: want })
+}
