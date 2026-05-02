@@ -187,6 +187,9 @@ func registerBuiltins(i *Interpreter) {
 	// Resolve the stderr writer used by jobs.go's worker logger.
 	_stderrWrite = func(p []byte) (int, error) { return os.Stderr.Write(p) }
 
+	// Wire crypto/rand for the extra-hashing helpers (argon2 / scrypt).
+	crandRead = crand.Read
+
 	// --- CSV ---
 	def("csv_parse", builtinCSVParse)
 	def("csv_stringify", builtinCSVStringify)
@@ -214,8 +217,18 @@ func registerBuiltins(i *Interpreter) {
 	pwNS := NewOrderedMap()
 	pwNS.Set("hash", FunctionValue(&Function{Name: "password.hash", Native: builtinPasswordHash}))
 	pwNS.Set("verify", FunctionValue(&Function{Name: "password.verify", Native: builtinPasswordVerify}))
+	pwNS.Set("hash_argon2", FunctionValue(&Function{Name: "password.hash_argon2", Native: builtinPasswordHashArgon2}))
+	pwNS.Set("verify_argon2", FunctionValue(&Function{Name: "password.verify_argon2", Native: builtinPasswordVerifyArgon2}))
+	pwNS.Set("hash_scrypt", FunctionValue(&Function{Name: "password.hash_scrypt", Native: builtinPasswordHashScrypt}))
+	pwNS.Set("verify_scrypt", FunctionValue(&Function{Name: "password.verify_scrypt", Native: builtinPasswordVerifyScrypt}))
 	g.Set("password", ObjectValue(pwNS))
 	builtinNames["password"] = true
+
+	// --- YAML / TOML ---
+	def("yaml_parse", builtinYAMLParse)
+	def("yaml_stringify", builtinYAMLStringify)
+	def("toml_parse", builtinTOMLParse)
+	def("toml_stringify", builtinTOMLStringify)
 
 	// --- Session namespace (signed cookies + claims) ---
 	sessionNS := NewOrderedMap()

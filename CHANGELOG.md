@@ -4,6 +4,31 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.48.0] — 2026-05-02
+
+### Added
+- **Argon2id + scrypt password hashing**:
+  - `password.hash_argon2(plain)` / `password.verify_argon2(plain, stored)`
+    — OWASP-recommended defaults (m=64MiB, t=3, p=4).
+  - `password.hash_scrypt(plain)` / `password.verify_scrypt(plain, stored)`
+    — N=32768, r=8, p=1.
+  Both store self-describing strings (`$argon2id$...`, `$scrypt$...`)
+  so verification is portable to any compliant implementation.
+- **YAML**: `yaml_parse(s)` / `yaml_stringify(v)` (gopkg.in/yaml.v3).
+- **TOML**: `toml_parse(s)` / `toml_stringify(v)` (BurntSushi/toml).
+
+  ```mx
+  let cfg = yaml_parse(read_file("./config.yml"))
+  let toml_text = toml_stringify({ name: "MX", version: "1.0" })
+  ```
+
+### Dependencies
+Three new deps to support the above: `golang.org/x/crypto` (argon2,
+scrypt), `gopkg.in/yaml.v3`, `github.com/BurntSushi/toml`. All three
+are widely-deployed and pure-Go.
+
+[0.48.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.48.0
+
 ## [0.47.0] — 2026-05-02
 
 ### Added — AI vision + similarity
