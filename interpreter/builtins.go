@@ -262,6 +262,7 @@ func registerBuiltins(i *Interpreter) {
 	sqlNS.Set("query", FunctionValue(&Function{Name: "sql.query", Native: builtinSQLQuery}))
 	sqlNS.Set("query_one", FunctionValue(&Function{Name: "sql.query_one", Native: builtinSQLQueryOne}))
 	sqlNS.Set("close", FunctionValue(&Function{Name: "sql.close", Native: builtinSQLClose}))
+	sqlNS.Set("transaction", FunctionValue(&Function{Name: "sql.transaction", Native: builtinSQLTransaction}))
 	g.Set("sql", ObjectValue(sqlNS))
 	builtinNames["sql"] = true
 
@@ -2970,6 +2971,35 @@ func builtinSQLClose(i *Interpreter, args []Value) (Value, error) {
 	return NullValue(), h.db.Close()
 }
 
+// sql.transaction(db, fn) runs fn(db) inside a transaction. If fn
+// throws, the transaction is rolled back and the error re-raised. If
+// fn returns normally, the transaction is committed and fn's result
+// is returned to the caller.
+func builtinSQLTransaction(i *Interpreter, args []Value) (Value, error) {
+	h, err := mustDBHandle(args)
+	if err != nil {
+		return Value{}, err
+	}
+	if len(args) < 2 || args[1].Kind != KindFunction {
+		return Value{}, fmt.Errorf("sql.transaction(db, fn) requires a function")
+	}
+	tx, err := h.db.Begin()
+	if err != nil {
+		return Value{}, err
+	}
+	// Wrap the original *sql.DB so .exec / .query inside fn use the txn.
+	txHandle := &dbHandle{db: nil, tx: tx}
+	v, callErr := i.callFunction(nil, args[1].Function, []Value{HandleValue(txHandle)})
+	if callErr != nil {
+		_ = tx.Rollback()
+		return Value{}, callErr
+	}
+	if err := tx.Commit(); err != nil {
+		return Value{}, err
+	}
+	return v, nil
+}
+
 // ===== Image =====
 //
 // Image bytes flow through MX as strings (the same shape multipart file
@@ -3792,6 +3822,9 @@ func builtinAIComplete(i *Interpreter, args []Value) (Value, error) {
 	if provider == "anthropic" {
 		return aiCompleteAnthropic(prompt, model, maxTokens)
 	}
+	if provider == "gemini" || provider == "google" {
+		return aiCompleteGemini(prompt, model, maxTokens)
+	}
 
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
@@ -3838,6 +3871,64 @@ func builtinAIComplete(i *Interpreter, args []Value) (Value, error) {
 		return StringValue(""), nil
 	}
 	return StringValue(parsed.Choices[0].Message.Content), nil
+}
+
+// aiCompleteGemini calls Google's Generative Language API.
+// Reads GEMINI_API_KEY (or GOOGLE_API_KEY) from the environment.
+func aiCompleteGemini(prompt, model string, maxTokens int) (Value, error) {
+	apiKey := os.Getenv("GEMINI_API_KEY")
+	if apiKey == "" {
+		apiKey = os.Getenv("GOOGLE_API_KEY")
+	}
+	if apiKey == "" {
+		return Value{}, fmt.Errorf("ai.complete with provider=gemini requires GEMINI_API_KEY or GOOGLE_API_KEY")
+	}
+	if model == "" || model == "gpt-4o-mini" {
+		model = "gemini-2.0-flash"
+	}
+	body, _ := json.Marshal(map[string]any{
+		"contents": []map[string]any{
+			{"parts": []map[string]string{{"text": prompt}}},
+		},
+		"generationConfig": map[string]any{
+			"maxOutputTokens": maxTokens,
+		},
+	})
+	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", model, apiKey)
+	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
+	if err != nil {
+		return Value{}, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{Timeout: 60 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return Value{}, err
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return Value{}, err
+	}
+	if resp.StatusCode >= 400 {
+		return Value{}, fmt.Errorf("gemini ai.complete failed (%d): %s", resp.StatusCode, string(raw))
+	}
+	var parsed struct {
+		Candidates []struct {
+			Content struct {
+				Parts []struct {
+					Text string `json:"text"`
+				} `json:"parts"`
+			} `json:"content"`
+		} `json:"candidates"`
+	}
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return Value{}, err
+	}
+	if len(parsed.Candidates) == 0 || len(parsed.Candidates[0].Content.Parts) == 0 {
+		return StringValue(""), nil
+	}
+	return StringValue(parsed.Candidates[0].Content.Parts[0].Text), nil
 }
 
 // aiCompleteAnthropic calls Anthropic's /v1/messages endpoint. The model

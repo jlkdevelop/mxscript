@@ -8,6 +8,9 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.33.0** (2026-05-02)
+  - Gemini AI provider (`ai.complete(prompt, { provider: "gemini" })`)
+  - `sql.transaction(db, fn)` with auto-rollback on throw
 - **v0.32.0** (2026-05-02)
   - `openapi(info?)` auto-generates an OpenAPI 3.1 spec from registered routes
   - `routes()` returns an array of `{ method, path }`

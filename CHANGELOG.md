@@ -4,6 +4,41 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.33.0] — 2026-05-02
+
+### Added
+- **Gemini AI provider**:
+
+  ```mx
+  let answer = ai.complete("hello", {
+    provider: "gemini",
+    model: "gemini-2.0-flash",
+    max_tokens: 200
+  })
+  ```
+
+  Reads `GEMINI_API_KEY` (or `GOOGLE_API_KEY`). The default model is
+  `gemini-2.0-flash` when `provider="gemini"`. Three providers now
+  ship in stdlib: OpenAI (default), Anthropic, Gemini.
+
+- **`sql.transaction(db, fn)`** — runs `fn(tx)` inside a transaction.
+  If the function throws, the transaction is rolled back and the
+  error is re-raised. If it returns normally, the transaction is
+  committed and the return value is propagated to the caller.
+
+  ```mx
+  sql.transaction(db, fn(tx) {
+    sql.exec(tx, "UPDATE accounts SET balance = balance - 50 WHERE id = ?", 1)
+    sql.exec(tx, "UPDATE accounts SET balance = balance + 50 WHERE id = ?", 2)
+  })
+  ```
+
+  All `sql.exec` / `sql.query` / `sql.query_one` calls inside `fn`
+  use the transaction handle automatically — same API, just the
+  pooled-vs-transaction routing happens behind the scenes.
+
+[0.33.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.33.0
+
 ## [0.32.0] — 2026-05-02
 
 ### Added

@@ -25,3 +25,4 @@ coverage.html
 # GoReleaser
 dist/
 .gstack/
+.vercel

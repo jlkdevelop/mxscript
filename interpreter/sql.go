@@ -17,10 +17,27 @@ import (
 	_ "modernc.org/sqlite" // pure-Go SQLite driver, registered as "sqlite"
 )
 
-// dbHandle is the opaque value handed to .mx code. It carries a generic
-// Go interface so future helpers (Postgres, MySQL) can reuse the shape.
+// dbHandle is the opaque value handed to .mx code. It carries either a
+// connection pool (`db`) or an in-flight transaction (`tx`); the
+// `runner` shim picks whichever is set.
 type dbHandle struct {
 	db *sql.DB
+	tx *sql.Tx
+}
+
+// runner is the subset of *sql.DB / *sql.Tx that we need. Picking the
+// non-nil one lets sql.exec / sql.query work both inside and outside
+// transactions without duplicating code.
+type sqlRunner interface {
+	Exec(query string, args ...any) (sql.Result, error)
+	Query(query string, args ...any) (*sql.Rows, error)
+}
+
+func (h *dbHandle) runner() sqlRunner {
+	if h.tx != nil {
+		return h.tx
+	}
+	return h.db
 }
 
 func sqlOpen(path string) (*dbHandle, error) {
@@ -59,7 +76,7 @@ func goArgs(args []Value) []any {
 // sqlExec runs INSERT/UPDATE/DELETE/CREATE statements. Returns
 // { rows_affected, last_insert_id }.
 func sqlExec(h *dbHandle, query string, args []Value) (Value, error) {
-	res, err := h.db.Exec(query, goArgs(args)...)
+	res, err := h.runner().Exec(query, goArgs(args)...)
 	if err != nil {
 		return Value{}, err
 	}
@@ -76,7 +93,7 @@ func sqlExec(h *dbHandle, query string, args []Value) (Value, error) {
 // sqlQuery runs SELECT statements. Returns an array of objects, each
 // with column-name keys.
 func sqlQuery(h *dbHandle, query string, args []Value) (Value, error) {
-	rows, err := h.db.Query(query, goArgs(args)...)
+	rows, err := h.runner().Query(query, goArgs(args)...)
 	if err != nil {
 		return Value{}, err
 	}
