@@ -213,6 +213,13 @@ func registerBuiltins(i *Interpreter) {
 	// --- Webhook helpers ---
 	def("verify_webhook", builtinVerifyWebhook)
 
+	// --- Concurrency: channels ---
+	def("chan", builtinChan)
+	def("send", builtinChanSend)
+	def("recv", builtinChanRecv)
+	def("close_chan", builtinChanClose)
+	def("wait_group", builtinWaitGroup)
+
 	// --- AI namespace ---
 	ai := NewOrderedMap()
 	ai.Set("complete", FunctionValue(&Function{Name: "ai.complete", Native: builtinAIComplete}))
@@ -2056,6 +2063,77 @@ func lookupTemplateVar(vars *OrderedMap, expr string) Value {
 func htmlEscapeString(s string) string {
 	r := strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;", "'", "&#39;")
 	return r.Replace(s)
+}
+
+// ===== Concurrency: channels =====
+//
+// chan(capacity?)  -> channel
+// send(ch, value)  -> null  (blocks if buffered chan is full)
+// recv(ch)         -> value | null  (null means closed)
+// close_chan(ch)   -> null
+// wait_group()     -> { add, done, wait }  — sync.WaitGroup wrapper
+
+func builtinChan(i *Interpreter, args []Value) (Value, error) {
+	cap := 0
+	if len(args) > 0 && args[0].Kind == KindNumber {
+		cap = int(args[0].Number)
+	}
+	return ChannelValue(&Channel{C: make(chan Value, cap)}), nil
+}
+
+func builtinChanSend(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 2 || args[0].Kind != KindChannel {
+		return Value{}, fmt.Errorf("send(ch, value) requires a channel and a value")
+	}
+	defer func() {
+		// Sending on a closed channel panics; convert to error.
+		_ = recover()
+	}()
+	args[0].Channel.C <- args[1]
+	return NullValue(), nil
+}
+
+func builtinChanRecv(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 1 || args[0].Kind != KindChannel {
+		return Value{}, fmt.Errorf("recv(ch) requires a channel")
+	}
+	v, ok := <-args[0].Channel.C
+	if !ok {
+		return NullValue(), nil
+	}
+	return v, nil
+}
+
+func builtinChanClose(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 1 || args[0].Kind != KindChannel {
+		return Value{}, fmt.Errorf("close_chan(ch) requires a channel")
+	}
+	args[0].Channel.Close()
+	return NullValue(), nil
+}
+
+// wait_group() returns an object with add(n), done(), wait() methods
+// wrapping a sync.WaitGroup. Useful for "fork N goroutines, wait for all".
+func builtinWaitGroup(i *Interpreter, args []Value) (Value, error) {
+	wg := &sync.WaitGroup{}
+	out := NewOrderedMap()
+	out.Set("add", FunctionValue(&Function{Name: "wg.add", Native: func(_ *Interpreter, a []Value) (Value, error) {
+		n := 1
+		if len(a) > 0 && a[0].Kind == KindNumber {
+			n = int(a[0].Number)
+		}
+		wg.Add(n)
+		return NullValue(), nil
+	}}))
+	out.Set("done", FunctionValue(&Function{Name: "wg.done", Native: func(_ *Interpreter, _ []Value) (Value, error) {
+		wg.Done()
+		return NullValue(), nil
+	}}))
+	out.Set("wait", FunctionValue(&Function{Name: "wg.wait", Native: func(_ *Interpreter, _ []Value) (Value, error) {
+		wg.Wait()
+		return NullValue(), nil
+	}}))
+	return ObjectValue(out), nil
 }
 
 // ===== Email (SMTP) =====

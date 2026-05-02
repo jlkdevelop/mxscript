@@ -4,6 +4,42 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.16.0] — 2026-05-02
+
+### Added — Concurrency
+- **`spawn { ... }`** runs a block in a fresh goroutine. The body shares
+  the enclosing scope (Env is now RWMutex-protected) but the convention
+  is: use channels for coordination, don't mutate shared state.
+
+  ```mx
+  let ch = chan(10)
+  spawn {
+    loop 5 as i { send(ch, i * 2) }
+    close_chan(ch)
+  }
+  while (true) {
+    let v = recv(ch)
+    if (v == null) { break }   // null means closed
+    print(v)
+  }
+  ```
+- **Channels**: `chan(capacity?)` allocates a buffered (or unbuffered)
+  channel. `send(ch, value)` puts; `recv(ch)` takes (returns null on
+  closed); `close_chan(ch)` closes (idempotent).
+- **`wait_group()`** wraps `sync.WaitGroup` for the classic "fork N
+  goroutines, wait for all" pattern:
+
+  ```mx
+  let wg = wait_group()
+  loop urls as u {
+    wg.add(1)
+    spawn { fetch(u); wg.done() }
+  }
+  wg.wait()
+  ```
+
+[0.16.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.16.0
+
 ## [0.15.0] — 2026-05-02
 
 ### Added

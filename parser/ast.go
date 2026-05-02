@@ -166,6 +166,17 @@ type ImportStmt struct {
 
 func (*ImportStmt) stmtNode() {}
 
+// SpawnStmt runs a block in a fresh goroutine. The body shares the
+// enclosing closure (read-only by convention — writes from goroutines
+// race with the main interpreter and other spawns). Use channels for
+// inter-goroutine communication.
+type SpawnStmt struct {
+	pos
+	Body []Stmt
+}
+
+func (*SpawnStmt) stmtNode() {}
+
 // StaticStmt declares a static-file mount point.
 //
 //	static "./public"            // serves files from ./public at /

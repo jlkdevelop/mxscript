@@ -157,7 +157,17 @@ const (
 	KindObject
 	KindFunction
 	KindResponse
+	KindChannel
 )
+
+// Channel wraps a Go channel of MX values. Allocated by chan(); operated
+// on with send(ch, v), recv(ch), close_chan(ch).
+type Channel struct {
+	C    chan Value
+	once sync.Once
+}
+
+func (c *Channel) Close() { c.once.Do(func() { close(c.C) }) }
 
 type Value struct {
 	Kind     ValueKind
@@ -168,7 +178,10 @@ type Value struct {
 	Object   *OrderedMap
 	Function *Function
 	Response *Response
+	Channel  *Channel
 }
+
+func ChannelValue(c *Channel) Value { return Value{Kind: KindChannel, Channel: c} }
 
 type Function struct {
 	Name    string
@@ -255,6 +268,8 @@ func (v Value) typeName() string {
 		return "function"
 	case KindResponse:
 		return "response"
+	case KindChannel:
+		return "channel"
 	}
 	return "unknown"
 }
@@ -284,21 +299,31 @@ func (v Value) Display() string {
 			return "<fn " + v.Function.Name + ">"
 		}
 		return "<fn>"
+	case KindChannel:
+		return "<channel>"
 	}
 	return ""
 }
 
 // ===== Environment =====
 
+// Env is the lexical scope. RWMutex protects the vars map so spawned
+// goroutines can read/write the closure safely. (Programs that share
+// MUTABLE state across spawns still race on the values themselves —
+// use channels for coordination.)
 type Env struct {
 	parent *Env
+	mu     sync.RWMutex
 	vars   map[string]Value
 }
 
 func NewEnv(parent *Env) *Env { return &Env{parent: parent, vars: map[string]Value{}} }
 
 func (e *Env) Get(name string) (Value, bool) {
-	if v, ok := e.vars[name]; ok {
+	e.mu.RLock()
+	v, ok := e.vars[name]
+	e.mu.RUnlock()
+	if ok {
 		return v, true
 	}
 	if e.parent != nil {
@@ -307,11 +332,17 @@ func (e *Env) Get(name string) (Value, bool) {
 	return Value{}, false
 }
 
-func (e *Env) Set(name string, v Value) { e.vars[name] = v }
+func (e *Env) Set(name string, v Value) {
+	e.mu.Lock()
+	e.vars[name] = v
+	e.mu.Unlock()
+}
 
 // Keys returns the names defined directly in this scope (not parents).
 // Used by the REPL to show what the user has bound.
 func (e *Env) Keys() []string {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
 	keys := make([]string, 0, len(e.vars))
 	for k := range e.vars {
 		keys = append(keys, k)
@@ -323,21 +354,29 @@ func (e *Env) Keys() []string {
 // Assign walks up parents until the variable is found, then replaces it.
 // If not found, defines it in the current scope.
 func (e *Env) Assign(name string, v Value) {
+	e.mu.Lock()
 	if _, ok := e.vars[name]; ok {
 		e.vars[name] = v
+		e.mu.Unlock()
 		return
 	}
+	e.mu.Unlock()
 	if e.parent != nil {
 		if _, ok := e.parent.lookup(name); ok {
 			e.parent.Assign(name, v)
 			return
 		}
 	}
+	e.mu.Lock()
 	e.vars[name] = v
+	e.mu.Unlock()
 }
 
 func (e *Env) lookup(name string) (Value, bool) {
-	if v, ok := e.vars[name]; ok {
+	e.mu.RLock()
+	v, ok := e.vars[name]
+	e.mu.RUnlock()
+	if ok {
 		return v, true
 	}
 	if e.parent != nil {
@@ -654,6 +693,28 @@ func (i *Interpreter) execStmt(s parser.Stmt, env *Env) error {
 		return i.execImport(n, env)
 	case *parser.StaticStmt:
 		i.statics = append(i.statics, staticMount{Mount: n.Mount, Dir: n.Dir})
+	case *parser.SpawnStmt:
+		// Run the body in a fresh goroutine. The body shares this
+		// goroutine's env via closure — Env is RWMutex-protected, but
+		// users should still prefer channels for coordination.
+		body := n.Body
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					fmt.Fprintf(os.Stderr, "[mx spawn panic] %v\n", r)
+				}
+			}()
+			scope := NewEnv(env)
+			for _, s := range body {
+				if err := i.execStmt(s, scope); err != nil {
+					if _, ok := err.(*returnSignal); ok {
+						return
+					}
+					fmt.Fprintf(os.Stderr, "[mx spawn] %v\n", i.wrapErr(err))
+					return
+				}
+			}
+		}()
 	case *parser.ExprStmt:
 		_, err := i.evalExpr(n.Expr, env)
 		return err

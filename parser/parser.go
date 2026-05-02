@@ -133,6 +133,13 @@ func (p *Parser) parseStmt() (Stmt, error) {
 		return p.parseImport()
 	case lexer.TokenStatic:
 		return p.parseStatic()
+	case lexer.TokenSpawn:
+		tok := p.advance()
+		body, err := p.parseBlock()
+		if err != nil {
+			return nil, err
+		}
+		return &SpawnStmt{pos: mkPos(tok), Body: body}, nil
 	case lexer.TokenSemicolon:
 		p.advance()
 		return nil, nil

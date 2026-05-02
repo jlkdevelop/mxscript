@@ -8,6 +8,11 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.16.0** (2026-05-02) — concurrency
+  - `spawn { ... }` runs a block in a goroutine
+  - Channels: `chan(cap?)`, `send`, `recv`, `close_chan`
+  - `wait_group()` for fork/join coordination
+  - Env is now thread-safe via RWMutex
 - **v0.15.0** (2026-05-02)
   - Email via SMTP: `email.send({ host, from, to, subject, body, html?, ... })`
   - Rate limiting: `server.rate_limit: { requests: N, per: "1m" }` (per-IP token bucket)
