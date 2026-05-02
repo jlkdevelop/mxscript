@@ -583,9 +583,12 @@ func (i *Interpreter) execLoop(n *parser.LoopStmt, env *Env) error {
 	if err != nil {
 		return err
 	}
-	runIteration := func(item Value) (stop bool, err error) {
+	runIteration := func(idx int, item Value) (stop bool, err error) {
 		scope := NewEnv(env)
 		scope.Set(n.Var, item)
+		if n.IndexVar != "" {
+			scope.Set(n.IndexVar, NumberValue(float64(idx)))
+		}
 		if err := i.execBlock(n.Body, scope); err != nil {
 			if _, ok := err.(*breakSignal); ok {
 				return true, nil
@@ -599,8 +602,8 @@ func (i *Interpreter) execLoop(n *parser.LoopStmt, env *Env) error {
 	}
 	switch iter.Kind {
 	case KindArray:
-		for _, item := range iter.Array {
-			stop, err := runIteration(item)
+		for k, item := range iter.Array {
+			stop, err := runIteration(k, item)
 			if err != nil {
 				return err
 			}
@@ -611,7 +614,7 @@ func (i *Interpreter) execLoop(n *parser.LoopStmt, env *Env) error {
 	case KindNumber:
 		count := int(iter.Number)
 		for k := 0; k < count; k++ {
-			stop, err := runIteration(NumberValue(float64(k)))
+			stop, err := runIteration(k, NumberValue(float64(k)))
 			if err != nil {
 				return err
 			}
@@ -620,8 +623,8 @@ func (i *Interpreter) execLoop(n *parser.LoopStmt, env *Env) error {
 			}
 		}
 	case KindObject:
-		for _, key := range iter.Object.Keys {
-			stop, err := runIteration(StringValue(key))
+		for k, key := range iter.Object.Keys {
+			stop, err := runIteration(k, StringValue(key))
 			if err != nil {
 				return err
 			}

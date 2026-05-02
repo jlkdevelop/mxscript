@@ -365,15 +365,26 @@ func (p *Parser) parseLoop() (Stmt, error) {
 	if _, err := p.expect(lexer.TokenAs, "after loop iterable"); err != nil {
 		return nil, err
 	}
-	varName, err := p.expect(lexer.TokenIdent, "as loop variable")
+	first, err := p.expect(lexer.TokenIdent, "as loop variable")
 	if err != nil {
 		return nil, err
+	}
+	indexVar := ""
+	varName := first.Lexeme
+	// Optional `, value` form: first is the index, second is the element.
+	if p.match(lexer.TokenComma) {
+		second, err := p.expect(lexer.TokenIdent, "as second loop variable")
+		if err != nil {
+			return nil, err
+		}
+		indexVar = first.Lexeme
+		varName = second.Lexeme
 	}
 	body, err := p.parseBlock()
 	if err != nil {
 		return nil, err
 	}
-	return &LoopStmt{pos: mkPos(tok), Iterable: iter, Var: varName.Lexeme, Body: body}, nil
+	return &LoopStmt{pos: mkPos(tok), Iterable: iter, IndexVar: indexVar, Var: varName, Body: body}, nil
 }
 
 func (p *Parser) parseWhile() (Stmt, error) {

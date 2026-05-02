@@ -105,10 +105,12 @@ type IfStmt struct {
 
 func (*IfStmt) stmtNode() {}
 
-// LoopStmt is `loop iterable as item { ... }` — iterates arrays / numeric ranges.
+// LoopStmt is `loop iterable as item { ... }` or `loop iterable as i, item { ... }`.
+// IndexVar is the empty string when no index is requested.
 type LoopStmt struct {
 	pos
 	Iterable Expr
+	IndexVar string
 	Var      string
 	Body     []Stmt
 }
