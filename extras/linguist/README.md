@@ -50,3 +50,13 @@ Answers we'll have ready:
 ## Status
 
 🟡 Awaiting public adoption threshold. Until then, `.mx` files render as plain text on GitHub — but install the [VS Code extension](../vscode/) for full highlighting locally.
+
+## When the moment comes — exact PR steps
+
+1. Fork `github-linguist/linguist`.
+2. Drop the contents of [`samples/`](samples/) into `samples/MX Script/` in your fork.
+3. Copy `extras/syntax/mxscript.tmLanguage.json` to `vendor/grammars/mxscript/` (you may need to register it as a submodule the way other languages do — see linguist's CONTRIBUTING.md). The simplest path is to first publish the grammar to a small repo of its own, then add it as a submodule.
+4. Apply [`languages.yml.patch`](languages.yml.patch) (alphabetically near "MoonScript") and let the maintainers assign `language_id`.
+5. Open a PR titled "Add MX Script", description linking to mxscript.com and the home repo, with a one-paragraph context section explaining what the language is and how it's used.
+
+The brand color (`#2B54A8`) matches the logo's blue.

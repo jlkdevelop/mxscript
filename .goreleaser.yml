@@ -5,6 +5,10 @@ project_name: mxscript
 before:
   hooks:
     - go mod tidy
+    # Package the VS Code extension into a .vsix so it can ship as a
+    # release asset. Falls through quietly if Node / npx isn't available
+    # (e.g. on the local dev machine).
+    - sh -c 'cd extras/vscode && npx --yes @vscode/vsce package --out ../../dist/mxscript-{{ trimprefix .Version "v" }}.vsix || true'
 
 builds:
   - id: mx
@@ -34,6 +38,11 @@ archives:
       - LICENSE
       - CHANGELOG.md
       - docs/**
+
+# Attach the VS Code extension .vsix (built by the `before:` hook) as a
+# standalone release asset so users can `code --install-extension <url>`.
+extra_files:
+  - glob: dist/mxscript-*.vsix
 
 checksum:
   name_template: 'checksums.txt'

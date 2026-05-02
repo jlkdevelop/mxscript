@@ -1,0 +1,14 @@
+diff --git a/lib/linguist/languages.yml b/lib/linguist/languages.yml
+--- a/lib/linguist/languages.yml
++++ b/lib/linguist/languages.yml
+@@ -<line-near-MX-Script-alphabetical-position> +<same>,0 @@
++MX Script:
++  type: programming
++  color: "#2B54A8"
++  extensions:
++  - ".mx"
++  tm_scope: source.mx
++  ace_mode: text
++  interpreters:
++  - mx
++  language_id: <ASSIGNED-BY-MAINTAINERS>

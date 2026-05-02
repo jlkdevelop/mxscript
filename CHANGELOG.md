@@ -4,6 +4,30 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.51.0] — 2026-05-02
+
+### Distribution
+- **VS Code extension `.vsix` is now a release asset.** GoReleaser
+  runs `npx @vscode/vsce package` in the pre-build hook and attaches
+  the resulting `mxscript-<version>.vsix` to every tag. Users can
+  one-line install:
+
+  ```bash
+  curl -fsSL -o mx.vsix \
+    https://github.com/jlkdevelop/mxscript/releases/latest/download/mxscript-0.51.0.vsix
+  code --install-extension mx.vsix
+  ```
+
+  The hook gracefully no-ops when Node / npx isn't available locally.
+
+### Adoption
+- **github-linguist PR scaffold polished.** `extras/linguist/` now
+  ships a ready-to-apply `languages.yml.patch`, the brand-color hex
+  to add (`#2B54A8` from the logo), and a step-by-step PR procedure
+  for when MX hits the public-adoption threshold.
+
+[0.51.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.51.0
+
 ## [0.50.0] — 2026-05-02
 
 ### Added — LSP polish (v1.0 of the editor experience)
