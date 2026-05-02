@@ -1,0 +1,131 @@
+// chat.mx — a real-time chat app in 80 lines.
+//
+// Demonstrates:
+//   - WebSocket routes via `ws /chat`
+//   - In-memory client registry guarded by a channel pattern
+//   - Sessions for the username (signed cookies)
+//   - Static file serving for the HTML/JS client
+//
+// Run:    mx run examples/chat.mx
+// Open:   http://localhost:8080
+//
+// Two browser tabs and you have a chat room. Try it on a phone too —
+// the page is responsive.
+
+server {
+  port: 8080,
+  log: true
+}
+
+// In-memory client registry. Each client is the `send` function the
+// route's body received from MX. Pushing a message means iterating
+// every registered send.
+let clients = []
+
+fn broadcast(msg) {
+  loop clients as c {
+    try { c(msg) } catch (e) { /* dead connection — clean up next round */ }
+  }
+}
+
+post /login {
+  let body = request.body
+  if (body == null || body.username == null || len(body.username) < 2) {
+    return status(400, { error: "username must be at least 2 chars" })
+  }
+  return session.create({ username: body.username }, {
+    secret: env("CHAT_SECRET", "dev-secret"),
+    max_age: 86400
+  })
+}
+
+post /logout { return session.clear() }
+
+ws /chat {
+  let claims = session.read(request, env("CHAT_SECRET", "dev-secret"))
+  if (claims == null) {
+    close(4001, "login first")
+    return
+  }
+  let username = claims.username
+
+  // Register this client's send fn so other routes can push to them.
+  clients = push(clients, send)
+  broadcast(json_stringify({ type: "join", username: username, time: now_iso() }))
+
+  while (true) {
+    let raw = recv()
+    if (raw == null) { break }
+    let msg = try { json_parse(raw) } catch { null }
+    if (msg == null || msg.text == null) { continue }
+    broadcast(json_stringify({
+      type: "message",
+      username: username,
+      text: msg.text,
+      time: now_iso()
+    }))
+  }
+
+  // De-register on disconnect.
+  clients = filter(clients, fn(c) { return c != send })
+  broadcast(json_stringify({ type: "leave", username: username, time: now_iso() }))
+}
+
+// Tiny single-page client — saves you bringing your own.
+get / {
+  return html("<!doctype html><meta charset=utf-8><title>MX chat</title>
+  <style>
+    body{font:14px/1.5 -apple-system,sans-serif;margin:0;padding:24px;max-width:560px;margin:0 auto}
+    h1{margin:0 0 16px}
+    #log{height:60vh;border:1px solid #e5e7ef;border-radius:8px;padding:12px;overflow-y:auto;background:#fafbfd}
+    #log .m{margin:6px 0}
+    #log .meta{color:#888;font-size:12px}
+    #form{display:flex;gap:8px;margin-top:12px}
+    input,button{padding:8px 12px;border-radius:6px;border:1px solid #e5e7ef;font:inherit}
+    input{flex:1}
+    button{background:#2B54A8;color:#fff;border:none;cursor:pointer}
+  </style>
+  <h1>mx chat</h1>
+  <div id=login>
+    <input id=u placeholder='your name'><button onclick='login()'>join</button>
+  </div>
+  <div id=room style=display:none>
+    <div id=log></div>
+    <form id=form onsubmit='send(event)'>
+      <input id=msg placeholder='type a message…' autofocus>
+      <button>send</button>
+    </form>
+  </div>
+  <script>
+  let ws
+  async function login(){
+    let u = document.getElementById('u').value.trim()
+    if(u.length<2) return alert('name too short')
+    await fetch('/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({username:u})})
+    document.getElementById('login').style.display='none'
+    document.getElementById('room').style.display='block'
+    ws = new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/chat')
+    ws.onmessage = e => {
+      let m = JSON.parse(e.data)
+      let log = document.getElementById('log')
+      let div = document.createElement('div')
+      div.className = 'm'
+      if (m.type === 'message') {
+        div.innerHTML = '<span class=meta>'+m.username+'</span> '+escapeHtml(m.text)
+      } else {
+        div.innerHTML = '<span class=meta>'+m.username+' '+m.type+'ed</span>'
+      }
+      log.appendChild(div)
+      log.scrollTop = log.scrollHeight
+    }
+  }
+  function send(e){
+    e.preventDefault()
+    let i = document.getElementById('msg')
+    if (!i.value.trim()) return
+    ws.send(JSON.stringify({text: i.value}))
+    i.value = ''
+  }
+  function escapeHtml(s){return s.replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c]))}
+  </script>")
+}

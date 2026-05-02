@@ -190,6 +190,14 @@ func registerBuiltins(i *Interpreter) {
 	g.Set("password", ObjectValue(pwNS))
 	builtinNames["password"] = true
 
+	// --- Session namespace (signed cookies + claims) ---
+	sessionNS := NewOrderedMap()
+	sessionNS.Set("create", FunctionValue(&Function{Name: "session.create", Native: builtinSessionCreate}))
+	sessionNS.Set("read", FunctionValue(&Function{Name: "session.read", Native: builtinSessionRead}))
+	sessionNS.Set("clear", FunctionValue(&Function{Name: "session.clear", Native: builtinSessionClear}))
+	g.Set("session", ObjectValue(sessionNS))
+	builtinNames["session"] = true
+
 	// --- Regex ---
 	def("re_match", builtinReMatch)
 	def("re_find", builtinReFind)
@@ -2117,6 +2125,173 @@ func builtinPasswordVerify(i *Interpreter, args []Value) (Value, error) {
 	}
 	got := pbkdf2Hash(password, salt, iter, len(want))
 	return BoolValue(hmac.Equal(got, want)), nil
+}
+
+// ===== Session helper =====
+//
+// session.create(claims, opts) returns a Response that sets a signed
+// session cookie. session.read(request, secret?) reads + verifies it.
+// session.clear() returns a Response that expires the cookie.
+//
+//	post /login {
+//	  // ... validate creds ...
+//	  return session.create({ user_id: 42, role: "admin" }, {
+//	    secret: env_required("SESSION_SECRET"),
+//	    max_age: 86400  // 1 day, defaults to 30 days
+//	  })
+//	}
+//
+//	get /me {
+//	  let claims = session.read(request, env("SESSION_SECRET"))
+//	  if (claims == null) { return status(401) }
+//	  return json(claims)
+//	}
+//
+//	post /logout { return session.clear() }
+
+const sessionCookieName = "mx_session"
+
+func sessionCookieOpts(opts *OrderedMap) (name string, maxAge int, path, domain, sameSite string, httpOnly, secure bool) {
+	name = sessionCookieName
+	maxAge = 30 * 86400
+	path = "/"
+	httpOnly = true
+	sameSite = "Lax"
+	if opts == nil {
+		return
+	}
+	if v, ok := opts.Get("name"); ok && v.Kind == KindString {
+		name = v.String
+	}
+	if v, ok := opts.Get("max_age"); ok && v.Kind == KindNumber {
+		maxAge = int(v.Number)
+	}
+	if v, ok := opts.Get("path"); ok && v.Kind == KindString {
+		path = v.String
+	}
+	if v, ok := opts.Get("domain"); ok && v.Kind == KindString {
+		domain = v.String
+	}
+	if v, ok := opts.Get("same_site"); ok && v.Kind == KindString {
+		sameSite = v.String
+	}
+	if v, ok := opts.Get("http_only"); ok && v.Kind == KindBool {
+		httpOnly = v.Bool
+	}
+	if v, ok := opts.Get("secure"); ok && v.Kind == KindBool {
+		secure = v.Bool
+	}
+	return
+}
+
+func builtinSessionCreate(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 1 || args[0].Kind != KindObject {
+		return Value{}, fmt.Errorf("session.create(claims, opts) requires a claims object")
+	}
+	if len(args) < 2 || args[1].Kind != KindObject {
+		return Value{}, fmt.Errorf("session.create(claims, opts) requires opts.secret")
+	}
+	opts := args[1].Object
+	secret := ""
+	if v, ok := opts.Get("secret"); ok && v.Kind == KindString {
+		secret = v.String
+	}
+	if secret == "" {
+		return Value{}, fmt.Errorf("session.create requires opts.secret")
+	}
+
+	// Encode claims as JSON, then sign HMAC-SHA256 over base64(json).
+	claimsJSON, err := jsonEncode(args[0])
+	if err != nil {
+		return Value{}, err
+	}
+	payload := base64.RawURLEncoding.EncodeToString(claimsJSON)
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(payload))
+	sig := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+	signed := payload + "." + sig
+
+	name, maxAge, path, domain, sameSite, httpOnly, secure := sessionCookieOpts(opts)
+	c := &http.Cookie{
+		Name: name, Value: signed, Path: path, Domain: domain,
+		MaxAge: maxAge, HttpOnly: httpOnly, Secure: secure,
+	}
+	switch strings.ToLower(sameSite) {
+	case "strict":
+		c.SameSite = http.SameSiteStrictMode
+	case "lax":
+		c.SameSite = http.SameSiteLaxMode
+	case "none":
+		c.SameSite = http.SameSiteNoneMode
+	}
+
+	body := args[0]
+	if v, ok := opts.Get("body"); ok {
+		body = v
+	}
+	resp := &Response{ContentType: "application/json", Body: body, Cookies: []*http.Cookie{c}}
+	return ResponseValue(resp), nil
+}
+
+func builtinSessionRead(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 2 {
+		return Value{}, fmt.Errorf("session.read(request, secret) requires (request, secret)")
+	}
+	if args[0].Kind != KindObject {
+		return Value{}, fmt.Errorf("session.read: first arg must be `request`")
+	}
+	secret, err := stringArg(args, 1)
+	if err != nil {
+		return Value{}, err
+	}
+	cookieName := sessionCookieName
+	if len(args) > 2 && args[2].Kind == KindString {
+		cookieName = args[2].String
+	}
+	cookies, _ := args[0].Object.Get("cookies")
+	if cookies.Kind != KindObject {
+		return NullValue(), nil
+	}
+	val, _ := cookies.Object.Get(cookieName)
+	if val.Kind != KindString {
+		return NullValue(), nil
+	}
+	parts := strings.SplitN(val.String, ".", 2)
+	if len(parts) != 2 {
+		return NullValue(), nil
+	}
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(parts[0]))
+	got, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil || !hmac.Equal(got, mac.Sum(nil)) {
+		return NullValue(), nil
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil {
+		return NullValue(), nil
+	}
+	claims, err := jsonDecode(raw)
+	if err != nil {
+		return NullValue(), nil
+	}
+	return claims, nil
+}
+
+func builtinSessionClear(i *Interpreter, args []Value) (Value, error) {
+	name := sessionCookieName
+	path := "/"
+	if len(args) > 0 && args[0].Kind == KindObject {
+		if v, ok := args[0].Object.Get("name"); ok && v.Kind == KindString {
+			name = v.String
+		}
+		if v, ok := args[0].Object.Get("path"); ok && v.Kind == KindString {
+			path = v.String
+		}
+	}
+	c := &http.Cookie{Name: name, Path: path, MaxAge: -1, Value: ""}
+	body := NewOrderedMap()
+	body.Set("ok", BoolValue(true))
+	return ResponseValue(&Response{ContentType: "application/json", Body: ObjectValue(body), Cookies: []*http.Cookie{c}}), nil
 }
 
 // ===== AES-256-GCM =====

@@ -8,6 +8,9 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.30.0** (2026-05-02)
+  - `session.create / read / clear` — high-level session API
+  - `examples/chat.mx` — 80-line real-time chat showcase (WS + sessions + HTML client)
 - **v0.29.0** (2026-05-02)
   - LSP hover with signatures + summaries for ~110 builtins
   - LSP completion (builtins + keywords)

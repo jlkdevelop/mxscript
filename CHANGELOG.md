@@ -4,6 +4,41 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.30.0] — 2026-05-02
+
+### Added — sessions
+- **`session` namespace** wires JWT-style claims to a signed cookie:
+
+  ```mx
+  post /login {
+    return session.create({ user_id: 42, role: "admin" }, {
+      secret: env_required("SESSION_SECRET"),
+      max_age: 86400
+    })
+  }
+
+  get /me {
+    let claims = session.read(request, env("SESSION_SECRET"))
+    if (claims == null) { return status(401) }
+    return json(claims)
+  }
+
+  post /logout { return session.clear() }
+  ```
+
+  - `session.create(claims, opts)` returns a Response that sets the
+    cookie. `opts` accepts `secret` (required), `max_age`, `name`,
+    `path`, `domain`, `same_site`, `http_only`, `secure`, `body`.
+  - `session.read(request, secret, name?)` returns the claims object
+    or `null` if the cookie is missing / tampered.
+  - `session.clear(opts?)` returns a Response that expires the cookie.
+
+### Added — example
+- **`examples/chat.mx`** — an 80-line real-time chat app using
+  WebSockets + sessions + a built-in single-page HTML client.
+
+[0.30.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.30.0
+
 ## [0.29.0] — 2026-05-02
 
 ### Added — LSP intelligence
