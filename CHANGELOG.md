@@ -4,6 +4,46 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.10.0] — 2026-05-02
+
+### Added
+The first production-readiness release. The `server` block now accepts
+several new keys, all optional with sensible defaults:
+
+```mx
+server {
+  port: 8080,
+  read_timeout: "5s",          # number = ms, string = time.ParseDuration
+  write_timeout: "30s",
+  max_body: "10MB",            # number = bytes, string = KB / MB / GB
+
+  tls: { cert: "./cert.pem", key: "./key.pem" },
+
+  log: true,                   # one log line per request
+  cors: {
+    origins: ["https://app.example.com"],
+    methods: ["GET", "POST"],
+    headers: ["Content-Type", "Authorization"],
+    credentials: true,
+    max_age: 3600
+  }
+}
+```
+
+- **Graceful shutdown**: SIGINT / SIGTERM trigger a clean shutdown
+  with up to 10s for in-flight requests to drain.
+- **TLS / HTTPS**: when `tls.cert` and `tls.key` are set, the server
+  boots `ListenAndServeTLS` and the startup banner shows `https://`.
+- **Body size limits**: requests over `max_body` get a 413 (cheap
+  Content-Length check first, MaxBytesReader as backstop for chunked).
+- **Read / write timeouts** on the underlying http.Server.
+- **Access logging** via `log: true` — one line per request showing
+  method, path, status, and duration.
+- **CORS handling** including OPTIONS preflight, configurable
+  origins / methods / headers / credentials / max_age.
+
+[0.10.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.10.0
+
 ## [0.9.0] — 2026-05-02
 
 ### Added

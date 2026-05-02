@@ -8,6 +8,13 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.10.0** (2026-05-02) — production hardening
+  - TLS / HTTPS via `server.tls.{cert, key}`
+  - Graceful shutdown on SIGINT / SIGTERM (10s drain)
+  - Request body limits (`server.max_body`)
+  - Read / write timeouts (`server.read_timeout`, `server.write_timeout`)
+  - Access logging (`server.log`)
+  - CORS with preflight (`server.cors`)
 - **v0.9.0** (2026-05-02)
   - Shorthand routes: `get /users { ... }` etc.
   - Functional iterators: sort / sort_by / reduce / sum / group_by / unique / flatten / zip
