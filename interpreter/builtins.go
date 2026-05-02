@@ -4108,6 +4108,8 @@ func builtinAIComplete(i *Interpreter, args []Value) (Value, error) {
 	provider := "openai"
 	model := "gpt-4o-mini"
 	maxTokens := 256
+	var tools []Value
+	var messages []Value
 
 	if len(args) > 1 && args[1].Kind == KindObject {
 		opts := args[1].Object
@@ -4119,6 +4121,13 @@ func builtinAIComplete(i *Interpreter, args []Value) (Value, error) {
 		}
 		if v, ok := opts.Get("max_tokens"); ok && v.Kind == KindNumber {
 			maxTokens = int(v.Number)
+		}
+		if v, ok := opts.Get("tools"); ok && v.Kind == KindArray {
+			tools = v.Array
+		}
+		// Multi-turn: `messages` overrides `prompt` if both are passed.
+		if v, ok := opts.Get("messages"); ok && v.Kind == KindArray {
+			messages = v.Array
 		}
 	}
 
@@ -4132,6 +4141,11 @@ func builtinAIComplete(i *Interpreter, args []Value) (Value, error) {
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
 		return Value{}, fmt.Errorf("ai.complete requires OPENAI_API_KEY environment variable")
+	}
+
+	// Tool calling path: structured request + response.
+	if len(tools) > 0 || len(messages) > 0 {
+		return aiCompleteOpenAITools(prompt, messages, model, maxTokens, tools, apiKey)
 	}
 
 	body, _ := json.Marshal(map[string]any{
@@ -4174,6 +4188,151 @@ func builtinAIComplete(i *Interpreter, args []Value) (Value, error) {
 		return StringValue(""), nil
 	}
 	return StringValue(parsed.Choices[0].Message.Content), nil
+}
+
+// aiCompleteOpenAITools is the tool-calling / multi-turn variant.
+// Returns either a string (assistant text) or an object with shape
+//
+//	{ tool_calls: [ { id, name, arguments }, ... ] }
+//
+// when the model wants to invoke a tool. Callers run the loop:
+//
+//	let r = ai.complete(prompt, { tools: [...] })
+//	if (r.tool_calls != null) {
+//	  // execute each tool, build messages, call again
+//	} else {
+//	  print(r)   // final string answer
+//	}
+func aiCompleteOpenAITools(prompt string, mxMessages []Value, model string, maxTokens int, tools []Value, apiKey string) (Value, error) {
+	// Build messages array. If user passed messages explicitly, use those;
+	// otherwise wrap prompt as a single user turn.
+	var msgs []map[string]any
+	if len(mxMessages) > 0 {
+		for _, m := range mxMessages {
+			if m.Kind != KindObject {
+				continue
+			}
+			conv := map[string]any{}
+			for _, k := range m.Object.Keys {
+				v, _ := m.Object.Get(k)
+				switch v.Kind {
+				case KindString:
+					conv[k] = v.String
+				case KindArray, KindObject, KindNumber, KindBool:
+					raw, _ := jsonEncode(v)
+					var any any
+					_ = json.Unmarshal(raw, &any)
+					conv[k] = any
+				}
+			}
+			msgs = append(msgs, conv)
+		}
+	} else {
+		msgs = []map[string]any{{"role": "user", "content": prompt}}
+	}
+
+	// Build OpenAI-shape tools array from MX shape:
+	//   { name, description, params: { ... json schema ... } }
+	var toolDefs []map[string]any
+	for _, t := range tools {
+		if t.Kind != KindObject {
+			continue
+		}
+		name, _ := t.Object.Get("name")
+		desc, _ := t.Object.Get("description")
+		params, _ := t.Object.Get("params")
+		if name.Kind != KindString {
+			continue
+		}
+		fn := map[string]any{"name": name.String}
+		if desc.Kind == KindString {
+			fn["description"] = desc.String
+		}
+		if params.Kind == KindObject {
+			raw, _ := jsonEncode(params)
+			var p any
+			_ = json.Unmarshal(raw, &p)
+			fn["parameters"] = p
+		} else {
+			fn["parameters"] = map[string]any{"type": "object", "properties": map[string]any{}}
+		}
+		toolDefs = append(toolDefs, map[string]any{"type": "function", "function": fn})
+	}
+
+	body := map[string]any{
+		"model":      model,
+		"messages":   msgs,
+		"max_tokens": maxTokens,
+	}
+	if len(toolDefs) > 0 {
+		body["tools"] = toolDefs
+	}
+	bodyBytes, _ := json.Marshal(body)
+
+	req, err := http.NewRequest("POST", "https://api.openai.com/v1/chat/completions", bytes.NewReader(bodyBytes))
+	if err != nil {
+		return Value{}, err
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{Timeout: 60 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return Value{}, err
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return Value{}, err
+	}
+	if resp.StatusCode >= 400 {
+		return Value{}, fmt.Errorf("ai.complete failed (%d): %s", resp.StatusCode, string(raw))
+	}
+
+	var parsed struct {
+		Choices []struct {
+			Message struct {
+				Content   string `json:"content"`
+				ToolCalls []struct {
+					ID       string `json:"id"`
+					Function struct {
+						Name      string `json:"name"`
+						Arguments string `json:"arguments"`
+					} `json:"function"`
+				} `json:"tool_calls"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return Value{}, err
+	}
+	if len(parsed.Choices) == 0 {
+		return StringValue(""), nil
+	}
+	m := parsed.Choices[0].Message
+
+	if len(m.ToolCalls) > 0 {
+		out := NewOrderedMap()
+		var calls []Value
+		for _, tc := range m.ToolCalls {
+			c := NewOrderedMap()
+			c.Set("id", StringValue(tc.ID))
+			c.Set("name", StringValue(tc.Function.Name))
+			argsParsed, err := jsonDecode([]byte(tc.Function.Arguments))
+			if err != nil {
+				c.Set("arguments", StringValue(tc.Function.Arguments))
+			} else {
+				c.Set("arguments", argsParsed)
+			}
+			calls = append(calls, ObjectValue(c))
+		}
+		out.Set("tool_calls", ArrayValue(calls))
+		if m.Content != "" {
+			out.Set("content", StringValue(m.Content))
+		}
+		return ObjectValue(out), nil
+	}
+	return StringValue(m.Content), nil
 }
 
 // aiCompleteGemini calls Google's Generative Language API.

@@ -1,0 +1,84 @@
+// agent.mx — a tool-calling AI agent in 60 lines.
+//
+// Demonstrates ai.complete with tools[]: send a user prompt, the model
+// decides whether to call a tool, we execute the tool, feed results back,
+// repeat until it produces a final answer.
+//
+// Run:    OPENAI_API_KEY=... mx run examples/agent.mx
+//
+// Tool registry: each tool is { name, description, params (JSON Schema), fn }.
+
+let tools = [
+  {
+    name: "get_time",
+    description: "Get the current UTC time in ISO 8601",
+    params: { type: "object", properties: {} },
+    handler: fn(args) { return now_iso() }
+  },
+  {
+    name: "calc",
+    description: "Evaluate a basic arithmetic expression like 2*(3+4)",
+    params: {
+      type: "object",
+      properties: { expr: { type: "string" } },
+      required: ["expr"]
+    },
+    handler: fn(args) {
+      // tiny calc — just route through MX's own --eval shell-out
+      let r = shell("./mx", ["run", "--eval", "print(" + args.expr + ")"])
+      return trim(r.stdout)
+    }
+  },
+  {
+    name: "fetch_url",
+    description: "GET a URL and return the response body as text",
+    params: {
+      type: "object",
+      properties: { url: { type: "string" } },
+      required: ["url"]
+    },
+    handler: fn(args) {
+      let res = fetch(args.url)
+      return substr(res.text, 0, 2000)
+    }
+  }
+]
+
+fn find_tool(name) {
+  return find(tools, fn(t) { return t.name == name })
+}
+
+fn agent(prompt) {
+  let messages = [{ role: "user", content: prompt }]
+
+  loop 5 as turn {
+    let r = ai.complete("", { tools: tools, messages: messages, max_tokens: 800 })
+
+    if (isString(r)) {
+      print("\n[final answer]\n" + r)
+      return r
+    }
+
+    // Model wants to call a tool — execute and feed back.
+    print("\n[turn ${turn}] model called " + len(r.tool_calls) + " tool(s)")
+    let assistantMsg = { role: "assistant", content: r.content ?? "", tool_calls: r.tool_calls }
+    messages = push(messages, assistantMsg)
+
+    loop r.tool_calls as call {
+      let t = find_tool(call.name)
+      let result = "<unknown tool>"
+      if (t != null) {
+        result = t.handler(call.arguments)
+      }
+      print("  - " + call.name + "(" + json_stringify(call.arguments) + ") = " + str(result))
+      messages = push(messages, {
+        role: "tool",
+        tool_call_id: call.id,
+        content: str(result)
+      })
+    }
+  }
+  print("\n[gave up after 5 turns]")
+}
+
+agent("What time is it right now? Then compute 47 * 23 and tell me the result.")

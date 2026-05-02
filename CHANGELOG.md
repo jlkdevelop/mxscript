@@ -4,6 +4,45 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.37.0] — 2026-05-02
+
+### Added — AI tool calling
+- **`ai.complete(prompt, { tools: [...] })`** now supports OpenAI-style
+  function / tool calling. When tools are passed (or a `messages` array
+  for multi-turn chats), the response is structured:
+
+  - **Text answer**: returns a plain string (existing behavior).
+  - **Tool call**: returns `{ tool_calls: [{ id, name, arguments }, ...], content? }`.
+    `arguments` is a fully parsed object — no need to `json_parse` it.
+
+  ```mx
+  let tools = [
+    {
+      name: "get_weather",
+      description: "Get the current temperature for a city",
+      params: {
+        type: "object",
+        properties: { city: { type: "string" } },
+        required: ["city"]
+      }
+    }
+  ]
+  let r = ai.complete("What's the weather in Paris?", { tools: tools })
+  if (r.tool_calls != null) {
+    // call your function, feed the result back via messages: [...]
+  }
+  ```
+- **Multi-turn chat support**: pass `messages: [{role, content, ...}, ...]`
+  to keep an ongoing conversation across calls. Required for the agent
+  loop pattern (call → tool result → call → answer).
+
+### Added — example
+- **`examples/agent.mx`** — 60-line tool-calling agent. Three tools
+  (`get_time`, `calc`, `fetch_url`), a 5-turn loop, and a final answer.
+  Run with `OPENAI_API_KEY=... mx run examples/agent.mx`.
+
+[0.37.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.37.0
+
 ## [0.36.0] — 2026-05-02
 
 ### Added
