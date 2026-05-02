@@ -8,6 +8,8 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.28.0** (2026-05-02)
+  - Destructure renaming (`{ name: n }`), defaults (`{ name = "anon" }`), array rest (`[head, ...rest]`)
 - **v0.27.0** (2026-05-02)
   - Destructuring: `let { a, b } = obj` / `let [x, y] = arr`
   - `time_ago(ms)` and `time_human(ms)` for friendly time strings

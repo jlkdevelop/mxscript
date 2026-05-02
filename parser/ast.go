@@ -49,8 +49,24 @@ func (*LetStmt) stmtNode() {}
 
 // DestructurePattern captures `let { a, b }` or `let [a, b]` style bindings.
 type DestructurePattern struct {
-	IsArray bool     // false = object, true = array
-	Names   []string // names to bind in order (object: matches keys; array: positional)
+	IsArray bool                 // false = object, true = array
+	Items   []DestructureBinding // each binding's source key + local name + optional default
+}
+
+// DestructureBinding represents one position in a destructure pattern:
+//
+//	{ name }              -> Name="name", Source="name"
+//	{ name: n }           -> Name="n",    Source="name"
+//	{ name = "anon" }     -> Name="name", Source="name", Default=<expr>
+//	{ name: n = "anon" }  -> Name="n",    Source="name", Default=<expr>
+//	[a]                   -> Name="a"
+//	[...rest]             -> Name="rest", Rest=true
+//	[a = 0]               -> Name="a", Default=<expr>
+type DestructureBinding struct {
+	Name    string
+	Source  string // empty unless renamed
+	Default Expr   // nil if no default
+	Rest    bool   // array spread
 }
 
 type AssignStmt struct {

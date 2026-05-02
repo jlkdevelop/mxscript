@@ -220,35 +220,69 @@ func (p *Parser) parseLet() (Stmt, error) {
 	return &LetStmt{pos: mkPos(tok), Name: name.Lexeme, Value: val}, nil
 }
 
-// parseDestructurePattern parses either `{ name, name, ... }` (object)
-// or `[ name, name, ... ]` (array) — comma-separated identifiers.
+// parseDestructurePattern parses object `{ a, b: c, d = "x" }` or array
+// `[ a, b = 0, ...rest ]` patterns.
 func (p *Parser) parseDestructurePattern() (*DestructurePattern, error) {
 	open := p.advance()
 	isArray := open.Type == lexer.TokenLBracket
-	close := lexer.TokenRBrace
+	closeTok := lexer.TokenRBrace
 	if isArray {
-		close = lexer.TokenRBracket
+		closeTok = lexer.TokenRBracket
 	}
-	var names []string
-	if !p.check(close) {
+
+	var items []DestructureBinding
+	if !p.check(closeTok) {
 		for {
+			b := DestructureBinding{}
+			// Array-only: ...rest
+			if isArray && p.check(lexer.TokenSpread) {
+				p.advance()
+				id, err := p.expect(lexer.TokenIdent, "after `...` in destructure")
+				if err != nil {
+					return nil, err
+				}
+				b.Name = id.Lexeme
+				b.Rest = true
+				items = append(items, b)
+				break // rest must be last
+			}
 			id, err := p.expect(lexer.TokenIdent, "as destructure binding")
 			if err != nil {
 				return nil, err
 			}
-			names = append(names, id.Lexeme)
+			b.Name = id.Lexeme
+			// Object-only: { name: alias }
+			if !isArray && p.check(lexer.TokenColon) {
+				p.advance()
+				alias, err := p.expect(lexer.TokenIdent, "after `:` in destructure")
+				if err != nil {
+					return nil, err
+				}
+				b.Source = b.Name
+				b.Name = alias.Lexeme
+			}
+			// Optional default: `= expr`
+			if p.check(lexer.TokenAssign) {
+				p.advance()
+				def, err := p.parseExpr()
+				if err != nil {
+					return nil, err
+				}
+				b.Default = def
+			}
+			items = append(items, b)
 			if !p.match(lexer.TokenComma) {
 				break
 			}
-			if p.check(close) {
+			if p.check(closeTok) {
 				break
 			}
 		}
 	}
-	if _, err := p.expect(close, "to close destructure pattern"); err != nil {
+	if _, err := p.expect(closeTok, "to close destructure pattern"); err != nil {
 		return nil, err
 	}
-	return &DestructurePattern{IsArray: isArray, Names: names}, nil
+	return &DestructurePattern{IsArray: isArray, Items: items}, nil
 }
 
 func (p *Parser) parseFn() (Stmt, error) {

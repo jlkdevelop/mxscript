@@ -4,6 +4,19 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.28.0] — 2026-05-02
+
+### Added — destructuring polish
+- **Renaming** in object destructure: `let { name: n, role: r } = user`.
+- **Default values** when the source key is missing or null:
+  `let { name = "anon" } = user`. Works on both object and array forms.
+- **Rest in array destructure**: `let [head, ...tail] = arr`. The
+  rest binding gathers the remaining elements as an array. Must be
+  last in the pattern.
+- All three combine: `let { name: n = "anon" } = user`.
+
+[0.28.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.28.0
+
 ## [0.27.0] — 2026-05-02
 
 ### Added

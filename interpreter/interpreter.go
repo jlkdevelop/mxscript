@@ -818,31 +818,58 @@ func (i *Interpreter) execStmt(s parser.Stmt, env *Env) error {
 }
 
 // bindDestructure unpacks a value into multiple env bindings according
-// to the pattern. Missing keys / out-of-range indexes produce null.
+// to the pattern. Each binding may have a default value (used when the
+// source is missing or null) and array bindings may include a rest item.
 func (i *Interpreter) bindDestructure(n parser.Node, p *parser.DestructurePattern, v Value, env *Env) error {
 	if p.IsArray {
 		if v.Kind != KindArray {
 			return runtimeErrorf(n, "cannot array-destructure %s", v.typeName())
 		}
-		for k, name := range p.Names {
-			if k < len(v.Array) {
-				env.Set(name, v.Array[k])
-			} else {
-				env.Set(name, NullValue())
+		idx := 0
+		for k, b := range p.Items {
+			if b.Rest {
+				rest := v.Array[idx:]
+				env.Set(b.Name, ArrayValue(append([]Value{}, rest...)))
+				idx = len(v.Array)
+				continue
 			}
+			var val Value = NullValue()
+			if k < len(v.Array) {
+				val = v.Array[k]
+				idx = k + 1
+			}
+			if val.Kind == KindNull && b.Default != nil {
+				dv, err := i.evalExpr(b.Default, env)
+				if err != nil {
+					return err
+				}
+				val = dv
+			}
+			env.Set(b.Name, val)
 		}
 		return nil
 	}
 	if v.Kind != KindObject {
 		return runtimeErrorf(n, "cannot object-destructure %s", v.typeName())
 	}
-	for _, name := range p.Names {
-		val, ok := v.Object.Get(name)
-		if !ok {
-			env.Set(name, NullValue())
-			continue
+	for _, b := range p.Items {
+		key := b.Source
+		if key == "" {
+			key = b.Name
 		}
-		env.Set(name, val)
+		val, ok := v.Object.Get(key)
+		if !ok || val.Kind == KindNull {
+			if b.Default != nil {
+				dv, err := i.evalExpr(b.Default, env)
+				if err != nil {
+					return err
+				}
+				val = dv
+			} else if !ok {
+				val = NullValue()
+			}
+		}
+		env.Set(b.Name, val)
 	}
 	return nil
 }
