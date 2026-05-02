@@ -4,6 +4,25 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.29.0] — 2026-05-02
+
+### Added — LSP intelligence
+- **`textDocument/hover`** now returns a real signature + summary for
+  every built-in function and keyword. Position your cursor over
+  `json_stringify` and the editor shows:
+
+      json_stringify(v, pretty?) -> string
+
+      Serialize to JSON.
+- **`textDocument/completion`** offers all ~110 built-ins plus the
+  ~40 language keywords, each with a one-line `detail` and a markdown
+  documentation block. The editor handles prefix filtering client-side.
+- **Curated `builtinDocs` registry** in `lsp/lsp.go` — single source
+  of truth for hover / completion docs. Adding a new built-in to the
+  language now means adding one entry here too.
+
+[0.29.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.29.0
+
 ## [0.28.0] — 2026-05-02
 
 ### Added — destructuring polish

@@ -8,6 +8,9 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.29.0** (2026-05-02)
+  - LSP hover with signatures + summaries for ~110 builtins
+  - LSP completion (builtins + keywords)
 - **v0.28.0** (2026-05-02)
   - Destructure renaming (`{ name: n }`), defaults (`{ name = "anon" }`), array rest (`[head, ...rest]`)
 - **v0.27.0** (2026-05-02)
