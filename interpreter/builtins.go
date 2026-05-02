@@ -938,7 +938,7 @@ func builtinSort(i *Interpreter, args []Value) (Value, error) {
 	kind := out[0].Kind
 	for _, v := range out {
 		if v.Kind != kind {
-			return Value{}, fmt.Errorf("sort: cannot mix %s and %s", kind, v.typeName())
+			return Value{}, fmt.Errorf("sort: cannot mix %s and %s", out[0].typeName(), v.typeName())
 		}
 	}
 	switch kind {
@@ -948,7 +948,7 @@ func builtinSort(i *Interpreter, args []Value) (Value, error) {
 	case KindString:
 		simpleSortString(out)
 	default:
-		return Value{}, fmt.Errorf("sort: unsupported element type %s", kind)
+		return Value{}, fmt.Errorf("sort: unsupported element type %s", out[0].typeName())
 	}
 	return ArrayValue(out), nil
 }

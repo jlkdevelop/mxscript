@@ -176,10 +176,14 @@ while (n < 100) {
 ### HTTP routes
 
 ```mx
-route GET /             { return text("hello") }
-route GET /users/:id    { return json({ id: request.params.id }) }
-route POST /users       { return status(201, request.body) }
-route DELETE /users/:id { return json({ deleted: true }) }
+// Shorthand form (recommended)
+get /             { return text("hello") }
+get /users/:id    { return json({ id: request.params.id }) }
+post /users       { return status(201, request.body) }
+delete /users/:id { return json({ deleted: true }) }
+
+// Verbose form (equivalent)
+route GET /users  { return json(users) }
 ```
 
 ### Middleware

@@ -8,6 +8,11 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.9.0** (2026-05-02)
+  - Shorthand routes: `get /users { ... }` etc.
+  - Functional iterators: sort / sort_by / reduce / sum / group_by / unique / flatten / zip
+  - String helpers: pad_left / pad_right / repeat / substr / index_of
+  - Math: pow / sqrt / log / exp + `math.PI` / `math.E` namespace
 - **v0.8.0** (2026-05-02)
   - Call-stack tracebacks on runtime errors
   - `mx run --eval '<src>'` for inline one-liners

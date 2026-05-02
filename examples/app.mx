@@ -17,19 +17,19 @@ let users = [
   { id: 2, name: "Ada Lovelace", role: "Computing Pioneer" }
 ]
 
-route GET / {
+get / {
   return json({
     app: appName,
-    version: "0.1.0",
-    docs: "https://github.com/jlkdevelop/mxscript"
+    version: "0.9.0",
+    docs: "https://mxscript.com"
   })
 }
 
-route GET /users {
+get /users {
   return json(users)
 }
 
-route GET /users/:id {
+get /users/:id {
   let wanted = num(request.params.id)
   let found = find(users, fn(u) { return u.id == wanted })
   if (found == null) {
@@ -38,7 +38,7 @@ route GET /users/:id {
   return json(found)
 }
 
-route POST /users {
+post /users {
   let body = request.body
   if (body == null || body.name == null) {
     return status(400, { error: "name is required" })
@@ -48,6 +48,6 @@ route POST /users {
   return status(201, created)
 }
 
-route GET /health {
+get /health {
   return json({ status: "ok", uptime_ms: now() })
 }

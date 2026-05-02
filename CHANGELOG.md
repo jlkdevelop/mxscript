@@ -4,6 +4,26 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.9.0] — 2026-05-02
+
+### Added
+- **Shorthand HTTP routes**: `get /users { ... }` is sugar for
+  `route GET /users { ... }`. Supports `get`, `post`, `put`, `delete`,
+  `patch`, `head`, `options`. The verbose form keeps working — they
+  parse to the same AST node.
+- **Functional iterators**:
+  - `sort(arr)`, `sort_by(arr, key_fn)`
+  - `reduce(arr, fn, init)`
+  - `sum(arr)`
+  - `group_by(arr, key_fn)` → object of `key -> [items]`
+  - `unique(arr)`, `flatten(arr)`, `zip(a, b)`
+- **String helpers**: `pad_left`, `pad_right`, `repeat`, `substr`
+  (negative-start aware), `index_of`.
+- **Math helpers**: `pow`, `sqrt`, `log`, `exp`. Plus a `math` namespace
+  with `math.PI`, `math.E`, `math.INFINITY`, `math.NAN`.
+
+[0.9.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.9.0
+
 ## [0.8.0] — 2026-05-02
 
 ### Added
