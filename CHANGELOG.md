@@ -4,6 +4,36 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.35.0] — 2026-05-02
+
+### Added
+- **`mx bench [path]`** — built-in benchmark runner. Discovers
+  `*_bench.mx` files; runs every `bench_*` function with auto-scaled
+  iterations targeting a 1-second wall-clock budget per benchmark.
+
+  ```mx
+  fn bench_json_stringify() {
+    json_stringify({ id: 1, name: "Jassim", scores: [10,20,30] })
+  }
+  fn bench_hash_sha256() {
+    hash_sha256("the quick brown fox")
+  }
+  ```
+
+  ```
+  $ mx bench
+    json stringify       629,073 ops    1.94 us/op    (516,210 ops/s)
+    hash sha256        4,063,116 ops    0.29 us/op  (3,455,304 ops/s)
+  ```
+
+- **`fs.watch(path, fn, opts?)`** — recursive directory polling
+  watcher. Calls `fn(event)` for every file change with
+  `{ kind: "added"|"modified"|"removed", path }`. Pure stdlib (no
+  fsnotify dep). Returns a stop function. Default 500 ms poll
+  interval, configurable via `opts.interval_ms`.
+
+[0.35.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.35.0
+
 ## [0.34.0] — 2026-05-02
 
 ### Added

@@ -47,7 +47,7 @@ func (rr *replReader) ReadLine() (string, bool) {
 // Version is bumped at release time. Override at build with:
 //
 //	go build -ldflags "-X main.Version=v0.2.0"
-var Version = "v0.34.0"
+var Version = "v0.35.0"
 
 const (
 	cReset  = "\033[0m"
@@ -79,6 +79,8 @@ func main() {
 		cmdRepl(args)
 	case "test":
 		cmdTest(args)
+	case "bench":
+		cmdBench(args)
 	case "fmt":
 		cmdFmt(args)
 	case "lsp":
@@ -106,6 +108,7 @@ func printHelp() {
 	fmt.Println("  build --vercel        Generate a Vercel-deployable Go project from app.mx")
 	fmt.Println("  repl                  Start an interactive REPL")
 	fmt.Println("  test [path]           Run *_test.mx files (default: current dir)")
+	fmt.Println("  bench [path]          Run *_bench.mx benchmarks (each fn bench_*)")
 	fmt.Println("  fmt [paths]           Format .mx files (-w writes, --check exits 1 on diffs)")
 	fmt.Println("  lsp                   Run the Language Server (JSON-RPC over stdio)")
 	fmt.Println("  version               Print version and exit")
@@ -688,6 +691,135 @@ func expandFmtPaths(paths []string) ([]string, error) {
 		}
 	}
 	return out, nil
+}
+
+// ===== mx bench =====
+
+// cmdBench runs every `bench_*` function in `*_bench.mx` files and prints
+// a summary: ops/sec, ns/op, allocations not measured (Go-style would be
+// nice but we don't have allocation hooks in the interpreter yet).
+//
+//	fn bench_json_encode() {
+//	  json_stringify({ id: 1, name: "Jassim", scores: [10, 20, 30] })
+//	}
+//
+//	$ mx bench
+//	bench_json_encode    50000 ops    14.2 us/op
+func cmdBench(args []string) {
+	root := "."
+	for _, a := range args {
+		if !strings.HasPrefix(a, "-") {
+			root = a
+		}
+	}
+
+	files, err := findBenchFiles(root)
+	if err != nil {
+		fatal("bench discovery failed: %v", err)
+	}
+	if len(files) == 0 {
+		fmt.Printf("%sno *_bench.mx files found under %s%s\n", cYellow, root, cReset)
+		return
+	}
+
+	for _, file := range files {
+		fmt.Printf("\n%s%s%s\n", cBold, file, cReset)
+		src, err := os.ReadFile(file)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%scannot read %s:%s %v\n", cRed, file, cReset, err)
+			continue
+		}
+		tokens, err := lexer.New(string(src)).Tokenize()
+		if err != nil {
+			printError(file, err)
+			continue
+		}
+		prog, err := parser.New(tokens).Parse()
+		if err != nil {
+			printError(file, err)
+			continue
+		}
+		var names []string
+		for _, s := range prog.Stmts {
+			if fn, ok := s.(*parser.FnDecl); ok && strings.HasPrefix(fn.Name, "bench_") {
+				names = append(names, fn.Name)
+			}
+		}
+		if len(names) == 0 {
+			fmt.Printf("  %s(no bench_* functions in this file)%s\n", cGray, cReset)
+			continue
+		}
+		for _, name := range names {
+			interp := interpreter.New()
+			interp.SetFile(file)
+			if err := runProgramQuietly(interp, prog); err != nil {
+				fmt.Printf("  %s✗%s %s — %v\n", cRed, cReset, name, err)
+				continue
+			}
+			runBench(interp, name)
+		}
+	}
+}
+
+func findBenchFiles(root string) ([]string, error) {
+	var out []string
+	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			if strings.HasPrefix(info.Name(), ".") && path != root {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if strings.HasSuffix(path, "_bench.mx") {
+			out = append(out, path)
+		}
+		return nil
+	})
+	return out, err
+}
+
+// runBench calls fn enough times to fill at least 1 second, doubling
+// the iteration count each warm-up round. Reports ops, ops/sec, ns/op.
+func runBench(interp *interpreter.Interpreter, name string) {
+	const target = 1 * time.Second
+	n := 1
+	var elapsed time.Duration
+	for {
+		start := time.Now()
+		for i := 0; i < n; i++ {
+			if _, err := interp.CallByName(name, nil); err != nil {
+				fmt.Printf("  %s✗%s %s — %v\n", cRed, cReset, prettyBenchName(name), err)
+				return
+			}
+		}
+		elapsed = time.Since(start)
+		if elapsed >= target || n >= 1<<24 {
+			break
+		}
+		// Aim for `target` total — multiply n by the ratio plus a little headroom.
+		ratio := float64(target) / float64(elapsed)
+		next := int(float64(n) * ratio * 1.2)
+		if next <= n {
+			next = n * 2
+		}
+		n = next
+	}
+	nsPerOp := float64(elapsed.Nanoseconds()) / float64(n)
+	opsPerSec := float64(n) / elapsed.Seconds()
+	fmt.Printf("  %s%-32s%s %s%9d ops%s   %s%.2f us/op%s   %s(%.0f ops/s)%s\n",
+		cBold, prettyBenchName(name), cReset,
+		cYellow, n, cReset,
+		cCyan, nsPerOp/1000, cReset,
+		cGray, opsPerSec, cReset,
+	)
+}
+
+func prettyBenchName(name string) string {
+	stripped := strings.TrimPrefix(name, "bench_")
+	return strings.ReplaceAll(stripped, "_", " ")
 }
 
 // ===== mx test =====

@@ -166,6 +166,12 @@ func registerBuiltins(i *Interpreter) {
 	def("delete_file", builtinDeleteFile)
 	def("shell", builtinShell)
 
+	// --- Filesystem watching ---
+	fsNS := NewOrderedMap()
+	fsNS.Set("watch", FunctionValue(&Function{Name: "fs.watch", Native: builtinFSWatch}))
+	g.Set("fs", ObjectValue(fsNS))
+	builtinNames["fs"] = true
+
 	// --- CSV ---
 	def("csv_parse", builtinCSVParse)
 	def("csv_stringify", builtinCSVStringify)
@@ -1874,6 +1880,95 @@ func builtinDeleteFile(i *Interpreter, args []Value) (Value, error) {
 		return Value{}, err
 	}
 	return NullValue(), nil
+}
+
+// ===== Filesystem watching =====
+//
+// fs.watch(path, fn, opts?) polls a path (file or directory) for
+// changes — every 500ms by default — and calls fn(event) when something
+// shifts. Each event is { path, kind } where kind is "added" / "modified"
+// / "removed". Returns a stop function. Pure stdlib (no fsnotify dep);
+// good enough for hot-reload / build-watch use cases.
+//
+//	let stop = fs.watch("./public", fn(ev) {
+//	  print("[" + ev.kind + "]", ev.path)
+//	})
+//	// later: stop()
+
+func builtinFSWatch(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 2 || args[0].Kind != KindString || args[1].Kind != KindFunction {
+		return Value{}, fmt.Errorf("fs.watch(path, fn, opts?) requires (string, function)")
+	}
+	root := args[0].String
+	fn := args[1].Function
+	interval := 500 * time.Millisecond
+	if len(args) > 2 && args[2].Kind == KindObject {
+		if v, ok := args[2].Object.Get("interval_ms"); ok && v.Kind == KindNumber {
+			interval = time.Duration(v.Number) * time.Millisecond
+		}
+	}
+
+	stop := make(chan struct{})
+	go func() {
+		prev := snapshotFiles(root)
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-ticker.C:
+				cur := snapshotFiles(root)
+				for path, mod := range cur {
+					if old, ok := prev[path]; !ok {
+						fireFSEvent(i, fn, "added", path)
+					} else if old != mod {
+						fireFSEvent(i, fn, "modified", path)
+					}
+				}
+				for path := range prev {
+					if _, ok := cur[path]; !ok {
+						fireFSEvent(i, fn, "removed", path)
+					}
+				}
+				prev = cur
+			}
+		}
+	}()
+	cancel := &Function{Name: "stop", Native: func(_ *Interpreter, _ []Value) (Value, error) {
+		select {
+		case <-stop:
+		default:
+			close(stop)
+		}
+		return NullValue(), nil
+	}}
+	return FunctionValue(cancel), nil
+}
+
+func snapshotFiles(root string) map[string]int64 {
+	out := map[string]int64{}
+	_ = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info == nil {
+			return nil
+		}
+		if info.IsDir() {
+			return nil
+		}
+		// Combine size + mtime so renames-with-same-name still register.
+		out[path] = info.Size()*1_000_000_000 + info.ModTime().UnixNano()%1_000_000_000
+		return nil
+	})
+	return out
+}
+
+func fireFSEvent(i *Interpreter, fn *Function, kind, path string) {
+	ev := NewOrderedMap()
+	ev.Set("kind", StringValue(kind))
+	ev.Set("path", StringValue(path))
+	if _, err := i.callFunction(nil, fn, []Value{ObjectValue(ev)}); err != nil {
+		fmt.Fprintf(os.Stderr, "[mx fs.watch] %v\n", err)
+	}
 }
 
 // ===== Subprocess =====

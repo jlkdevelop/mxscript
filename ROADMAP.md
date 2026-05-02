@@ -8,6 +8,9 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.35.0** (2026-05-02)
+  - `mx bench` runner — auto-scales iterations to a 1s budget
+  - `fs.watch(path, fn)` polling directory watcher
 - **v0.34.0** (2026-05-02)
   - `swagger_ui(spec_url)` / `redoc_ui(spec_url)` interactive API docs
   - `sql.migrate(db, [...])` schema versioning (hash-tracked, idempotent)
