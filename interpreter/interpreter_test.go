@@ -330,3 +330,85 @@ func TestHandlerWithoutRoutes(t *testing.T) {
 		t.Errorf("expected 404 from empty handler, got %d", rec.Code)
 	}
 }
+
+// evalCase runs `eval(<src>)` from MX-land and returns the structured result
+// object so tests can assert against its fields.
+func evalCase(t *testing.T, src string) *OrderedMap {
+	t.Helper()
+	prog, err := ParseSource(`let __r = eval(__src)`)
+	if err != nil {
+		t.Fatalf("harness parse: %v", err)
+	}
+	interp := New()
+	interp.globals.Set("__src", StringValue(src))
+	if _, err := interp.Exec(prog); err != nil {
+		t.Fatalf("harness exec: %v", err)
+	}
+	v, _ := interp.globals.Get("__r")
+	if v.Kind != KindObject {
+		t.Fatalf("eval did not return an object, got %s", v.typeName())
+	}
+	return v.Object
+}
+
+func TestEvalCapturesOutput(t *testing.T) {
+	r := evalCase(t, `print("hello")`+"\n"+`print(1 + 2)`)
+	if ok, _ := r.Get("ok"); !ok.Bool {
+		errV, _ := r.Get("error")
+		t.Fatalf("expected ok=true, got error=%v", errV)
+	}
+	out, _ := r.Get("output")
+	want := "hello\n3\n"
+	if out.String != want {
+		t.Errorf("output mismatch:\ngot  %q\nwant %q", out.String, want)
+	}
+}
+
+func TestEvalReturnsParseError(t *testing.T) {
+	r := evalCase(t, `let x = @@@`)
+	if ok, _ := r.Get("ok"); ok.Bool {
+		t.Fatal("expected ok=false on syntax garbage")
+	}
+	errV, _ := r.Get("error")
+	if errV.Kind != KindString || errV.String == "" {
+		t.Errorf("expected non-empty error string, got %#v", errV)
+	}
+}
+
+func TestEvalReturnsRuntimeError(t *testing.T) {
+	r := evalCase(t, `error("boom")`)
+	if ok, _ := r.Get("ok"); ok.Bool {
+		t.Fatal("expected ok=false when program raises an error")
+	}
+	errV, _ := r.Get("error")
+	if !strings.Contains(errV.String, "boom") {
+		t.Errorf("expected error to mention 'boom', got %q", errV.String)
+	}
+}
+
+func TestEvalDoesNotStartServer(t *testing.T) {
+	// `server { port: ... }` and route declarations must NOT actually bind a
+	// listener — Exec only registers state. This is what makes eval() safe to
+	// call from inside a request handler (e.g. the playground's POST /run).
+	r := evalCase(t, `
+server { port: 9999 }
+get / { return json({ ok: true }) }
+print("registered")
+`)
+	if ok, _ := r.Get("ok"); !ok.Bool {
+		errV, _ := r.Get("error")
+		t.Fatalf("ok=false unexpectedly: %v", errV)
+	}
+	out, _ := r.Get("output")
+	if !strings.Contains(out.String, "registered") {
+		t.Errorf("expected 'registered' in output, got %q", out.String)
+	}
+}
+
+func TestEvalReportsDuration(t *testing.T) {
+	r := evalCase(t, `let x = 1 + 1`)
+	d, _ := r.Get("duration_ms")
+	if d.Kind != KindNumber || d.Number < 0 {
+		t.Errorf("expected non-negative duration_ms, got %#v", d)
+	}
+}
