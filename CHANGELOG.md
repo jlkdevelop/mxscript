@@ -4,6 +4,33 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.47.0] — 2026-05-02
+
+### Added — AI vision + similarity
+- **`ai.vision(prompt, images, opts?)`** — multimodal completion. Each
+  image is a URL or `data:` URL. Default model `gpt-4o-mini`.
+
+  ```mx
+  let r = ai.vision("Describe this", [
+    "https://example.com/photo.jpg",
+    "data:image/jpeg;base64," + base64_encode(read_file("./local.jpg"))
+  ])
+  ```
+
+- **`ai.similarity(a, b)`** — cosine similarity between two embedding
+  vectors. Returns a number in `[-1, 1]`. Useful for semantic search,
+  clustering, dedup:
+
+  ```mx
+  let q = ai.embed("cute pet animals")
+  loop docs as d {
+    let score = ai.similarity(q, d.embedding)
+    if (score > 0.85) { print(d.title) }
+  }
+  ```
+
+[0.47.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.47.0
+
 ## [0.46.0] — 2026-05-02
 
 ### Added

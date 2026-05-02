@@ -326,6 +326,8 @@ func registerBuiltins(i *Interpreter) {
 	ai.Set("complete", FunctionValue(&Function{Name: "ai.complete", Native: builtinAIComplete}))
 	ai.Set("embed", FunctionValue(&Function{Name: "ai.embed", Native: builtinAIEmbed}))
 	ai.Set("stream", FunctionValue(&Function{Name: "ai.stream", Native: builtinAIStream}))
+	ai.Set("vision", FunctionValue(&Function{Name: "ai.vision", Native: builtinAIVision}))
+	ai.Set("similarity", FunctionValue(&Function{Name: "ai.similarity", Native: builtinAISimilarity}))
 	g.Set("ai", ObjectValue(ai))
 	builtinNames["ai"] = true
 
@@ -4930,6 +4932,119 @@ func builtinAIStream(i *Interpreter, args []Value) (Value, error) {
 		}
 	}
 	return StringValue(full.String()), nil
+}
+
+// ai.vision(prompt, images, opts?) — multimodal completion. Each image
+// is either a URL or a base64 data: URL. Returns the assistant's reply
+// as a string.
+//
+//	let r = ai.vision("Describe this", [
+//	  "https://example.com/photo.jpg",
+//	  "data:image/jpeg;base64," + base64_encode(read_file("./local.jpg"))
+//	])
+func builtinAIVision(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 2 || args[0].Kind != KindString || args[1].Kind != KindArray {
+		return Value{}, fmt.Errorf("ai.vision(prompt, images, opts?) requires (string, array)")
+	}
+	prompt := args[0].String
+	model := "gpt-4o-mini"
+	maxTokens := 512
+	if len(args) > 2 && args[2].Kind == KindObject {
+		if v, ok := args[2].Object.Get("model"); ok && v.Kind == KindString {
+			model = v.String
+		}
+		if v, ok := args[2].Object.Get("max_tokens"); ok && v.Kind == KindNumber {
+			maxTokens = int(v.Number)
+		}
+	}
+
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	if apiKey == "" {
+		return Value{}, fmt.Errorf("ai.vision requires OPENAI_API_KEY")
+	}
+
+	// Build the multipart user message: text + each image as image_url.
+	parts := []map[string]any{{"type": "text", "text": prompt}}
+	for _, img := range args[1].Array {
+		if img.Kind != KindString {
+			continue
+		}
+		parts = append(parts, map[string]any{
+			"type":      "image_url",
+			"image_url": map[string]string{"url": img.String},
+		})
+	}
+	body, _ := json.Marshal(map[string]any{
+		"model":      model,
+		"max_tokens": maxTokens,
+		"messages":   []map[string]any{{"role": "user", "content": parts}},
+	})
+
+	req, err := http.NewRequest("POST", "https://api.openai.com/v1/chat/completions", bytes.NewReader(body))
+	if err != nil {
+		return Value{}, err
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{Timeout: 90 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return Value{}, err
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return Value{}, err
+	}
+	if resp.StatusCode >= 400 {
+		return Value{}, fmt.Errorf("ai.vision failed (%d): %s", resp.StatusCode, string(raw))
+	}
+	var parsed struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return Value{}, err
+	}
+	if len(parsed.Choices) == 0 {
+		return StringValue(""), nil
+	}
+	return StringValue(parsed.Choices[0].Message.Content), nil
+}
+
+// ai.similarity(a, b) — cosine similarity between two embedding vectors.
+// Returns a number in [-1, 1] where 1 means identical direction.
+//
+//	let a = ai.embed("dog")
+//	let b = ai.embed("puppy")
+//	let s = ai.similarity(a, b)   // ~0.85
+func builtinAISimilarity(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 2 || args[0].Kind != KindArray || args[1].Kind != KindArray {
+		return Value{}, fmt.Errorf("ai.similarity(a, b) requires two number arrays")
+	}
+	a, b := args[0].Array, args[1].Array
+	if len(a) != len(b) {
+		return Value{}, fmt.Errorf("ai.similarity: vectors must be the same length (%d vs %d)", len(a), len(b))
+	}
+	if len(a) == 0 {
+		return NumberValue(0), nil
+	}
+	var dot, normA, normB float64
+	for i := range a {
+		if a[i].Kind != KindNumber || b[i].Kind != KindNumber {
+			return Value{}, fmt.Errorf("ai.similarity: all elements must be numbers")
+		}
+		dot += a[i].Number * b[i].Number
+		normA += a[i].Number * a[i].Number
+		normB += b[i].Number * b[i].Number
+	}
+	if normA == 0 || normB == 0 {
+		return NumberValue(0), nil
+	}
+	return NumberValue(dot / (math.Sqrt(normA) * math.Sqrt(normB))), nil
 }
 
 func builtinAIEmbed(i *Interpreter, args []Value) (Value, error) {
