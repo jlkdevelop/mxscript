@@ -1,0 +1,11 @@
+# Tell GitHub to detect .mx files. Once MX Script is accepted upstream
+# at github-linguist, the `linguist-language` override here will pick up
+# the correct grammar automatically. Until then, treating .mx like a
+# scripting language gives a sensible fallback for diff/blame views.
+*.mx              linguist-detectable=true
+*.mx              linguist-language=MX
+*.mx              text eol=lf
+
+# Don't count vendored or auto-generated files toward language stats.
+extras/vscode/**  linguist-vendored=true
+docs/**           linguist-documentation=true

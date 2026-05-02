@@ -1,0 +1,12 @@
+// hello.mx — the smallest possible MX Script program.
+// Run with:  mx run examples/hello.mx
+print("Hello from MX Script!")
+
+let name = "Jassim"
+print("Founder:", name)
+
+fn greet(who) {
+  return "Hello, " + who
+}
+
+print(greet("world"))

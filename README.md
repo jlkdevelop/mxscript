@@ -207,9 +207,11 @@ route POST /admin {
 | Array      | `push`, `pop`, `map`, `filter`, `find`, `join`, `reverse`, `range` |
 | Math       | `round`, `floor`, `ceil`, `abs`, `min`, `max`, `random` |
 | Types      | `typeof`, `isString`, `isNumber`, `isBool`, `isNull`, `isArray`, `isObject` |
-| JSON       | `json_parse`, `json_stringify` |
+| JSON       | `json_parse`, `json_stringify(v, pretty?)` |
 | File I/O   | `read_file`, `write_file`, `file_exists`, `list_files`, `delete_file` |
-| Crypto     | `hash_sha256`, `base64_encode`, `base64_decode`, `uuid` |
+| Crypto     | `hash_sha256`, `hmac_sha256`, `base64_encode`, `base64_decode`, `uuid` |
+| Regex      | `re_match`, `re_find`, `re_find_all`, `re_replace` |
+| JWT        | `jwt.sign(payload, secret)`, `jwt.verify(token, secret)` |
 | Time       | `now()`, `now_iso()`, `sleep(ms)` |
 | AI         | `ai.complete(prompt)`, `ai.embed(text)` |
 
@@ -226,6 +228,34 @@ route POST /summarise {
 
 `ai.complete` reads `OPENAI_API_KEY` from the environment.
 
+### Pattern matching
+
+```mx
+let label = match status_code {
+  200 => "OK"
+  404 => "Not Found"
+  500 => "Server Error"
+  _   => "Status ${status_code}"
+}
+```
+
+### Authentication with JWT
+
+```mx
+route POST /login {
+  let token = jwt.sign({ sub: request.body.username, exp: now() / 1000 + 3600 }, env("JWT_SECRET"))
+  return json({ token: token })
+}
+
+route GET /me {
+  let claims = jwt.verify(request.headers["authorization"], env("JWT_SECRET"))
+  if (claims == null) {
+    return status(401, { error: "invalid token" })
+  }
+  return json(claims)
+}
+```
+
 ### Error handling
 
 ```mx
@@ -236,6 +266,22 @@ try {
   return status(400, { error: e.message })
 }
 ```
+
+---
+
+## Editor support
+
+`.mx` files have full syntax highlighting in VS Code (and any TextMate-compatible editor):
+
+```bash
+git clone https://github.com/jlkdevelop/mxscript.git
+cd mxscript/extras/vscode
+code --install-extension .
+```
+
+The grammar lives at [`extras/syntax/mxscript.tmLanguage.json`](extras/syntax/mxscript.tmLanguage.json) — drop it into Sublime, Atom, or any other TextMate-aware editor.
+
+GitHub itself doesn't yet recognise `.mx` natively (we're working through [github-linguist](https://github.com/github-linguist/linguist)), but the `.gitattributes` in this repo gives the best fallback.
 
 ---
 

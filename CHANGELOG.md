@@ -4,6 +4,42 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] — 2026-05-02
+
+### Added
+- **Pattern matching** with `match`:
+
+  ```mx
+  let label = match value {
+    1 => "one"
+    2 => "two"
+    _ => "other"
+  }
+  ```
+
+  New `=>` arrow operator. `_` is the wildcard arm. Returns `null` if
+  no arm matches.
+- **JWT (HS256)** in stdlib:
+  - `jwt.sign(payload, secret)` returns a signed token.
+  - `jwt.verify(token, secret)` returns the payload object — or `null`
+    if the signature is invalid or the `exp` claim has passed.
+- **Regex** built-ins (Go's RE2 engine — no catastrophic backtracking):
+  - `re_match(pattern, s)` → bool
+  - `re_find(pattern, s)` → string (or array of capture groups)
+  - `re_find_all(pattern, s)` → array of all matches
+  - `re_replace(pattern, s, repl)` → string
+- **HMAC**: `hmac_sha256(secret, message)` returns a hex digest.
+- **Editor support**:
+  - TextMate grammar at `extras/syntax/mxscript.tmLanguage.json` —
+    works in any editor that speaks TextMate.
+  - VS Code extension scaffold in `extras/vscode/`.
+  - `.gitattributes` declares `.mx` so GitHub treats it as detectable.
+  - `extras/linguist/` carries the grammar + sample files needed for
+    a future PR to github-linguist (the project that powers GitHub's
+    syntax highlighting).
+
+[0.5.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.5.0
+
 ## [0.4.0] — 2026-05-02
 
 ### Added

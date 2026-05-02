@@ -8,6 +8,12 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.5.0** (2026-05-02)
+  - Pattern matching with `match` / `=>`
+  - JWT (HS256) — `jwt.sign` / `jwt.verify` (honours `exp`)
+  - Regex — `re_match`, `re_find`, `re_find_all`, `re_replace`
+  - `hmac_sha256(secret, msg)` general-purpose HMAC
+  - TextMate grammar + VS Code extension + linguist PR scaffolding
 - **v0.4.0** (2026-05-02)
   - Optional chaining (`?.`) and nullish coalescing (`??`)
   - Cookies: `request.cookies` (read) and response opts (write)
@@ -37,16 +43,16 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ---
 
-## Next up (v0.5 candidates)
+## Next up (v0.6 candidates)
 
 These are the things we'd most like help with.
 
 - [ ] **`mx fmt`** — opinionated formatter for `.mx` files.
 - [ ] **WebSocket routes** — `route WS /chat { ... }`.
 - [ ] **SQLite driver** — `db.query("select ...")` as a built-in (pure-Go driver).
-- [ ] **Pattern matching** — `match value { 1 => "one", _ => "other" }`.
-- [ ] **Sessions** — `session(request)` helper backed by signed cookies.
-- [ ] **JWT** — `jwt.sign(payload)` / `jwt.verify(token)`.
+- [ ] **Sessions helper** — signed-cookie sessions backed by JWT.
+- [ ] **GitHub linguist PR** — once we hit the public-adoption threshold.
+- [ ] **VS Code Marketplace listing** — publish the extension.
 
 ---
 

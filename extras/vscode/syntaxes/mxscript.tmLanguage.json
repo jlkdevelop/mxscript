@@ -1,0 +1,126 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "MX Script",
+  "scopeName": "source.mx",
+  "fileTypes": ["mx"],
+  "patterns": [
+    { "include": "#comment" },
+    { "include": "#keyword" },
+    { "include": "#constant" },
+    { "include": "#string" },
+    { "include": "#number" },
+    { "include": "#route" },
+    { "include": "#function-call" },
+    { "include": "#operator" },
+    { "include": "#identifier" }
+  ],
+  "repository": {
+    "comment": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.mx",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.line.number-sign.mx",
+          "match": "#.*$"
+        },
+        {
+          "name": "comment.block.mx",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "keyword": {
+      "patterns": [
+        {
+          "name": "keyword.control.mx",
+          "match": "\\b(if|else|loop|while|as|return|try|catch|break|continue|match|import|export|use)\\b"
+        },
+        {
+          "name": "storage.type.mx",
+          "match": "\\b(let|fn|server|route|middleware|static)\\b"
+        }
+      ]
+    },
+    "constant": {
+      "patterns": [
+        {
+          "name": "constant.language.mx",
+          "match": "\\b(true|false|null)\\b"
+        }
+      ]
+    },
+    "number": {
+      "name": "constant.numeric.mx",
+      "match": "\\b\\d+(\\.\\d+)?\\b"
+    },
+    "string": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.mx",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            { "name": "constant.character.escape.mx", "match": "\\\\." },
+            {
+              "name": "meta.template.expression.mx",
+              "begin": "\\$\\{",
+              "end": "\\}",
+              "beginCaptures": { "0": { "name": "punctuation.definition.template-expression.begin.mx" } },
+              "endCaptures":   { "0": { "name": "punctuation.definition.template-expression.end.mx" } },
+              "patterns": [{ "include": "$self" }]
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.single.mx",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            { "name": "constant.character.escape.mx", "match": "\\\\." }
+          ]
+        }
+      ]
+    },
+    "route": {
+      "patterns": [
+        {
+          "match": "\\b(route)\\s+(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\\b\\s*([^{]*)",
+          "captures": {
+            "1": { "name": "storage.type.mx" },
+            "2": { "name": "support.constant.http-method.mx" },
+            "3": { "name": "string.unquoted.path.mx" }
+          }
+        }
+      ]
+    },
+    "function-call": {
+      "patterns": [
+        {
+          "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(",
+          "captures": {
+            "1": { "name": "entity.name.function.mx" }
+          }
+        }
+      ]
+    },
+    "operator": {
+      "patterns": [
+        {
+          "name": "keyword.operator.mx",
+          "match": "(\\?\\.|\\?\\?|=>|==|!=|<=|>=|&&|\\|\\||\\.\\.\\.|[+\\-*/%<>!=])"
+        }
+      ]
+    },
+    "identifier": {
+      "patterns": [
+        {
+          "name": "variable.other.mx",
+          "match": "\\b[a-zA-Z_][a-zA-Z0-9_]*\\b"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "name": "mxscript",
+  "displayName": "MX Script",
+  "description": "Syntax highlighting and language support for MX Script (.mx files).",
+  "version": "0.5.0",
+  "publisher": "jlkdevelop",
+  "author": {
+    "name": "Jassim Alkharafi",
+    "url": "https://github.com/jlkdevelop"
+  },
+  "license": "MIT",
+  "homepage": "https://mxscript.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jlkdevelop/mxscript.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jlkdevelop/mxscript/issues"
+  },
+  "engines": {
+    "vscode": "^1.60.0"
+  },
+  "categories": ["Programming Languages"],
+  "keywords": ["mx", "mxscript", "language", "interpreter", "web", "api"],
+  "icon": "icon.png",
+  "contributes": {
+    "languages": [
+      {
+        "id": "mxscript",
+        "aliases": ["MX Script", "mxscript", "mx"],
+        "extensions": [".mx"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "mxscript",
+        "scopeName": "source.mx",
+        "path": "./syntaxes/mxscript.tmLanguage.json"
+      }
+    ]
+  }
+}
