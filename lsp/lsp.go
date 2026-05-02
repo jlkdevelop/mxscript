@@ -405,7 +405,8 @@ var builtinDocs = map[string]builtinDoc{
 	"html":     {"html(value, opts?) -> response", "HTML response."},
 	"status":   {"status(code, body?, opts?) -> response", "Custom status code."},
 	"redirect": {"redirect(url, code?) -> response", "302 redirect (or supplied code)."},
-	"render":   {"render(path, vars?) -> response", "Render an HTML template file with `{{ vars }}`."},
+	"render":   {"render(path, vars?, partials?) -> response", "Render an HTML template file. Supports `{{ var }}`, `{{{ raw }}}`, `{{#if}}…{{else}}…{{/if}}`, `{{#each items}}…{{/each}}` (with `{{this}}`, `{{@index}}`), and `{{> partial}}`."},
+	"render_string": {"render_string(tmpl, vars?, partials?) -> string", "Render an inline template. Same syntax as `render` — returns the result as a string."},
 
 	// HTTP request
 	"fetch": {"fetch(url, opts?) -> { status, headers, body, text }", "Outbound HTTP request."},

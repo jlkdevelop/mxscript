@@ -3153,11 +3153,15 @@ func builtinAssertEq(i *Interpreter, args []Value) (Value, error) {
 	return NullValue(), nil
 }
 
-// render(path, vars?) reads a template file from disk and substitutes
-// any `${expr}` placeholders. Variables come from `vars` (an object) and
-// support dotted access for nested values. Reasonably robust against
-// the most common XSS pitfalls because all substituted values are
-// auto html-escaped — call render_string for raw passthrough.
+// render(path, vars?, partials?) reads an HTML template from disk and
+// renders it. Returns a Response with content-type text/html.
+//
+//	render("./views/post.html", { post: post })
+//	render("./views/page.html", vars, { header: "<h1>Hi</h1>", nav: navHtml })
+//
+// All `{{ expr }}` substitutions are HTML-escaped. Use `{{{ expr }}}` for
+// raw insertion. Supports `{{#if expr}}…{{else}}…{{/if}}`,
+// `{{#each items}}…{{/each}}`, and `{{> name}}` partials.
 func builtinRender(i *Interpreter, args []Value) (Value, error) {
 	path, err := stringArg(args, 0)
 	if err != nil {
@@ -3167,88 +3171,344 @@ func builtinRender(i *Interpreter, args []Value) (Value, error) {
 	if err != nil {
 		return Value{}, err
 	}
-	var vars *OrderedMap
-	if len(args) > 1 && args[1].Kind == KindObject {
-		vars = args[1].Object
-	}
-	out, err := renderTemplate(string(src), vars, true)
+	vars, partials := templateArgs(args)
+	out, err := renderTemplate(string(src), vars, partials, true)
 	if err != nil {
 		return Value{}, err
 	}
 	return ResponseValue(&Response{ContentType: "text/html; charset=utf-8", Body: StringValue(out)}), nil
 }
 
-// render_string(template, vars?) is the same as render() but takes the
-// template inline. Returns a plain string — caller decides what to do
-// with it (html(), text(), persistence, etc.).
+// render_string(template, vars?, partials?) renders an inline template
+// and returns the resulting string. Caller decides what to do with the
+// output (html(), persistence, email body, etc.).
 func builtinRenderString(i *Interpreter, args []Value) (Value, error) {
 	tmpl, err := stringArg(args, 0)
 	if err != nil {
 		return Value{}, err
 	}
-	var vars *OrderedMap
-	if len(args) > 1 && args[1].Kind == KindObject {
-		vars = args[1].Object
-	}
-	out, err := renderTemplate(tmpl, vars, true)
+	vars, partials := templateArgs(args)
+	out, err := renderTemplate(tmpl, vars, partials, true)
 	if err != nil {
 		return Value{}, err
 	}
 	return StringValue(out), nil
 }
 
-// renderTemplate replaces `{{ path.expr }}` placeholders with the looked-up
-// value (HTML-escaped if `escape` is true). `{{{ path }}}` is the raw form
-// — no escaping. Templates use `{{` instead of `${` so they don't collide
-// with MX's own string interpolation in the surrounding source.
-func renderTemplate(tmpl string, vars *OrderedMap, escape bool) (string, error) {
+// templateArgs pulls `vars` (object) and `partials` (object of
+// name->template-string) from the optional positional args.
+func templateArgs(args []Value) (*OrderedMap, map[string]string) {
+	var vars *OrderedMap
+	if len(args) > 1 && args[1].Kind == KindObject {
+		vars = args[1].Object
+	}
+	partials := map[string]string{}
+	if len(args) > 2 && args[2].Kind == KindObject {
+		for _, k := range args[2].Object.Keys {
+			v, _ := args[2].Object.Get(k)
+			if v.Kind == KindString {
+				partials[k] = v.String
+			}
+		}
+	}
+	return vars, partials
+}
+
+// ===== Template engine =====
+//
+// Templates are parsed once into a small AST of nodes (text, interp,
+// if, each, partial) and rendered against a stack of scopes so `each`
+// can shadow names from outer scopes without losing them.
+//
+// Tags:
+//   {{ expr }}           HTML-escaped interpolation
+//   {{{ expr }}}         raw interpolation (no escaping)
+//   {{#if expr}}…{{else}}…{{/if}}
+//   {{#each items}}…{{/each}}   inside: {{this}}, {{@index}}, {{@key}}
+//   {{> name}}           include a partial by name
+//
+// Expressions are dotted-path lookups against the scope stack: `name`,
+// `post.title`, `user.address.city`, `this.name`. There is no expression
+// language beyond that — keep templates declarative.
+
+type tmplNode interface{ tmplNode() }
+
+type tmplText struct{ s string }
+type tmplInterp struct {
+	expr   string
+	escape bool
+}
+type tmplIf struct {
+	cond     string
+	then     []tmplNode
+	elseBody []tmplNode
+}
+type tmplEach struct {
+	expr string
+	body []tmplNode
+}
+type tmplPartial struct{ name string }
+
+func (tmplText) tmplNode()    {}
+func (tmplInterp) tmplNode()  {}
+func (tmplIf) tmplNode()      {}
+func (tmplEach) tmplNode()    {}
+func (tmplPartial) tmplNode() {}
+
+// renderTemplate is the public entry point. It parses then renders.
+func renderTemplate(tmpl string, vars *OrderedMap, partials map[string]string, escape bool) (string, error) {
+	tokens, err := tmplTokenize(tmpl)
+	if err != nil {
+		return "", err
+	}
+	nodes, _, err := tmplParse(tokens, 0, "")
+	if err != nil {
+		return "", err
+	}
+	scope := []map[string]Value{}
+	if vars != nil {
+		scope = append(scope, orderedMapToMap(vars))
+	}
 	var b strings.Builder
-	i := 0
-	for i < len(tmpl) {
-		// Triple-brace raw form first.
-		if i+2 < len(tmpl) && tmpl[i] == '{' && tmpl[i+1] == '{' && tmpl[i+2] == '{' {
-			end := strings.Index(tmpl[i+3:], "}}}")
-			if end < 0 {
-				return "", fmt.Errorf("unterminated {{{...}}} in template")
-			}
-			expr := strings.TrimSpace(tmpl[i+3 : i+3+end])
-			val := lookupTemplateVar(vars, expr)
-			b.WriteString(val.Display())
-			i += 3 + end + 3
-			continue
-		}
-		// Standard {{ }} form (HTML-escaped).
-		if i+1 < len(tmpl) && tmpl[i] == '{' && tmpl[i+1] == '{' {
-			end := strings.Index(tmpl[i+2:], "}}")
-			if end < 0 {
-				return "", fmt.Errorf("unterminated {{...}} in template")
-			}
-			expr := strings.TrimSpace(tmpl[i+2 : i+2+end])
-			val := lookupTemplateVar(vars, expr)
-			s := val.Display()
-			if escape {
-				s = htmlEscapeString(s)
-			}
-			b.WriteString(s)
-			i += 2 + end + 2
-			continue
-		}
-		b.WriteByte(tmpl[i])
-		i++
+	if err := tmplRender(&b, nodes, scope, partials, escape, 0); err != nil {
+		return "", err
 	}
 	return b.String(), nil
 }
 
-func lookupTemplateVar(vars *OrderedMap, expr string) Value {
-	if vars == nil || expr == "" {
+// tmplToken is a flat token: text, an interpolation, or one of the
+// block-control tags (if/else/endif/each/endeach/partial).
+type tmplToken struct {
+	kind string // "text", "interp", "raw", "if", "else", "endif", "each", "endeach", "partial"
+	body string // text content or expression
+}
+
+func tmplTokenize(s string) ([]tmplToken, error) {
+	var out []tmplToken
+	i := 0
+	for i < len(s) {
+		// {{{ raw }}}
+		if i+2 < len(s) && s[i] == '{' && s[i+1] == '{' && s[i+2] == '{' {
+			end := strings.Index(s[i+3:], "}}}")
+			if end < 0 {
+				return nil, fmt.Errorf("unterminated {{{...}}} in template")
+			}
+			out = append(out, tmplToken{kind: "raw", body: strings.TrimSpace(s[i+3 : i+3+end])})
+			i += 3 + end + 3
+			continue
+		}
+		// {{ ... }}
+		if i+1 < len(s) && s[i] == '{' && s[i+1] == '{' {
+			end := strings.Index(s[i+2:], "}}")
+			if end < 0 {
+				return nil, fmt.Errorf("unterminated {{...}} in template")
+			}
+			body := strings.TrimSpace(s[i+2 : i+2+end])
+			i += 2 + end + 2
+			switch {
+			case strings.HasPrefix(body, "#if "):
+				out = append(out, tmplToken{kind: "if", body: strings.TrimSpace(body[3:])})
+			case body == "else":
+				out = append(out, tmplToken{kind: "else"})
+			case body == "/if":
+				out = append(out, tmplToken{kind: "endif"})
+			case strings.HasPrefix(body, "#each "):
+				out = append(out, tmplToken{kind: "each", body: strings.TrimSpace(body[5:])})
+			case body == "/each":
+				out = append(out, tmplToken{kind: "endeach"})
+			case strings.HasPrefix(body, "> "):
+				out = append(out, tmplToken{kind: "partial", body: strings.TrimSpace(body[2:])})
+			default:
+				out = append(out, tmplToken{kind: "interp", body: body})
+			}
+			continue
+		}
+		// Run of plain text up to the next `{{`.
+		j := i
+		for j < len(s) && !(j+1 < len(s) && s[j] == '{' && s[j+1] == '{') {
+			j++
+		}
+		out = append(out, tmplToken{kind: "text", body: s[i:j]})
+		i = j
+	}
+	return out, nil
+}
+
+// tmplParse converts a flat token stream into a node tree, stopping
+// when it sees `stopAt` (used to find the matching `endif`/`endeach`/
+// `else`). Returns the nodes, the index of the stop token, or err.
+func tmplParse(tokens []tmplToken, start int, stopAt string) ([]tmplNode, int, error) {
+	var nodes []tmplNode
+	i := start
+	for i < len(tokens) {
+		t := tokens[i]
+		if stopAt != "" && (t.kind == stopAt || (stopAt == "endif" && t.kind == "else")) {
+			return nodes, i, nil
+		}
+		switch t.kind {
+		case "text":
+			nodes = append(nodes, tmplText{s: t.body})
+			i++
+		case "interp":
+			nodes = append(nodes, tmplInterp{expr: t.body, escape: true})
+			i++
+		case "raw":
+			nodes = append(nodes, tmplInterp{expr: t.body, escape: false})
+			i++
+		case "partial":
+			nodes = append(nodes, tmplPartial{name: t.body})
+			i++
+		case "if":
+			cond := t.body
+			thenNodes, next, err := tmplParse(tokens, i+1, "endif")
+			if err != nil {
+				return nil, 0, err
+			}
+			if next >= len(tokens) {
+				return nil, 0, fmt.Errorf("unterminated {{#if %s}}", cond)
+			}
+			var elseNodes []tmplNode
+			if tokens[next].kind == "else" {
+				elseNodes, next, err = tmplParse(tokens, next+1, "endif")
+				if err != nil {
+					return nil, 0, err
+				}
+				if next >= len(tokens) || tokens[next].kind != "endif" {
+					return nil, 0, fmt.Errorf("unterminated {{#if %s}}", cond)
+				}
+			}
+			nodes = append(nodes, tmplIf{cond: cond, then: thenNodes, elseBody: elseNodes})
+			i = next + 1
+		case "each":
+			expr := t.body
+			body, next, err := tmplParse(tokens, i+1, "endeach")
+			if err != nil {
+				return nil, 0, err
+			}
+			if next >= len(tokens) || tokens[next].kind != "endeach" {
+				return nil, 0, fmt.Errorf("unterminated {{#each %s}}", expr)
+			}
+			nodes = append(nodes, tmplEach{expr: expr, body: body})
+			i = next + 1
+		case "else", "endif", "endeach":
+			return nil, 0, fmt.Errorf("stray {{%s}} with no matching opener", t.kind)
+		default:
+			return nil, 0, fmt.Errorf("unknown template token %q", t.kind)
+		}
+	}
+	return nodes, i, nil
+}
+
+// tmplRender walks the node tree against the scope stack and writes
+// output to b. depth guards against pathological partial recursion.
+func tmplRender(b *strings.Builder, nodes []tmplNode, scope []map[string]Value, partials map[string]string, escape bool, depth int) error {
+	if depth > 16 {
+		return fmt.Errorf("template partial recursion exceeded depth 16")
+	}
+	for _, n := range nodes {
+		switch v := n.(type) {
+		case tmplText:
+			b.WriteString(v.s)
+		case tmplInterp:
+			val := lookupTemplateExpr(scope, v.expr)
+			s := val.Display()
+			if v.escape {
+				s = htmlEscapeString(s)
+			}
+			b.WriteString(s)
+		case tmplPartial:
+			tmpl, ok := partials[v.name]
+			if !ok {
+				return fmt.Errorf("template partial %q not provided", v.name)
+			}
+			tokens, err := tmplTokenize(tmpl)
+			if err != nil {
+				return err
+			}
+			child, _, err := tmplParse(tokens, 0, "")
+			if err != nil {
+				return err
+			}
+			if err := tmplRender(b, child, scope, partials, escape, depth+1); err != nil {
+				return err
+			}
+		case tmplIf:
+			val := lookupTemplateExpr(scope, v.cond)
+			if isTemplateTruthy(val) {
+				if err := tmplRender(b, v.then, scope, partials, escape, depth); err != nil {
+					return err
+				}
+			} else if len(v.elseBody) > 0 {
+				if err := tmplRender(b, v.elseBody, scope, partials, escape, depth); err != nil {
+					return err
+				}
+			}
+		case tmplEach:
+			val := lookupTemplateExpr(scope, v.expr)
+			switch val.Kind {
+			case KindArray:
+				for idx, item := range val.Array {
+					frame := map[string]Value{
+						"this":   item,
+						"@index": NumberValue(float64(idx)),
+					}
+					// Object items expose their keys directly so templates
+					// can write `{{title}}` instead of `{{this.title}}`.
+					if item.Kind == KindObject {
+						for _, k := range item.Object.Keys {
+							iv, _ := item.Object.Get(k)
+							frame[k] = iv
+						}
+					}
+					if err := tmplRender(b, v.body, append(scope, frame), partials, escape, depth); err != nil {
+						return err
+					}
+				}
+			case KindObject:
+				for idx, k := range val.Object.Keys {
+					iv, _ := val.Object.Get(k)
+					frame := map[string]Value{
+						"this":   iv,
+						"@key":   StringValue(k),
+						"@index": NumberValue(float64(idx)),
+					}
+					if iv.Kind == KindObject {
+						for _, kk := range iv.Object.Keys {
+							ivv, _ := iv.Object.Get(kk)
+							frame[kk] = ivv
+						}
+					}
+					if err := tmplRender(b, v.body, append(scope, frame), partials, escape, depth); err != nil {
+						return err
+					}
+				}
+			default:
+				// Null / non-iterable: render zero times — same semantics
+				// as Handlebars / Mustache. Don't error.
+			}
+		}
+	}
+	return nil
+}
+
+// lookupTemplateExpr resolves a dotted path against the scope stack.
+// Inner scopes shadow outer; identifiers starting with `@` and `this`
+// always come from the innermost frame.
+func lookupTemplateExpr(scope []map[string]Value, expr string) Value {
+	if expr == "" {
 		return NullValue()
 	}
 	parts := strings.Split(expr, ".")
-	v, ok := vars.Get(parts[0])
-	if !ok {
-		return NullValue()
+	for k := len(scope) - 1; k >= 0; k-- {
+		if v, ok := scope[k][parts[0]]; ok {
+			return walkValuePath(v, parts[1:])
+		}
 	}
-	for _, p := range parts[1:] {
+	return NullValue()
+}
+
+func walkValuePath(v Value, parts []string) Value {
+	for _, p := range parts {
 		if v.Kind != KindObject {
 			return NullValue()
 		}
@@ -3259,6 +3519,36 @@ func lookupTemplateVar(vars *OrderedMap, expr string) Value {
 		}
 	}
 	return v
+}
+
+// isTemplateTruthy uses the same rules as MX's IsTruthy plus a special
+// case for empty arrays / empty strings / null so templates feel like
+// the user expects.
+func isTemplateTruthy(v Value) bool {
+	switch v.Kind {
+	case KindNull:
+		return false
+	case KindBool:
+		return v.Bool
+	case KindNumber:
+		return v.Number != 0
+	case KindString:
+		return v.String != ""
+	case KindArray:
+		return len(v.Array) > 0
+	case KindObject:
+		return len(v.Object.Keys) > 0
+	}
+	return true
+}
+
+func orderedMapToMap(o *OrderedMap) map[string]Value {
+	out := make(map[string]Value, len(o.Keys))
+	for _, k := range o.Keys {
+		v, _ := o.Get(k)
+		out[k] = v
+	}
+	return out
 }
 
 func htmlEscapeString(s string) string {

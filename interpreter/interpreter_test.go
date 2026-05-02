@@ -468,3 +468,124 @@ func TestOpenAICompatRequiresKey(t *testing.T) {
 		}
 	}
 }
+
+func TestTemplateInterpolationAndEscape(t *testing.T) {
+	vars := NewOrderedMap()
+	vars.Set("title", StringValue("<script>alert(1)</script>"))
+	vars.Set("desc", StringValue("hello"))
+	out, err := renderTemplate("<h1>{{ title }}</h1><p>{{{ desc }}}</p>", vars, nil, true)
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	want := "<h1>&lt;script&gt;alert(1)&lt;/script&gt;</h1><p>hello</p>"
+	if out != want {
+		t.Errorf("got %q, want %q", out, want)
+	}
+}
+
+func TestTemplateIfElse(t *testing.T) {
+	vars := NewOrderedMap()
+	vars.Set("logged_in", BoolValue(true))
+	tmpl := `{{#if logged_in}}hi{{else}}sign in{{/if}}`
+	out, _ := renderTemplate(tmpl, vars, nil, true)
+	if out != "hi" {
+		t.Errorf("if=true: got %q", out)
+	}
+	vars.Set("logged_in", BoolValue(false))
+	out, _ = renderTemplate(tmpl, vars, nil, true)
+	if out != "sign in" {
+		t.Errorf("if=false: got %q", out)
+	}
+}
+
+func TestTemplateEachArrayOfObjects(t *testing.T) {
+	post1 := NewOrderedMap()
+	post1.Set("title", StringValue("First"))
+	post1.Set("slug", StringValue("first"))
+	post2 := NewOrderedMap()
+	post2.Set("title", StringValue("Second"))
+	post2.Set("slug", StringValue("second"))
+	vars := NewOrderedMap()
+	vars.Set("posts", ArrayValue([]Value{ObjectValue(post1), ObjectValue(post2)}))
+
+	tmpl := `<ul>{{#each posts}}<li><a href="/{{slug}}">{{title}}</a></li>{{/each}}</ul>`
+	out, err := renderTemplate(tmpl, vars, nil, true)
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	want := `<ul><li><a href="/first">First</a></li><li><a href="/second">Second</a></li></ul>`
+	if out != want {
+		t.Errorf("got %q, want %q", out, want)
+	}
+}
+
+func TestTemplateEachExposesIndexAndThis(t *testing.T) {
+	vars := NewOrderedMap()
+	vars.Set("nums", ArrayValue([]Value{NumberValue(10), NumberValue(20), NumberValue(30)}))
+	tmpl := `{{#each nums}}{{@index}}={{this}};{{/each}}`
+	out, _ := renderTemplate(tmpl, vars, nil, true)
+	if out != "0=10;1=20;2=30;" {
+		t.Errorf("got %q", out)
+	}
+}
+
+func TestTemplateEachEmptyArrayRendersNothing(t *testing.T) {
+	vars := NewOrderedMap()
+	vars.Set("items", ArrayValue(nil))
+	out, _ := renderTemplate(`pre{{#each items}}x{{/each}}post`, vars, nil, true)
+	if out != "prepost" {
+		t.Errorf("got %q, want \"prepost\"", out)
+	}
+}
+
+func TestTemplatePartials(t *testing.T) {
+	vars := NewOrderedMap()
+	vars.Set("user", StringValue("Jassim"))
+	tmpl := `<header>{{> nav}}</header><main>hi {{ user }}</main>`
+	partials := map[string]string{
+		"nav": `<a href="/">home</a>`,
+	}
+	out, err := renderTemplate(tmpl, vars, partials, true)
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	want := `<header><a href="/">home</a></header><main>hi Jassim</main>`
+	if out != want {
+		t.Errorf("got %q, want %q", out, want)
+	}
+}
+
+func TestTemplateMissingPartialErrors(t *testing.T) {
+	_, err := renderTemplate(`{{> missing}}`, nil, map[string]string{}, true)
+	if err == nil {
+		t.Error("expected error for missing partial")
+	}
+}
+
+func TestTemplateUnterminatedBlockErrors(t *testing.T) {
+	_, err := renderTemplate(`{{#if x}}stuck`, nil, nil, true)
+	if err == nil {
+		t.Error("expected error for unterminated #if")
+	}
+	_, err = renderTemplate(`{{#each xs}}body`, nil, nil, true)
+	if err == nil {
+		t.Error("expected error for unterminated #each")
+	}
+}
+
+func TestTemplateNestedEachAndIf(t *testing.T) {
+	tag1 := NewOrderedMap()
+	tag1.Set("name", StringValue("go"))
+	tag1.Set("hot", BoolValue(true))
+	tag2 := NewOrderedMap()
+	tag2.Set("name", StringValue("rust"))
+	tag2.Set("hot", BoolValue(false))
+	vars := NewOrderedMap()
+	vars.Set("tags", ArrayValue([]Value{ObjectValue(tag1), ObjectValue(tag2)}))
+
+	tmpl := `{{#each tags}}{{name}}{{#if hot}}!{{/if}} {{/each}}`
+	out, _ := renderTemplate(tmpl, vars, nil, true)
+	if out != "go! rust " {
+		t.Errorf("got %q", out)
+	}
+}

@@ -4,6 +4,58 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.55.0] — 2026-05-02
+
+### Added — real template engine (if / each / partials)
+- **Templates now have control flow.** The mustache-lite engine grew
+  conditionals, iteration, and partials — enough to actually build a
+  server-rendered site.
+
+  ```
+  {{#if logged_in}}<a href="/me">Profile</a>{{else}}<a href="/login">Sign in</a>{{/if}}
+
+  <ul>
+    {{#each posts}}
+      <li><a href="/p/{{slug}}">{{title}}</a>{{#if featured}} ⭐{{/if}}</li>
+    {{/each}}
+  </ul>
+
+  {{> header}}
+  ```
+
+- **`each` exposes loop context.** Inside the body, `{{this}}` is the
+  current item, `{{@index}}` is the 0-based index, and (for object
+  iteration) `{{@key}}` is the key. Object items also expose their
+  own keys directly so templates can write `{{title}}` instead of
+  `{{this.title}}`.
+
+- **Partials.** `render(path, vars, partials)` and
+  `render_string(tmpl, vars, partials)` accept an optional third
+  argument — a `name -> template-string` object. `{{> name}}` inserts
+  the partial in place. Recursion is bounded at depth 16.
+
+- **Same auto-escape default.** `{{ expr }}` is HTML-escaped (defends
+  against XSS), `{{{ expr }}}` is raw. Block tags (`{{#if}}`,
+  `{{#each}}`, `{{> partial}}`) are not output, only their contents
+  per iteration.
+
+- **Truthy rules** match what users expect: empty arrays, empty
+  objects, empty strings, zero, false, and null are all falsy.
+
+- **AST-based parser**. Templates parse once into a small node tree,
+  then render against a scope stack. Errors point at the unterminated
+  block or the missing partial by name.
+
+- **Tests.** Nine new tests cover interpolation+escape, if/else,
+  each-of-objects, `@index` / `this`, empty arrays, partials, missing
+  partials, unterminated blocks, and nested each-inside-if.
+
+- **`examples/blog.mx`** is a complete server-rendered blog: layout
+  with header/footer partials, post list with `{{#each}}`, featured
+  badge with `{{#if}}`, and per-post detail pages — about 60 lines.
+
+[0.55.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.55.0
+
 ## [0.54.0] — 2026-05-02
 
 ### Added — seven new AI providers, one API

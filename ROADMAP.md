@@ -8,6 +8,10 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.55.0** (2026-05-02)
+  - Template engine grew `{{#if}}`/`{{else}}`/`{{/if}}`, `{{#each}}`/`{{/each}}` (with `{{this}}`, `{{@index}}`, `{{@key}}`), and `{{> partial}}`
+  - `render` / `render_string` accept a third `partials` argument (name → template-string map)
+  - `examples/blog.mx` — complete server-rendered blog in ~60 lines
 - **v0.54.0** (2026-05-02)
   - `ai.complete` & `ai.stream` now speak ten providers behind one API: OpenAI, Anthropic, Gemini, xAI Grok, Mistral, DeepSeek, Groq, OpenRouter, Together, Ollama
   - Dispatch-table architecture — adding a new OpenAI-compatible provider is one entry
