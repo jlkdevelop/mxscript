@@ -8,6 +8,9 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.21.0** (2026-05-02)
+  - WebSockets (`ws /path { ... }`) — RFC 6455 in pure stdlib
+  - `recv()` / `send()` / `close()` injected into ws route bodies
 - **v0.20.0** (2026-05-02)
   - `mx fmt` — opinionated formatter (token-based, comment-preserving)
   - Lexer `CollectComments` flag for tooling

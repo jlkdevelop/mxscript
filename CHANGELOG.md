@@ -4,6 +4,35 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.21.0] — 2026-05-02
+
+### Added — WebSockets
+- **`ws /path { ... }`** is the third route flavour after `route` and
+  `sse`. RFC 6455 implemented in pure stdlib — no external dependency.
+
+  ```mx
+  ws /chat {
+    while (true) {
+      let msg = recv()              // null on peer-close
+      if (msg == null) { break }
+      send("echo: " + msg)
+    }
+  }
+  ```
+
+  Three functions are injected into the route scope:
+  - `recv()` — block until the next message; returns the payload as a
+    string (or `null` if the peer closed).
+  - `send(value)` — send a text frame. Strings go through verbatim;
+    other values get JSON-encoded automatically.
+  - `close(code?, reason?)` — explicit close (default code 1000).
+
+  The handler transparently handles ping/pong, fragmented messages,
+  and the closing handshake. Hard 16 MiB cap per message to bound
+  memory.
+
+[0.21.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.21.0
+
 ## [0.20.0] — 2026-05-02
 
 ### Added

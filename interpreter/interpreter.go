@@ -1757,8 +1757,9 @@ func (i *Interpreter) startServer() error {
 
 func (i *Interpreter) dispatch(w http.ResponseWriter, r *http.Request) {
 	for _, route := range i.routes {
-		// SSE routes accept GET requests but are tagged "SSE" internally.
-		if route.Method == "SSE" {
+		// SSE / WS routes accept GET requests but are tagged in their
+		// own pseudo-method internally.
+		if route.Method == "SSE" || route.Method == "WS" {
 			if r.Method != http.MethodGet {
 				continue
 			}
@@ -1769,9 +1770,12 @@ func (i *Interpreter) dispatch(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			continue
 		}
-		if route.Method == "SSE" {
+		switch route.Method {
+		case "SSE":
 			i.runSSE(w, r, route, params)
-		} else {
+		case "WS":
+			i.runWS(w, r, route, params)
+		default:
 			i.runRoute(w, r, route, params)
 		}
 		return
@@ -1784,6 +1788,73 @@ func (i *Interpreter) dispatch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.NotFound(w, r)
+}
+
+// runWS upgrades the HTTP connection to WebSocket and runs the route
+// body once with `recv`, `send`, and `close` injected. The route body
+// is responsible for the read loop — typically:
+//
+//	ws /chat {
+//	  while (true) {
+//	    let msg = recv()
+//	    if (msg == null) { break }   // peer closed
+//	    send("echo: " + msg)
+//	  }
+//	}
+func (i *Interpreter) runWS(w http.ResponseWriter, r *http.Request, route registeredRoute, params map[string]string) {
+	ws, err := upgradeWebSocket(w, r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	defer ws.WriteClose(1000, "")
+
+	scope := NewEnv(i.globals)
+	scope.Set("request", buildRequestObject(r, params))
+
+	scope.Set("recv", FunctionValue(&Function{Name: "recv", Native: func(_ *Interpreter, _ []Value) (Value, error) {
+		msg, _, err := ws.ReadMessage()
+		if err != nil {
+			return NullValue(), nil // peer closed → null sentinel for the route loop
+		}
+		return StringValue(msg), nil
+	}}))
+	scope.Set("send", FunctionValue(&Function{Name: "send", Native: func(_ *Interpreter, args []Value) (Value, error) {
+		var s string
+		if len(args) > 0 {
+			if args[0].Kind == KindString {
+				s = args[0].String
+			} else {
+				b, err := jsonEncode(args[0])
+				if err != nil {
+					return Value{}, err
+				}
+				s = string(b)
+			}
+		}
+		return NullValue(), ws.WriteText(s)
+	}}))
+	scope.Set("close", FunctionValue(&Function{Name: "close", Native: func(_ *Interpreter, args []Value) (Value, error) {
+		code := 1000
+		reason := ""
+		if len(args) > 0 && args[0].Kind == KindNumber {
+			code = int(args[0].Number)
+		}
+		if len(args) > 1 && args[1].Kind == KindString {
+			reason = args[1].String
+		}
+		return NullValue(), ws.WriteClose(code, reason)
+	}}))
+
+	for _, s := range route.Body {
+		if err := i.execStmt(s, scope); err != nil {
+			if _, ok := err.(*returnSignal); ok {
+				return
+			}
+			fmt.Fprintf(os.Stderr, "[mx ws] %v\n", i.wrapErr(err))
+			return
+		}
+	}
 }
 
 // runSSE handles a server-sent-events route. The route body is executed

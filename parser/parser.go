@@ -159,11 +159,11 @@ func (p *Parser) parseStmt() (Stmt, error) {
 
 // isHTTPMethod reports whether `name` is one of the HTTP verbs we accept
 // as a shorthand route prefix. Case-sensitive — lowercase only, to keep
-// the language style consistent. `sse` is the special server-sent events
-// flavour, also accepted at the same syntactic position.
+// the language style consistent. `sse` is server-sent events, `ws` is
+// WebSocket — both accepted at the same syntactic position.
 func isHTTPMethod(name string) bool {
 	switch name {
-	case "get", "post", "put", "delete", "patch", "head", "options", "sse":
+	case "get", "post", "put", "delete", "patch", "head", "options", "sse", "ws":
 		return true
 	}
 	return false
