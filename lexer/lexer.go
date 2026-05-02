@@ -295,18 +295,90 @@ func (l *Lexer) readIdentifier(line, col int) {
 	l.tokens = append(l.tokens, Token{Type: tt, Lexeme: lexeme, Line: line, Col: col})
 }
 
+// readNumber accepts decimals, floats, and the prefixed forms 0xFF / 0b1010 /
+// 0o755. Underscores between digits (1_000_000) are stripped before storage,
+// so the parser sees a clean numeric literal.
 func (l *Lexer) readNumber(line, col int) {
 	start := l.pos
-	for l.pos < len(l.src) && unicode.IsDigit(l.src[l.pos]) {
+
+	// Prefixed integer literals: hex, octal, binary.
+	if l.src[l.pos] == '0' && l.pos+1 < len(l.src) {
+		switch l.src[l.pos+1] {
+		case 'x', 'X':
+			l.advance()
+			l.advance()
+			for l.pos < len(l.src) && (isHexDigit(l.src[l.pos]) || l.src[l.pos] == '_') {
+				l.advance()
+			}
+			l.emitNumber(start, line, col, 16)
+			return
+		case 'b', 'B':
+			l.advance()
+			l.advance()
+			for l.pos < len(l.src) && (l.src[l.pos] == '0' || l.src[l.pos] == '1' || l.src[l.pos] == '_') {
+				l.advance()
+			}
+			l.emitNumber(start, line, col, 2)
+			return
+		case 'o', 'O':
+			l.advance()
+			l.advance()
+			for l.pos < len(l.src) && ((l.src[l.pos] >= '0' && l.src[l.pos] <= '7') || l.src[l.pos] == '_') {
+				l.advance()
+			}
+			l.emitNumber(start, line, col, 8)
+			return
+		}
+	}
+
+	for l.pos < len(l.src) && (unicode.IsDigit(l.src[l.pos]) || l.src[l.pos] == '_') {
 		l.advance()
 	}
 	if l.pos < len(l.src) && l.src[l.pos] == '.' && l.pos+1 < len(l.src) && unicode.IsDigit(l.src[l.pos+1]) {
 		l.advance()
-		for l.pos < len(l.src) && unicode.IsDigit(l.src[l.pos]) {
+		for l.pos < len(l.src) && (unicode.IsDigit(l.src[l.pos]) || l.src[l.pos] == '_') {
 			l.advance()
 		}
 	}
-	l.tokens = append(l.tokens, Token{Type: TokenNumber, Lexeme: string(l.src[start:l.pos]), Line: line, Col: col})
+	l.emitNumber(start, line, col, 10)
+}
+
+func isHexDigit(r rune) bool {
+	return (r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')
+}
+
+// emitNumber strips underscore separators and converts non-decimal bases
+// to a decimal string the parser's strconv.ParseFloat can handle.
+func (l *Lexer) emitNumber(start, line, col int, base int) {
+	raw := string(l.src[start:l.pos])
+	cleaned := strings.ReplaceAll(raw, "_", "")
+	lexeme := cleaned
+
+	if base != 10 {
+		// Strip the 0x / 0b / 0o prefix and reparse as that base, then emit
+		// the value as a decimal string so the parser is none the wiser.
+		digits := cleaned[2:]
+		if digits == "" {
+			lexeme = "0"
+		} else {
+			n := int64(0)
+			for _, c := range digits {
+				d := int64(0)
+				switch {
+				case c >= '0' && c <= '9':
+					d = int64(c - '0')
+				case c >= 'a' && c <= 'f':
+					d = int64(c-'a') + 10
+				case c >= 'A' && c <= 'F':
+					d = int64(c-'A') + 10
+				}
+				n = n*int64(base) + d
+			}
+			lexeme = fmt.Sprintf("%d", n)
+		}
+	}
+
+	l.tokens = append(l.tokens, Token{Type: TokenNumber, Lexeme: lexeme, Line: line, Col: col})
 }
 
 // readString handles plain strings and template strings with `${expr}`
