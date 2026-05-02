@@ -40,11 +40,18 @@ func (p *Program) Pos() (int, int) {
 
 type LetStmt struct {
 	pos
-	Name  string
-	Value Expr
+	Name    string              // single-binding form: `let x = ...`
+	Pattern *DestructurePattern // destructure form: `let {a,b} = ...` / `let [a,b] = ...`
+	Value   Expr
 }
 
 func (*LetStmt) stmtNode() {}
+
+// DestructurePattern captures `let { a, b }` or `let [a, b]` style bindings.
+type DestructurePattern struct {
+	IsArray bool     // false = object, true = array
+	Names   []string // names to bind in order (object: matches keys; array: positional)
+}
 
 type AssignStmt struct {
 	pos

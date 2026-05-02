@@ -187,6 +187,24 @@ func (p *Parser) parseShorthandRoute() (Stmt, error) {
 
 func (p *Parser) parseLet() (Stmt, error) {
 	tok := p.advance()
+
+	// Destructuring forms: `let { a, b }` or `let [a, b]`.
+	if p.check(lexer.TokenLBrace) || p.check(lexer.TokenLBracket) {
+		pattern, err := p.parseDestructurePattern()
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.expect(lexer.TokenAssign, "after destructure pattern"); err != nil {
+			return nil, err
+		}
+		val, err := p.parseExpr()
+		if err != nil {
+			return nil, err
+		}
+		p.match(lexer.TokenSemicolon)
+		return &LetStmt{pos: mkPos(tok), Pattern: pattern, Value: val}, nil
+	}
+
 	name, err := p.expect(lexer.TokenIdent, "after `let`")
 	if err != nil {
 		return nil, err
@@ -200,6 +218,37 @@ func (p *Parser) parseLet() (Stmt, error) {
 	}
 	p.match(lexer.TokenSemicolon)
 	return &LetStmt{pos: mkPos(tok), Name: name.Lexeme, Value: val}, nil
+}
+
+// parseDestructurePattern parses either `{ name, name, ... }` (object)
+// or `[ name, name, ... ]` (array) — comma-separated identifiers.
+func (p *Parser) parseDestructurePattern() (*DestructurePattern, error) {
+	open := p.advance()
+	isArray := open.Type == lexer.TokenLBracket
+	close := lexer.TokenRBrace
+	if isArray {
+		close = lexer.TokenRBracket
+	}
+	var names []string
+	if !p.check(close) {
+		for {
+			id, err := p.expect(lexer.TokenIdent, "as destructure binding")
+			if err != nil {
+				return nil, err
+			}
+			names = append(names, id.Lexeme)
+			if !p.match(lexer.TokenComma) {
+				break
+			}
+			if p.check(close) {
+				break
+			}
+		}
+	}
+	if _, err := p.expect(close, "to close destructure pattern"); err != nil {
+		return nil, err
+	}
+	return &DestructurePattern{IsArray: isArray, Names: names}, nil
 }
 
 func (p *Parser) parseFn() (Stmt, error) {

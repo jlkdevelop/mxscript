@@ -205,6 +205,8 @@ func registerBuiltins(i *Interpreter) {
 	def("add_minutes", builtinAddMinutes)
 	def("days_between", builtinDaysBetween)
 	def("weekday", builtinWeekday)
+	def("time_ago", builtinTimeAgo)
+	def("time_human", builtinTimeHuman)
 
 	// --- URL helpers ---
 	def("parse_url", builtinParseURL)
@@ -3250,6 +3252,59 @@ func builtinWeekday(i *Interpreter, args []Value) (Value, error) {
 		return Value{}, err
 	}
 	return StringValue(msToTime(ms).Weekday().String()), nil
+}
+
+// time_ago(unix_ms) → "5 minutes ago", "in 2 days", "just now", etc.
+func builtinTimeAgo(i *Interpreter, args []Value) (Value, error) {
+	ms, err := numberArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	d := time.Since(time.UnixMilli(int64(ms)))
+	future := false
+	if d < 0 {
+		future = true
+		d = -d
+	}
+	var s string
+	switch {
+	case d < 30*time.Second:
+		return StringValue("just now"), nil
+	case d < time.Minute:
+		s = fmt.Sprintf("%d seconds", int(d.Seconds()))
+	case d < time.Hour:
+		s = pluralUnit(int(d.Minutes()), "minute")
+	case d < 24*time.Hour:
+		s = pluralUnit(int(d.Hours()), "hour")
+	case d < 7*24*time.Hour:
+		s = pluralUnit(int(d.Hours()/24), "day")
+	case d < 30*24*time.Hour:
+		s = pluralUnit(int(d.Hours()/(24*7)), "week")
+	case d < 365*24*time.Hour:
+		s = pluralUnit(int(d.Hours()/(24*30)), "month")
+	default:
+		s = pluralUnit(int(d.Hours()/(24*365)), "year")
+	}
+	if future {
+		return StringValue("in " + s), nil
+	}
+	return StringValue(s + " ago"), nil
+}
+
+// time_human(unix_ms) → "Sat May 2 2026 14:23"
+func builtinTimeHuman(i *Interpreter, args []Value) (Value, error) {
+	ms, err := numberArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	return StringValue(msToTime(ms).Local().Format("Mon Jan 2 2006 15:04")), nil
+}
+
+func pluralUnit(n int, unit string) string {
+	if n == 1 {
+		return "1 " + unit
+	}
+	return fmt.Sprintf("%d %ss", n, unit)
 }
 
 // every(duration, fn) runs fn() in a goroutine every `duration` (number=ms

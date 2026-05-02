@@ -4,6 +4,25 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.27.0] — 2026-05-02
+
+### Added
+- **Destructuring assignment** in `let`:
+
+  ```mx
+  let { name, role } = user        # object: bind keys
+  let [a, b, c] = arr              # array: bind positions
+  ```
+
+  Missing keys / out-of-range indexes bind to `null`. Renaming
+  (`{ name: n }`) is on the roadmap for v0.28.
+- **Humanized time**: `time_ago(unix_ms)` returns strings like
+  `"5 minutes ago"`, `"2 days ago"`, `"in 30 seconds"`, `"just now"`.
+  `time_human(unix_ms)` returns `"Sat May 2 2026 15:41"` in the
+  local time zone.
+
+[0.27.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.27.0
+
 ## [0.26.0] — 2026-05-02
 
 ### Added

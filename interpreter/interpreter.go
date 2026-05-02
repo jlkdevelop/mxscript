@@ -743,6 +743,9 @@ func (i *Interpreter) execStmt(s parser.Stmt, env *Env) error {
 		if err != nil {
 			return err
 		}
+		if n.Pattern != nil {
+			return i.bindDestructure(n, n.Pattern, v, env)
+		}
 		env.Set(n.Name, v)
 	case *parser.AssignStmt:
 		return i.execAssign(n, env)
@@ -810,6 +813,36 @@ func (i *Interpreter) execStmt(s parser.Stmt, env *Env) error {
 		return err
 	default:
 		return runtimeErrorf(s, "unsupported statement type %T", s)
+	}
+	return nil
+}
+
+// bindDestructure unpacks a value into multiple env bindings according
+// to the pattern. Missing keys / out-of-range indexes produce null.
+func (i *Interpreter) bindDestructure(n parser.Node, p *parser.DestructurePattern, v Value, env *Env) error {
+	if p.IsArray {
+		if v.Kind != KindArray {
+			return runtimeErrorf(n, "cannot array-destructure %s", v.typeName())
+		}
+		for k, name := range p.Names {
+			if k < len(v.Array) {
+				env.Set(name, v.Array[k])
+			} else {
+				env.Set(name, NullValue())
+			}
+		}
+		return nil
+	}
+	if v.Kind != KindObject {
+		return runtimeErrorf(n, "cannot object-destructure %s", v.typeName())
+	}
+	for _, name := range p.Names {
+		val, ok := v.Object.Get(name)
+		if !ok {
+			env.Set(name, NullValue())
+			continue
+		}
+		env.Set(name, val)
 	}
 	return nil
 }
