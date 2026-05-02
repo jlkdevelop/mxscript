@@ -8,6 +8,10 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.26.0** (2026-05-02)
+  - `password.hash` / `password.verify` (PBKDF2-SHA256, stdlib only)
+  - `aes_encrypt` / `aes_decrypt` (AES-256-GCM)
+  - `ai.stream(prompt, on_chunk)` for streaming LLM responses
 - **v0.25.0** (2026-05-02)
   - `shell(cmd, args?, opts?)` — subprocess execution
   - CSV: `csv_parse` / `csv_stringify`

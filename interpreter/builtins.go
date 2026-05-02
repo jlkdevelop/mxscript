@@ -4,7 +4,10 @@
 package interpreter
 
 import (
+	"bufio"
 	"bytes"
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/hmac"
 	crand "crypto/rand"
 	"crypto/sha256"
@@ -177,6 +180,15 @@ func registerBuiltins(i *Interpreter) {
 	def("base64_encode", builtinBase64Encode)
 	def("base64_decode", builtinBase64Decode)
 	def("uuid", builtinUUID)
+	def("aes_encrypt", builtinAESEncrypt)
+	def("aes_decrypt", builtinAESDecrypt)
+
+	// --- Password namespace ---
+	pwNS := NewOrderedMap()
+	pwNS.Set("hash", FunctionValue(&Function{Name: "password.hash", Native: builtinPasswordHash}))
+	pwNS.Set("verify", FunctionValue(&Function{Name: "password.verify", Native: builtinPasswordVerify}))
+	g.Set("password", ObjectValue(pwNS))
+	builtinNames["password"] = true
 
 	// --- Regex ---
 	def("re_match", builtinReMatch)
@@ -265,6 +277,7 @@ func registerBuiltins(i *Interpreter) {
 	ai := NewOrderedMap()
 	ai.Set("complete", FunctionValue(&Function{Name: "ai.complete", Native: builtinAIComplete}))
 	ai.Set("embed", FunctionValue(&Function{Name: "ai.embed", Native: builtinAIEmbed}))
+	ai.Set("stream", FunctionValue(&Function{Name: "ai.stream", Native: builtinAIStream}))
 	g.Set("ai", ObjectValue(ai))
 	builtinNames["ai"] = true
 
@@ -2020,6 +2033,164 @@ func builtinBase64Decode(i *Interpreter, args []Value) (Value, error) {
 	return StringValue(string(out)), nil
 }
 
+// ===== Password hashing (PBKDF2-SHA256) =====
+//
+// Format on disk: "pbkdf2-sha256$<iterations>$<salt-hex>$<hash-hex>"
+//
+// PBKDF2 is NIST-approved, supported by OWASP, and implementable in
+// stdlib. Bcrypt would require x/crypto; we keep MX dep-light.
+
+const (
+	pbkdf2Iterations = 100_000
+	pbkdf2KeyLen     = 32
+	pbkdf2SaltLen    = 16
+)
+
+func pbkdf2Hash(password string, salt []byte, iter, keyLen int) []byte {
+	hLen := sha256.Size
+	numBlocks := (keyLen + hLen - 1) / hLen
+	out := make([]byte, 0, numBlocks*hLen)
+	for block := 1; block <= numBlocks; block++ {
+		U := make([]byte, len(salt)+4)
+		copy(U, salt)
+		U[len(salt)] = byte(block >> 24)
+		U[len(salt)+1] = byte(block >> 16)
+		U[len(salt)+2] = byte(block >> 8)
+		U[len(salt)+3] = byte(block)
+		mac := hmac.New(sha256.New, []byte(password))
+		mac.Write(U)
+		T := mac.Sum(nil)
+		U = T
+		for i := 1; i < iter; i++ {
+			mac.Reset()
+			mac.Write(U)
+			U = mac.Sum(nil)
+			for j := range T {
+				T[j] ^= U[j]
+			}
+		}
+		out = append(out, T...)
+	}
+	return out[:keyLen]
+}
+
+func builtinPasswordHash(i *Interpreter, args []Value) (Value, error) {
+	password, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	salt := make([]byte, pbkdf2SaltLen)
+	if _, err := crand.Read(salt); err != nil {
+		return Value{}, err
+	}
+	hash := pbkdf2Hash(password, salt, pbkdf2Iterations, pbkdf2KeyLen)
+	return StringValue(fmt.Sprintf("pbkdf2-sha256$%d$%s$%s",
+		pbkdf2Iterations, hex.EncodeToString(salt), hex.EncodeToString(hash))), nil
+}
+
+func builtinPasswordVerify(i *Interpreter, args []Value) (Value, error) {
+	password, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	stored, err := stringArg(args, 1)
+	if err != nil {
+		return Value{}, err
+	}
+	parts := strings.Split(stored, "$")
+	if len(parts) != 4 || parts[0] != "pbkdf2-sha256" {
+		return BoolValue(false), nil
+	}
+	iter, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return BoolValue(false), nil
+	}
+	salt, err := hex.DecodeString(parts[2])
+	if err != nil {
+		return BoolValue(false), nil
+	}
+	want, err := hex.DecodeString(parts[3])
+	if err != nil {
+		return BoolValue(false), nil
+	}
+	got := pbkdf2Hash(password, salt, iter, len(want))
+	return BoolValue(hmac.Equal(got, want)), nil
+}
+
+// ===== AES-256-GCM =====
+//
+// aes_encrypt(plaintext, key) returns base64( nonce || ciphertext || tag ).
+// The key must be 32 bytes (AES-256). Use hash_sha256(passphrase) for a
+// quick way to derive a key from a passphrase, or generate one with uuid()
+// twice base64-encoded for full random.
+
+func deriveAESKey(key string) []byte {
+	if len(key) == 32 {
+		return []byte(key)
+	}
+	// Derive a 32-byte key with SHA-256 if user passed a passphrase.
+	h := sha256.Sum256([]byte(key))
+	return h[:]
+}
+
+func builtinAESEncrypt(i *Interpreter, args []Value) (Value, error) {
+	plaintext, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	key, err := stringArg(args, 1)
+	if err != nil {
+		return Value{}, err
+	}
+	block, err := aes.NewCipher(deriveAESKey(key))
+	if err != nil {
+		return Value{}, err
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return Value{}, err
+	}
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := crand.Read(nonce); err != nil {
+		return Value{}, err
+	}
+	sealed := gcm.Seal(nonce, nonce, []byte(plaintext), nil)
+	return StringValue(base64.StdEncoding.EncodeToString(sealed)), nil
+}
+
+func builtinAESDecrypt(i *Interpreter, args []Value) (Value, error) {
+	ciphertext, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	key, err := stringArg(args, 1)
+	if err != nil {
+		return Value{}, err
+	}
+	raw, err := base64.StdEncoding.DecodeString(ciphertext)
+	if err != nil {
+		return Value{}, err
+	}
+	block, err := aes.NewCipher(deriveAESKey(key))
+	if err != nil {
+		return Value{}, err
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return Value{}, err
+	}
+	nonceSize := gcm.NonceSize()
+	if len(raw) < nonceSize {
+		return Value{}, fmt.Errorf("ciphertext too short")
+	}
+	nonce, body := raw[:nonceSize], raw[nonceSize:]
+	plaintext, err := gcm.Open(nil, nonce, body, nil)
+	if err != nil {
+		return Value{}, err
+	}
+	return StringValue(string(plaintext)), nil
+}
+
 // builtinUUID returns an RFC 4122 v4 UUID using crypto/rand.
 func builtinUUID(i *Interpreter, args []Value) (Value, error) {
 	var b [16]byte
@@ -3382,6 +3553,93 @@ func aiCompleteAnthropic(prompt, model string, maxTokens int) (Value, error) {
 		}
 	}
 	return StringValue(""), nil
+}
+
+// ai.stream(prompt, on_chunk, opts?) streams an LLM completion. on_chunk
+// is called once per delta with the new piece of text. Returns the full
+// concatenated response when done. OpenAI provider only for now —
+// Anthropic streaming uses a different event format and can be added
+// in a follow-up.
+func builtinAIStream(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 2 || args[0].Kind != KindString || args[1].Kind != KindFunction {
+		return Value{}, fmt.Errorf("ai.stream(prompt, on_chunk, opts?) requires (string, function)")
+	}
+	prompt := args[0].String
+	onChunk := args[1].Function
+	model := "gpt-4o-mini"
+	maxTokens := 512
+	if len(args) > 2 && args[2].Kind == KindObject {
+		opts := args[2].Object
+		if v, ok := opts.Get("model"); ok && v.Kind == KindString {
+			model = v.String
+		}
+		if v, ok := opts.Get("max_tokens"); ok && v.Kind == KindNumber {
+			maxTokens = int(v.Number)
+		}
+	}
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	if apiKey == "" {
+		return Value{}, fmt.Errorf("ai.stream requires OPENAI_API_KEY")
+	}
+	body, _ := json.Marshal(map[string]any{
+		"model":      model,
+		"max_tokens": maxTokens,
+		"stream":     true,
+		"messages":   []map[string]string{{"role": "user", "content": prompt}},
+	})
+	req, err := http.NewRequest("POST", "https://api.openai.com/v1/chat/completions", bytes.NewReader(body))
+	if err != nil {
+		return Value{}, err
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "text/event-stream")
+	client := &http.Client{Timeout: 5 * time.Minute}
+	resp, err := client.Do(req)
+	if err != nil {
+		return Value{}, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		raw, _ := io.ReadAll(resp.Body)
+		return Value{}, fmt.Errorf("ai.stream failed (%d): %s", resp.StatusCode, string(raw))
+	}
+
+	scanner := bufio.NewScanner(resp.Body)
+	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
+	var full strings.Builder
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.HasPrefix(line, "data: ") {
+			continue
+		}
+		data := strings.TrimPrefix(line, "data: ")
+		if data == "[DONE]" {
+			break
+		}
+		var event struct {
+			Choices []struct {
+				Delta struct {
+					Content string `json:"content"`
+				} `json:"delta"`
+			} `json:"choices"`
+		}
+		if err := json.Unmarshal([]byte(data), &event); err != nil {
+			continue
+		}
+		if len(event.Choices) == 0 {
+			continue
+		}
+		chunk := event.Choices[0].Delta.Content
+		if chunk == "" {
+			continue
+		}
+		full.WriteString(chunk)
+		if _, err := i.callFunction(nil, onChunk, []Value{StringValue(chunk)}); err != nil {
+			return Value{}, err
+		}
+	}
+	return StringValue(full.String()), nil
 }
 
 func builtinAIEmbed(i *Interpreter, args []Value) (Value, error) {

@@ -4,6 +4,35 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.26.0] — 2026-05-02
+
+### Added
+- **Password hashing** via `password.hash` / `password.verify`. Uses
+  PBKDF2-SHA256 with 100k iterations and a random per-password salt.
+  Stored format is the standard `pbkdf2-sha256$<iter>$<salt>$<hash>`,
+  so verification is portable. Implemented in stdlib (no x/crypto
+  dependency).
+
+  ```mx
+  let stored = password.hash("hunter2")            // store this in DB
+  if (password.verify(input, stored)) { ... }      // login check
+  ```
+- **AES-256-GCM encryption** for at-rest secrets. The key can be a
+  full 32-byte string or any passphrase (auto-derived via SHA-256).
+  Output is base64( nonce || ciphertext || auth tag ).
+
+  ```mx
+  let cipher = aes_encrypt("ssn:123-45-6789", env("ENC_KEY"))
+  let plain  = aes_decrypt(cipher, env("ENC_KEY"))
+  ```
+- **`ai.stream(prompt, on_chunk, opts?)`** — streaming LLM responses.
+  `on_chunk` is called once per token-delta with the new piece of
+  text; the final return value is the full concatenated response.
+  Lets you echo tokens to the client as they arrive (combine with
+  the `sse` route type for a typewriter-style UI).
+
+[0.26.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.26.0
+
 ## [0.25.0] — 2026-05-02
 
 ### Added
