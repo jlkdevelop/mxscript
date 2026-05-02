@@ -4,6 +4,48 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.52.0] — 2026-05-02
+
+### Added — experimental bytecode VM
+- **Stack-machine VM behind `--bytecode`.** A new compile-and-run path
+  lowers expression statements to a flat instruction stream and executes
+  them on a tight `for`/`switch` loop. Constants and identifiers live in
+  side tables; arithmetic, comparison, unary, and identifier-load are
+  all supported today.
+
+  ```bash
+  mx run --bytecode app.mx
+  mx bench --bytecode benchmarks/
+  ```
+
+  The compiler refuses any node it doesn't fully understand (objects,
+  arrays, calls, short-circuit `&&` / `||` / `??`, control flow) and
+  falls back to the tree-walker transparently — so semantics are
+  preserved on programs the VM only partially covers.
+
+- **Per-interpreter compile cache.** Each AST expression is compiled at
+  most once; subsequent visits hit `Compiled` directly. Negative results
+  are also cached so the compiler doesn't re-attempt nodes it already
+  refused.
+
+- **Public API.** `interpreter.CompileExpr(parser.Expr) (*Compiled, bool)`
+  and `(*Compiled).Run(*Env)` are exported so embedders, the LSP, or
+  future JIT experiments can target the same bytecode format. The
+  interpreter exposes `SetBytecode(bool)` and `BytecodeEnabled()`.
+
+- **Test coverage for the VM.** `interpreter/vm_test.go` exercises
+  arithmetic, comparison, identifier load, undefined-identifier errors,
+  divide-by-zero, refusal of short-circuit operators, refusal of
+  unsupported nodes, and an end-to-end parity check that runs the same
+  program through both engines and compares results.
+
+The VM is opt-in and off by default. It will become the default once it
+has parity with the tree-walker for every node type. Today it's a
+faster path for tight numeric / data-shuffling expression statements,
+which is the foundation for the upcoming function-body lowering.
+
+[0.52.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.52.0
+
 ## [0.51.0] — 2026-05-02
 
 ### Distribution

@@ -601,6 +601,17 @@ type Interpreter struct {
 	cliPort int // when > 0, overrides anything the program sets in its `server` block.
 	file    string
 
+	// useBytecode enables the experimental stack VM for expression
+	// statements that compile cleanly. Set via SetBytecode; gated by the
+	// CLI's --bytecode flag. Off by default until the VM has parity with
+	// the tree-walker for every node.
+	useBytecode bool
+
+	// bcCache memoises compiled bytecode for expression statements so
+	// hot expressions (the body of a bench function, the inside of a
+	// while loop) only pay the compilation cost once.
+	bcCache map[parser.Expr]*Compiled
+
 	// callStack tracks active user-defined function calls so runtime
 	// errors can include a traceback.
 	callStack []StackFrame
@@ -681,6 +692,21 @@ func New() *Interpreter {
 // SetFile records the source file path for error messages.
 func (i *Interpreter) SetFile(path string) { i.file = path }
 
+// SetBytecode toggles the experimental stack VM. When on, expression
+// statements that compile cleanly are lowered to bytecode and run on the
+// VM; nodes the compiler doesn't understand fall back to the tree-walker
+// transparently. Off by default.
+func (i *Interpreter) SetBytecode(on bool) {
+	i.useBytecode = on
+	if on && i.bcCache == nil {
+		i.bcCache = map[parser.Expr]*Compiled{}
+	}
+}
+
+// BytecodeEnabled reports whether the VM is on. Used by the bench reporter
+// so users can see which engine ran the numbers.
+func (i *Interpreter) BytecodeEnabled() bool { return i.useBytecode }
+
 // Globals returns the interpreter's top-level environment. It's exposed so
 // embedders (notably the REPL) can evaluate statements that read or write
 // the same scope across multiple calls.
@@ -697,6 +723,14 @@ func (i *Interpreter) Exec(prog *parser.Program) (Value, error) {
 		// the result for the REPL to display. Other statements use
 		// execStmt's normal path (which would discard the value).
 		if es, ok := s.(*parser.ExprStmt); ok {
+			if i.useBytecode {
+				if v, err := i.tryBytecode(es.Expr, i.globals); err == nil {
+					last = v
+					continue
+				} else if err != errBytecodeFallback {
+					return Value{}, i.wrapErr(err)
+				}
+			}
 			v, err := i.evalExpr(es.Expr, i.globals)
 			if err != nil {
 				return Value{}, i.wrapErr(err)
@@ -873,6 +907,13 @@ func (i *Interpreter) execStmt(s parser.Stmt, env *Env) error {
 			}
 		}()
 	case *parser.ExprStmt:
+		if i.useBytecode {
+			if _, err := i.tryBytecode(n.Expr, env); err == nil {
+				return nil
+			} else if err != errBytecodeFallback {
+				return err
+			}
+		}
 		_, err := i.evalExpr(n.Expr, env)
 		return err
 	default:

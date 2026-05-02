@@ -8,6 +8,25 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.52.0** (2026-05-02)
+  - Experimental stack-machine bytecode VM behind `mx run --bytecode` and `mx bench --bytecode`
+  - Per-interpreter compile cache; transparent fall-back to the tree-walker for unsupported nodes
+  - Public `interpreter.CompileExpr` / `Compiled.Run` API + parity tests
+- **v0.51.0** (2026-05-02)
+  - VS Code `.vsix` attached to every release via GoReleaser pre-build hook
+  - github-linguist PR scaffold polished (`extras/linguist/languages.yml.patch`, brand color `#2B54A8`)
+- **v0.50.0** (2026-05-02)
+  - LSP signature help with active-parameter highlighting
+  - LSP snippet completions for `route`, `server`, `if`, `while`, etc.
+- **v0.49.0** (2026-05-02)
+  - Redis client (`redis.open`, get/set/del/incr, pub/sub)
+  - MySQL driver (`sql.open` auto-routes by DSN scheme)
+- **v0.48.0** (2026-05-02)
+  - `argon2id_hash` / `argon2id_verify` (RFC 9106) and `scrypt_hash` / `scrypt_verify`
+  - `yaml_parse` / `yaml_stringify`, `toml_parse` / `toml_stringify`
+- **v0.47.0** (2026-05-02)
+  - `ai.vision(image, prompt)` — multimodal image+text completion
+  - `ai.embed(text)` and `cosine_similarity(a, b)` for vector search
 - **v0.46.0** (2026-05-02)
   - CSRF helpers: `csrf_token(secret, sid)` / `verify_csrf(...)`
   - In-process pub/sub: `pubsub.topic()` with subscribe / publish / count

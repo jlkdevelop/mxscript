@@ -54,7 +54,7 @@ func (rr *replReader) ReadLine() (string, bool) {
 // Version is bumped at release time. Override at build with:
 //
 //	go build -ldflags "-X main.Version=v0.2.0"
-var Version = "v0.51.0"
+var Version = "v0.52.0"
 
 const (
 	cReset  = "\033[0m"
@@ -146,11 +146,15 @@ func cmdRun(args []string) {
 	port := 0
 	watch := false
 	debug := false
+	bytecode := false
 
 	i := 0
 	for i < len(args) {
 		a := args[i]
 		switch {
+		case a == "--bytecode":
+			bytecode = true
+			i++
 		case a == "--port":
 			if i+1 >= len(args) {
 				fatal("--port requires a number")
@@ -192,7 +196,7 @@ func cmdRun(args []string) {
 	}
 
 	if eval != "" {
-		if err := runSource("<eval>", []byte(eval), port, debug); err != nil {
+		if err := runSource("<eval>", []byte(eval), port, debug, bytecode); err != nil {
 			printError("<eval>", err)
 			os.Exit(1)
 		}
@@ -204,11 +208,11 @@ func cmdRun(args []string) {
 	}
 
 	if watch {
-		runWatched(file, port, debug)
+		runWatched(file, port, debug, bytecode)
 		return
 	}
 
-	if err := runOnce(file, port, debug); err != nil {
+	if err := runOnce(file, port, debug, bytecode); err != nil {
 		printError(file, err)
 		os.Exit(1)
 	}
@@ -267,15 +271,15 @@ func errorLocation(err error) (line, col int, msg string) {
 	return 0, 0, err.Error()
 }
 
-func runOnce(file string, port int, debug bool) error {
+func runOnce(file string, port int, debug, bytecode bool) error {
 	src, err := os.ReadFile(file)
 	if err != nil {
 		return fmt.Errorf("cannot read %s: %w", file, err)
 	}
-	return runSource(file, src, port, debug)
+	return runSource(file, src, port, debug, bytecode)
 }
 
-func runSource(file string, src []byte, port int, debug bool) error {
+func runSource(file string, src []byte, port int, debug, bytecode bool) error {
 	tokens, err := lexer.New(string(src)).Tokenize()
 	if err != nil {
 		return fmt.Errorf("%s: %w", file, err)
@@ -303,12 +307,15 @@ func runSource(file string, src []byte, port int, debug bool) error {
 	if port > 0 {
 		interp.SetPort(port)
 	}
+	if bytecode {
+		interp.SetBytecode(true)
+	}
 	return interp.Run(prog)
 }
 
 // runWatched re-runs the file in a child process whenever it changes on disk.
 // We re-exec the same binary so any state inside the interpreter is reset.
-func runWatched(file string, port int, debug bool) {
+func runWatched(file string, port int, debug, bytecode bool) {
 	bin, err := os.Executable()
 	if err != nil {
 		fatal("cannot resolve executable: %v", err)
@@ -331,6 +338,9 @@ func runWatched(file string, port int, debug bool) {
 		}
 		if debug {
 			args = append(args, "--debug")
+		}
+		if bytecode {
+			args = append(args, "--bytecode")
 		}
 		cmd = exec.Command(bin, args...)
 		cmd.Stdout = os.Stdout
@@ -723,8 +733,12 @@ func expandFmtPaths(paths []string) ([]string, error) {
 //	bench_json_encode    50000 ops    14.2 us/op
 func cmdBench(args []string) {
 	root := "."
+	bytecode := false
 	for _, a := range args {
-		if !strings.HasPrefix(a, "-") {
+		switch {
+		case a == "--bytecode":
+			bytecode = true
+		case !strings.HasPrefix(a, "-"):
 			root = a
 		}
 	}
@@ -768,6 +782,9 @@ func cmdBench(args []string) {
 		for _, name := range names {
 			interp := interpreter.New()
 			interp.SetFile(file)
+			if bytecode {
+				interp.SetBytecode(true)
+			}
 			if err := runProgramQuietly(interp, prog); err != nil {
 				fmt.Printf("  %s✗%s %s — %v\n", cRed, cReset, name, err)
 				continue
