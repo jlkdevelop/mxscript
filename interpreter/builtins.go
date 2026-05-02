@@ -300,6 +300,19 @@ func registerBuiltins(i *Interpreter) {
 	// --- Webhook helpers ---
 	def("verify_webhook", builtinVerifyWebhook)
 
+	// --- Redis namespace ---
+	redisNS := NewOrderedMap()
+	redisNS.Set("connect", FunctionValue(&Function{Name: "redis.connect", Native: builtinRedisConnect}))
+	redisNS.Set("set", FunctionValue(&Function{Name: "redis.set", Native: builtinRedisSet}))
+	redisNS.Set("get", FunctionValue(&Function{Name: "redis.get", Native: builtinRedisGet}))
+	redisNS.Set("del", FunctionValue(&Function{Name: "redis.del", Native: builtinRedisDel}))
+	redisNS.Set("incr", FunctionValue(&Function{Name: "redis.incr", Native: builtinRedisIncr}))
+	redisNS.Set("expire", FunctionValue(&Function{Name: "redis.expire", Native: builtinRedisExpire}))
+	redisNS.Set("publish", FunctionValue(&Function{Name: "redis.publish", Native: builtinRedisPublish}))
+	redisNS.Set("close", FunctionValue(&Function{Name: "redis.close", Native: builtinRedisClose}))
+	g.Set("redis", ObjectValue(redisNS))
+	builtinNames["redis"] = true
+
 	// --- SQL (SQLite) namespace ---
 	sqlNS := NewOrderedMap()
 	sqlNS.Set("open", FunctionValue(&Function{Name: "sql.open", Native: builtinSQLOpen}))

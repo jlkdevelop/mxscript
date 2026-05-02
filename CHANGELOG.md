@@ -4,6 +4,35 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.49.0] — 2026-05-02
+
+### Added
+- **Redis namespace** — pure-Go go-redis/v9 client.
+
+  ```mx
+  let r = redis.connect("redis://localhost:6379/0")
+
+  redis.set(r, "user:1", "Jassim", { ttl_seconds: 3600 })
+  print(redis.get(r, "user:1"))
+  print(redis.incr(r, "page-views"))
+  redis.publish(r, "events", json_stringify({ kind: "login" }))
+  redis.del(r, "user:1")
+  redis.close(r)
+  ```
+
+  Surfaced ops: `connect`, `set` (with optional `ttl_seconds`), `get`,
+  `del` (variadic), `incr`, `expire`, `publish`, `close`.
+
+- **MySQL support** — `sql.open` now auto-routes by DSN:
+  - `./local.db` / `:memory:` → SQLite
+  - `postgres://...` / `postgresql://...` → Postgres (lib/pq)
+  - `mysql://user:pass@host/db` or `user:pass@tcp(host:port)/db` → MySQL
+
+  All existing `sql.exec / query / query_one / transaction / migrate`
+  helpers work transparently across all three.
+
+[0.49.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.49.0
+
 ## [0.48.0] — 2026-05-02
 
 ### Added

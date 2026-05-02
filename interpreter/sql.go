@@ -15,8 +15,9 @@ import (
 	"fmt"
 	"strings"
 
-	_ "github.com/lib/pq"  // Postgres driver, registered as "postgres"
-	_ "modernc.org/sqlite" // pure-Go SQLite driver, registered as "sqlite"
+	_ "github.com/go-sql-driver/mysql" // MySQL driver, registered as "mysql"
+	_ "github.com/lib/pq"              // Postgres driver, registered as "postgres"
+	_ "modernc.org/sqlite"             // pure-Go SQLite driver, registered as "sqlite"
 )
 
 // dbHandle is the opaque value handed to .mx code. It carries either a
@@ -44,18 +45,24 @@ func (h *dbHandle) runner() sqlRunner {
 
 // sqlOpen picks a driver from the DSN shape:
 //
-//	"./local.db"                            -> SQLite
-//	"file:..." or any plain path / :memory: -> SQLite
-//	"postgres://..." or "postgresql://..."  -> Postgres (lib/pq)
+//	"./local.db" / ":memory:"                -> SQLite
+//	"postgres://..." / "postgresql://..."    -> Postgres (lib/pq)
+//	"mysql://..." or "user:pass@tcp(...)/db" -> MySQL (go-sql-driver)
 //
-// Future drivers can be added by extending the switch — every dep is
-// imported as a side-effect (database/sql.Register-driven).
+// MySQL DSNs that start with `mysql://` get the prefix stripped before
+// being handed to the driver, since go-sql-driver expects the bare
+// `<user>:<pass>@tcp(host:port)/db` form.
 func sqlOpen(path string) (*dbHandle, error) {
 	driver := "sqlite"
 	dsn := path
 	switch {
 	case strings.HasPrefix(path, "postgres://"), strings.HasPrefix(path, "postgresql://"):
 		driver = "postgres"
+	case strings.HasPrefix(path, "mysql://"):
+		driver = "mysql"
+		dsn = strings.TrimPrefix(path, "mysql://")
+	case strings.Contains(path, "@tcp(") && strings.Contains(path, ")/"):
+		driver = "mysql"
 	}
 	d, err := sql.Open(driver, dsn)
 	if err != nil {
