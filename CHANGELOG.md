@@ -4,6 +4,38 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.43.0] — 2026-05-02
+
+### Added
+- **`mx upgrade`** — self-update. Hits the GitHub releases API, picks
+  the asset for your OS/arch (the GoReleaser `mx_<ver>_<os>_<arch>`
+  name pattern), extracts the binary from the .tar.gz / .zip, and
+  swaps it in place atomically. `--force` re-installs even when
+  you're already on the latest.
+- **`mx doctor`** — env / install / network diagnostic. Prints version,
+  binary path, platform + Go runtime, common env vars (with redacted
+  values), and a quick reachability check against GitHub & OpenAI.
+
+  ```
+  $ mx doctor
+  MX Script doctor
+    version:    v0.43.0
+    binary:     /usr/local/bin/mx
+    platform:   darwin/arm64 (Go go1.25.0)
+
+  env:
+    OPENAI_API_KEY:    set (51 chars)
+    ANTHROPIC_API_KEY: —
+    JWT_SECRET:        set (32 chars)
+    ...
+
+  network:
+    ✓ GitHub releases    230ms
+    ✓ OpenAI              74ms
+  ```
+
+[0.43.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.43.0
+
 ## [0.42.0] — 2026-05-02
 
 ### Added

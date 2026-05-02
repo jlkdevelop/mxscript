@@ -11,13 +11,20 @@
 package main
 
 import (
+	"archive/tar"
+	"archive/zip"
 	"bufio"
+	"compress/gzip"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -47,7 +54,7 @@ func (rr *replReader) ReadLine() (string, bool) {
 // Version is bumped at release time. Override at build with:
 //
 //	go build -ldflags "-X main.Version=v0.2.0"
-var Version = "v0.42.0"
+var Version = "v0.43.0"
 
 const (
 	cReset  = "\033[0m"
@@ -87,6 +94,10 @@ func main() {
 		cmdFmt(args)
 	case "lsp":
 		cmdLSP(args)
+	case "upgrade":
+		cmdUpgrade(args)
+	case "doctor":
+		cmdDoctor(args)
 	case "version", "-v", "--version":
 		fmt.Println("MX Script", Version)
 	case "help", "-h", "--help":
@@ -114,6 +125,8 @@ func printHelp() {
 	fmt.Println("  bench [path]          Run *_bench.mx benchmarks (each fn bench_*)")
 	fmt.Println("  fmt [paths]           Format .mx files (-w writes, --check exits 1 on diffs)")
 	fmt.Println("  lsp                   Run the Language Server (JSON-RPC over stdio)")
+	fmt.Println("  upgrade               Self-update to the latest release")
+	fmt.Println("  doctor                Diagnose env / install / runtime")
 	fmt.Println("  version               Print version and exit")
 	fmt.Println("  help                  Show this help")
 	fmt.Println()
@@ -980,6 +993,250 @@ func findTestFiles(root string) ([]string, error) {
 func prettyTestName(name string) string {
 	stripped := strings.TrimPrefix(name, "test_")
 	return strings.ReplaceAll(stripped, "_", " ")
+}
+
+// ===== mx upgrade =====
+//
+// Pulls the latest release tag from the GitHub API, downloads the
+// matching archive for the current OS / arch, extracts the `mx` binary
+// (or `mx.exe` on Windows), and atomically swaps it for the running
+// executable.
+//
+// Skips if you're already on the newest release. `--force` re-downloads
+// regardless. Behind the scenes this hits `api.github.com/repos/...`
+// (no auth required for public repos).
+
+func cmdUpgrade(args []string) {
+	force := false
+	for _, a := range args {
+		if a == "--force" || a == "-f" {
+			force = true
+		}
+	}
+
+	fmt.Printf("%scurrent:%s %s\n", cGray, cReset, Version)
+	fmt.Printf("%schecking github.com/jlkdevelop/mxscript for newer release…%s\n", cGray, cReset)
+
+	resp, err := http.Get("https://api.github.com/repos/jlkdevelop/mxscript/releases/latest")
+	if err != nil {
+		fatal("cannot reach GitHub: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		fatal("GitHub returned %d", resp.StatusCode)
+	}
+	var rel struct {
+		TagName string `json:"tag_name"`
+		Assets  []struct {
+			Name        string `json:"name"`
+			DownloadURL string `json:"browser_download_url"`
+		} `json:"assets"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&rel); err != nil {
+		fatal("cannot parse release JSON: %v", err)
+	}
+	if !force && rel.TagName == Version {
+		fmt.Printf("%s✓%s already on the latest release (%s)\n", cGreen, cReset, rel.TagName)
+		return
+	}
+	fmt.Printf("%slatest:%s %s\n", cGray, cReset, rel.TagName)
+
+	// Match an asset for our os/arch — GoReleaser uses names like
+	// mx_v0.42.0_darwin_arm64.tar.gz / mx_v0.42.0_windows_amd64.zip.
+	want := fmt.Sprintf("%s_%s", runtime.GOOS, runtime.GOARCH)
+	var asset struct{ Name, URL string }
+	for _, a := range rel.Assets {
+		if !strings.Contains(a.Name, want) {
+			continue
+		}
+		if strings.HasSuffix(a.Name, ".tar.gz") || strings.HasSuffix(a.Name, ".zip") {
+			asset.Name = a.Name
+			asset.URL = a.DownloadURL
+			break
+		}
+	}
+	if asset.URL == "" {
+		fatal("no release asset for %s/%s — please install manually", runtime.GOOS, runtime.GOARCH)
+	}
+
+	fmt.Printf("%sdownloading %s…%s\n", cGray, asset.Name, cReset)
+	dl, err := http.Get(asset.URL)
+	if err != nil {
+		fatal("download failed: %v", err)
+	}
+	defer dl.Body.Close()
+
+	tmpBin, err := extractMXBinary(dl.Body, asset.Name)
+	if err != nil {
+		fatal("extract failed: %v", err)
+	}
+	defer os.Remove(tmpBin)
+
+	cur, err := os.Executable()
+	if err != nil {
+		fatal("can't resolve own path: %v", err)
+	}
+	if err := os.Chmod(tmpBin, 0o755); err != nil {
+		fatal("chmod: %v", err)
+	}
+	if err := os.Rename(tmpBin, cur); err != nil {
+		// Some filesystems disallow cross-device rename; fall back to copy.
+		if cpErr := copyFile(tmpBin, cur); cpErr != nil {
+			fatal("install failed (rename: %v, copy: %v)", err, cpErr)
+		}
+	}
+	fmt.Printf("%s✓%s upgraded %s → %s\n", cGreen, cReset, Version, rel.TagName)
+}
+
+// extractMXBinary pulls `mx` (or `mx.exe`) out of the GoReleaser archive,
+// streaming it to a temp file. Returns the temp path on success.
+func extractMXBinary(r io.Reader, archiveName string) (string, error) {
+	tmp, err := os.CreateTemp("", "mx-upgrade-*")
+	if err != nil {
+		return "", err
+	}
+	tmp.Close()
+	tmpPath := tmp.Name()
+
+	binaryName := "mx"
+	if runtime.GOOS == "windows" {
+		binaryName = "mx.exe"
+	}
+
+	if strings.HasSuffix(archiveName, ".zip") {
+		// We need a seekable reader for the zip package; buffer to disk.
+		buf, err := os.CreateTemp("", "mx-zip-*.zip")
+		if err != nil {
+			return "", err
+		}
+		defer os.Remove(buf.Name())
+		if _, err := io.Copy(buf, r); err != nil {
+			buf.Close()
+			return "", err
+		}
+		buf.Close()
+		zr, err := zip.OpenReader(buf.Name())
+		if err != nil {
+			return "", err
+		}
+		defer zr.Close()
+		for _, f := range zr.File {
+			if filepath.Base(f.Name) == binaryName {
+				rc, err := f.Open()
+				if err != nil {
+					return "", err
+				}
+				defer rc.Close()
+				out, err := os.Create(tmpPath)
+				if err != nil {
+					return "", err
+				}
+				_, err = io.Copy(out, rc)
+				out.Close()
+				return tmpPath, err
+			}
+		}
+		return "", errors.New("binary not found in zip")
+	}
+
+	// .tar.gz path
+	gzr, err := gzip.NewReader(r)
+	if err != nil {
+		return "", err
+	}
+	defer gzr.Close()
+	tr := tar.NewReader(gzr)
+	for {
+		h, err := tr.Next()
+		if err == io.EOF {
+			return "", errors.New("binary not found in tar.gz")
+		}
+		if err != nil {
+			return "", err
+		}
+		if filepath.Base(h.Name) == binaryName {
+			out, err := os.Create(tmpPath)
+			if err != nil {
+				return "", err
+			}
+			_, err = io.Copy(out, tr)
+			out.Close()
+			return tmpPath, err
+		}
+	}
+}
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	_, err = io.Copy(out, in)
+	return err
+}
+
+// ===== mx doctor =====
+//
+// Quick env / install diagnostics. Useful for new users who've hit
+// something weird and want a one-line "is anything obviously wrong?"
+// view. Prints version, paths, runtime info, network reachability.
+
+func cmdDoctor(args []string) {
+	exe, _ := os.Executable()
+	pwd, _ := os.Getwd()
+
+	fmt.Printf("\n%sMX Script doctor%s\n", cBold, cReset)
+	fmt.Printf("  %s%-20s%s %s\n", cGray, "version:", cReset, Version)
+	fmt.Printf("  %s%-20s%s %s\n", cGray, "binary:", cReset, exe)
+	fmt.Printf("  %s%-20s%s %s/%s (Go %s)\n", cGray, "platform:", cReset, runtime.GOOS, runtime.GOARCH, runtime.Version())
+	fmt.Printf("  %s%-20s%s %s\n", cGray, "cwd:", cReset, pwd)
+
+	// Env keys MX commonly cares about.
+	fmt.Printf("\n%senv:%s\n", cBold, cReset)
+	for _, key := range []string{"OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "JWT_SECRET", "SESSION_SECRET", "DATABASE_URL", "PORT"} {
+		v := os.Getenv(key)
+		mark := cGray + "—" + cReset
+		val := mark
+		if v != "" {
+			val = fmt.Sprintf("%sset%s (%d chars)", cGreen, cReset, len(v))
+		}
+		fmt.Printf("  %s%-22s%s %s\n", cGray, key+":", cReset, val)
+	}
+
+	// Reachability checks (quick, parallelizable).
+	fmt.Printf("\n%snetwork:%s\n", cBold, cReset)
+	checks := []struct{ Name, URL string }{
+		{"GitHub releases", "https://api.github.com/repos/jlkdevelop/mxscript/releases/latest"},
+		{"OpenAI", "https://api.openai.com"},
+	}
+	for _, c := range checks {
+		client := &http.Client{Timeout: 5 * time.Second}
+		req, _ := http.NewRequest("HEAD", c.URL, nil)
+		start := time.Now()
+		resp, err := client.Do(req)
+		elapsed := time.Since(start).Round(time.Millisecond)
+		mark := cGreen + "✓"
+		detail := fmt.Sprintf("%dms", elapsed.Milliseconds())
+		if err != nil || resp.StatusCode >= 500 {
+			mark = cRed + "✗"
+			if err != nil {
+				detail = err.Error()
+			} else {
+				detail = fmt.Sprintf("HTTP %d", resp.StatusCode)
+			}
+		}
+		if resp != nil {
+			resp.Body.Close()
+		}
+		fmt.Printf("  %s%s%s %-20s %s\n", mark, cReset, "", c.Name, detail)
+	}
+	fmt.Println()
 }
 
 // ===== mx new =====

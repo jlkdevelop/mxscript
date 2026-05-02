@@ -8,6 +8,9 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.43.0** (2026-05-02)
+  - `mx upgrade` — self-update from latest GitHub release
+  - `mx doctor` — env / install / network diagnostics
 - **v0.42.0** (2026-05-02)
   - Namespaced imports: `import "./auth.mx" as auth` — proper module encapsulation
 - **v0.41.0** (2026-05-02)
