@@ -164,6 +164,18 @@ type ImportStmt struct {
 
 func (*ImportStmt) stmtNode() {}
 
+// StaticStmt declares a static-file mount point.
+//
+//	static "./public"            // serves files from ./public at /
+//	static "./assets" at "/cdn"  // serves files from ./assets at /cdn
+type StaticStmt struct {
+	pos
+	Dir   string
+	Mount string // URL prefix; defaults to "/" if not specified
+}
+
+func (*StaticStmt) stmtNode() {}
+
 // ===== Expressions =====
 
 type NumberLit struct {

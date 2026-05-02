@@ -130,6 +130,8 @@ func (p *Parser) parseStmt() (Stmt, error) {
 		return p.parseReturn()
 	case lexer.TokenImport:
 		return p.parseImport()
+	case lexer.TokenStatic:
+		return p.parseStatic()
 	case lexer.TokenSemicolon:
 		p.advance()
 		return nil, nil
@@ -444,6 +446,26 @@ func (p *Parser) parseReturn() (Stmt, error) {
 	}
 	p.match(lexer.TokenSemicolon)
 	return stmt, nil
+}
+
+func (p *Parser) parseStatic() (Stmt, error) {
+	tok := p.advance()
+	dir, err := p.expect(lexer.TokenString, "as static directory path")
+	if err != nil {
+		return nil, err
+	}
+	mount := "/"
+	// Optional `at "/prefix"` clause.
+	if p.check(lexer.TokenIdent) && p.cur().Lexeme == "at" {
+		p.advance()
+		m, err := p.expect(lexer.TokenString, "as static mount prefix")
+		if err != nil {
+			return nil, err
+		}
+		mount = m.Lexeme
+	}
+	p.match(lexer.TokenSemicolon)
+	return &StaticStmt{pos: mkPos(tok), Dir: dir.Lexeme, Mount: mount}, nil
 }
 
 func (p *Parser) parseImport() (Stmt, error) {

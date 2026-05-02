@@ -40,6 +40,7 @@ const (
 	TokenWhile
 	TokenBreak
 	TokenContinue
+	TokenStatic
 
 	TokenLBrace
 	TokenRBrace
@@ -95,6 +96,7 @@ var tokenNames = map[TokenType]string{
 	TokenWhile:      "while",
 	TokenBreak:      "break",
 	TokenContinue:   "continue",
+	TokenStatic:     "static",
 	TokenLBrace:     "{",
 	TokenRBrace:     "}",
 	TokenLParen:     "(",
@@ -151,6 +153,7 @@ var keywords = map[string]TokenType{
 	"while":      TokenWhile,
 	"break":      TokenBreak,
 	"continue":   TokenContinue,
+	"static":     TokenStatic,
 }
 
 type Token struct {

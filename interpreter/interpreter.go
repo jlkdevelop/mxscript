@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -271,11 +272,17 @@ type registeredRoute struct {
 	Middlewares []string
 }
 
+type staticMount struct {
+	Mount string // URL prefix, e.g. "/" or "/assets"
+	Dir   string // local filesystem directory
+}
+
 type Interpreter struct {
 	globals     *Env
 	routes      []registeredRoute
 	middlewares map[string]*parser.MiddlewareDecl
 	useGlobal   []string
+	statics     []staticMount
 
 	serverPort int
 	serverHost string
@@ -360,7 +367,7 @@ func (i *Interpreter) Run(prog *parser.Program) error {
 	if i.cliPort > 0 {
 		i.serverPort = i.cliPort
 	}
-	if len(i.routes) > 0 {
+	if len(i.routes) > 0 || len(i.statics) > 0 {
 		return i.startServer()
 	}
 	return nil
@@ -422,6 +429,8 @@ func (i *Interpreter) execStmt(s parser.Stmt, env *Env) error {
 		return &returnSignal{Value: v}
 	case *parser.ImportStmt:
 		return i.execImport(n, env)
+	case *parser.StaticStmt:
+		i.statics = append(i.statics, staticMount{Mount: n.Mount, Dir: n.Dir})
 	case *parser.ExprStmt:
 		_, err := i.evalExpr(n.Expr, env)
 		return err
@@ -1021,13 +1030,21 @@ func (i *Interpreter) startServer() error {
 	}
 
 	fmt.Printf("\n\033[1;32m🚀 MX Script\033[0m running at \033[1;36mhttp://%s:%d\033[0m\n\n", displayHost, i.serverPort)
-	fmt.Println("\033[1;33mRoutes:\033[0m")
-	for _, r := range i.routes {
-		path := "/" + strings.Join(r.PathParts, "/")
-		if path == "/" && len(r.PathParts) == 0 {
-			path = "/"
+	if len(i.routes) > 0 {
+		fmt.Println("\033[1;33mRoutes:\033[0m")
+		for _, r := range i.routes {
+			path := "/" + strings.Join(r.PathParts, "/")
+			if path == "/" && len(r.PathParts) == 0 {
+				path = "/"
+			}
+			fmt.Printf("  \033[1;35m%-6s\033[0m %s\n", r.Method, path)
 		}
-		fmt.Printf("  \033[1;35m%-6s\033[0m %s\n", r.Method, path)
+	}
+	if len(i.statics) > 0 {
+		fmt.Println("\033[1;33mStatic:\033[0m")
+		for _, s := range i.statics {
+			fmt.Printf("  \033[1;35m%-6s\033[0m %s -> %s\n", "FILES", s.Mount, s.Dir)
+		}
 	}
 	fmt.Println()
 
@@ -1047,7 +1064,66 @@ func (i *Interpreter) dispatch(w http.ResponseWriter, r *http.Request) {
 		i.runRoute(w, r, route, params)
 		return
 	}
+
+	// Fall through to static mounts. Longest mount prefix wins so e.g.
+	// `static "./api-docs" at "/docs"` is checked before `static "./public"`.
+	if i.serveStatic(w, r) {
+		return
+	}
+
 	http.NotFound(w, r)
+}
+
+func (i *Interpreter) serveStatic(w http.ResponseWriter, r *http.Request) bool {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		return false
+	}
+	type candidate struct {
+		mount string
+		dir   string
+	}
+	var best candidate
+	bestLen := -1
+	for _, s := range i.statics {
+		mount := s.Mount
+		if mount == "" {
+			mount = "/"
+		}
+		if !strings.HasPrefix(r.URL.Path, mount) {
+			continue
+		}
+		// Match longest mount prefix.
+		if len(mount) > bestLen {
+			best = candidate{mount: mount, dir: s.Dir}
+			bestLen = len(mount)
+		}
+	}
+	if bestLen < 0 {
+		return false
+	}
+	rel := strings.TrimPrefix(r.URL.Path, best.mount)
+	rel = strings.TrimPrefix(rel, "/")
+	// Path-traversal guard.
+	if strings.Contains(rel, "..") {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return true
+	}
+	full := filepath.Join(best.dir, rel)
+	info, err := os.Stat(full)
+	if err != nil {
+		return false
+	}
+	if info.IsDir() {
+		// Try index.html in the directory.
+		idx := filepath.Join(full, "index.html")
+		if _, err := os.Stat(idx); err == nil {
+			http.ServeFile(w, r, idx)
+			return true
+		}
+		return false
+	}
+	http.ServeFile(w, r, full)
+	return true
 }
 
 func matchPath(parts []string, urlPath string) (map[string]string, bool) {
