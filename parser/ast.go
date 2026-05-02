@@ -288,3 +288,20 @@ type SpreadExpr struct {
 }
 
 func (*SpreadExpr) exprNode() {}
+
+// MatchExpr is `match subject { p1 => e1, p2 => e2, _ => e3 }`. Arms are
+// tested top-to-bottom; the first matching arm's body is the result. A
+// pattern is either an expression (compared with `==`) or the bare
+// identifier `_` which matches anything.
+type MatchExpr struct {
+	pos
+	Subject Expr
+	Arms    []MatchArm
+}
+
+func (*MatchExpr) exprNode() {}
+
+type MatchArm struct {
+	Pattern  Expr // nil means wildcard `_`
+	Body     Expr
+}

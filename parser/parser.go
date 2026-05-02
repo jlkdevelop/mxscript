@@ -734,8 +734,54 @@ func (p *Parser) parsePrimary() (Expr, error) {
 		return p.parseObjectLit()
 	case lexer.TokenFn:
 		return p.parseFnLit()
+	case lexer.TokenMatch:
+		return p.parseMatch()
 	}
 	return nil, p.errorf("unexpected token %s (%q) in expression", t.Type, t.Lexeme)
+}
+
+// parseMatch parses `match <expr> { pat => expr, pat => expr, _ => expr }`.
+func (p *Parser) parseMatch() (Expr, error) {
+	tok := p.advance() // consume `match`
+	subject, err := p.parseOr() // parse below ?? to keep `match` standalone-friendly
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(lexer.TokenLBrace, "to start match arms"); err != nil {
+		return nil, err
+	}
+	var arms []MatchArm
+	for !p.check(lexer.TokenRBrace) && !p.isAtEnd() {
+		var pattern Expr
+		if p.check(lexer.TokenIdent) && p.cur().Lexeme == "_" {
+			p.advance()
+			pattern = nil
+		} else {
+			pattern, err = p.parseOr()
+			if err != nil {
+				return nil, err
+			}
+		}
+		if _, err := p.expect(lexer.TokenFatArrow, "between match pattern and body"); err != nil {
+			return nil, err
+		}
+		body, err := p.parseExpr()
+		if err != nil {
+			return nil, err
+		}
+		arms = append(arms, MatchArm{Pattern: pattern, Body: body})
+		if !p.match(lexer.TokenComma) {
+			// allow newline-separated arms — the lexer skips newlines as whitespace,
+			// so this is just "no comma needed"
+		}
+		if p.check(lexer.TokenRBrace) {
+			break
+		}
+	}
+	if _, err := p.expect(lexer.TokenRBrace, "to close match"); err != nil {
+		return nil, err
+	}
+	return &MatchExpr{pos: mkPos(tok), Subject: subject, Arms: arms}, nil
 }
 
 // parseFnLit parses an anonymous function literal: fn(params) { ... }.

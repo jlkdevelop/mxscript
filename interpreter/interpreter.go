@@ -800,6 +800,24 @@ func (i *Interpreter) evalExpr(e parser.Expr, env *Env) (Value, error) {
 		return i.memberAccess(n, obj, n.Property)
 	case *parser.FnLit:
 		return FunctionValue(&Function{Params: n.Params, Body: n.Body, Closure: env}), nil
+	case *parser.MatchExpr:
+		subj, err := i.evalExpr(n.Subject, env)
+		if err != nil {
+			return Value{}, err
+		}
+		for _, arm := range n.Arms {
+			if arm.Pattern == nil {
+				return i.evalExpr(arm.Body, env)
+			}
+			pat, err := i.evalExpr(arm.Pattern, env)
+			if err != nil {
+				return Value{}, err
+			}
+			if valuesEqual(subj, pat) {
+				return i.evalExpr(arm.Body, env)
+			}
+		}
+		return NullValue(), nil
 	}
 	return Value{}, fmt.Errorf("unknown expression node %T", e)
 }

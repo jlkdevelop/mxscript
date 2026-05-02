@@ -41,6 +41,8 @@ const (
 	TokenBreak
 	TokenContinue
 	TokenStatic
+	TokenMatch
+	TokenFatArrow
 
 	TokenLBrace
 	TokenRBrace
@@ -100,6 +102,8 @@ var tokenNames = map[TokenType]string{
 	TokenBreak:      "break",
 	TokenContinue:   "continue",
 	TokenStatic:     "static",
+	TokenMatch:      "match",
+	TokenFatArrow:   "=>",
 	TokenLBrace:     "{",
 	TokenRBrace:     "}",
 	TokenLParen:     "(",
@@ -160,6 +164,7 @@ var keywords = map[string]TokenType{
 	"break":      TokenBreak,
 	"continue":   TokenContinue,
 	"static":     TokenStatic,
+	"match":      TokenMatch,
 }
 
 type Token struct {
@@ -459,6 +464,11 @@ func (l *Lexer) readSymbol(line, col int) error {
 		l.advance()
 		l.advance()
 		l.tokens = append(l.tokens, Token{Type: TokenEq, Lexeme: "==", Line: line, Col: col})
+		return nil
+	case "=>":
+		l.advance()
+		l.advance()
+		l.tokens = append(l.tokens, Token{Type: TokenFatArrow, Lexeme: "=>", Line: line, Col: col})
 		return nil
 	case "!=":
 		l.advance()
