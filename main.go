@@ -75,6 +75,8 @@ func main() {
 		cmdBuild(args)
 	case "repl":
 		cmdRepl(args)
+	case "test":
+		cmdTest(args)
 	case "version", "-v", "--version":
 		fmt.Println("MX Script", Version)
 	case "help", "-h", "--help":
@@ -96,6 +98,7 @@ func printHelp() {
 	fmt.Println("  init [name]           Scaffold a new MX Script project")
 	fmt.Println("  build <file.mx>       Type-check & validate an MX Script file")
 	fmt.Println("  repl                  Start an interactive REPL")
+	fmt.Println("  test [path]           Run *_test.mx files (default: current dir)")
 	fmt.Println("  version               Print version and exit")
 	fmt.Println("  help                  Show this help")
 	fmt.Println()
@@ -527,6 +530,124 @@ func globalUserKeys(g *interpreter.Env) []string {
 		out = append(out, k)
 	}
 	return out
+}
+
+// ===== mx test =====
+
+func cmdTest(args []string) {
+	root := "."
+	for _, a := range args {
+		if !strings.HasPrefix(a, "-") {
+			root = a
+		}
+	}
+
+	files, err := findTestFiles(root)
+	if err != nil {
+		fatal("test discovery failed: %v", err)
+	}
+	if len(files) == 0 {
+		fmt.Printf("%sno *_test.mx files found under %s%s\n", cYellow, root, cReset)
+		return
+	}
+
+	totalPass, totalFail := 0, 0
+	start := time.Now()
+	for _, file := range files {
+		fmt.Printf("\n%s%s%s\n", cBold, file, cReset)
+
+		src, err := os.ReadFile(file)
+		if err != nil {
+			fmt.Printf("  %sread error:%s %v\n", cRed, cReset, err)
+			totalFail++
+			continue
+		}
+		tokens, err := lexer.New(string(src)).Tokenize()
+		if err != nil {
+			printError(file, err)
+			totalFail++
+			continue
+		}
+		prog, err := parser.New(tokens).Parse()
+		if err != nil {
+			printError(file, err)
+			totalFail++
+			continue
+		}
+
+		// Discover test_* functions by walking top-level FnDecls.
+		var names []string
+		for _, s := range prog.Stmts {
+			if fn, ok := s.(*parser.FnDecl); ok && strings.HasPrefix(fn.Name, "test_") {
+				names = append(names, fn.Name)
+			}
+		}
+		if len(names) == 0 {
+			fmt.Printf("  %s(no test_* functions in this file)%s\n", cGray, cReset)
+			continue
+		}
+
+		// Each test gets a fresh interpreter so state can't leak between tests.
+		for _, name := range names {
+			interp := interpreter.New()
+			interp.SetFile(file)
+			if err := runProgramQuietly(interp, prog); err != nil {
+				fmt.Printf("  %s✗%s %s — %v\n", cRed, cReset, prettyTestName(name), err)
+				totalFail++
+				continue
+			}
+			_, err := interp.CallByName(name, nil)
+			if err != nil {
+				fmt.Printf("  %s✗%s %s — %v\n", cRed, cReset, prettyTestName(name), err)
+				totalFail++
+			} else {
+				fmt.Printf("  %s✓%s %s\n", cGreen, cReset, prettyTestName(name))
+				totalPass++
+			}
+		}
+	}
+
+	elapsed := time.Since(start).Round(time.Millisecond)
+	fmt.Println()
+	if totalFail == 0 {
+		fmt.Printf("%s✓ %d passed%s in %s\n", cGreen, totalPass, cReset, elapsed)
+	} else {
+		fmt.Printf("%s✗ %d failed, %d passed%s in %s\n",
+			cRed, totalFail, totalPass, cReset, elapsed)
+		os.Exit(1)
+	}
+}
+
+// runProgramQuietly executes top-level statements (let/fn/etc) but skips
+// route registration and HTTP server startup — tests don't need a server.
+func runProgramQuietly(interp *interpreter.Interpreter, prog *parser.Program) error {
+	_, err := interp.Exec(prog)
+	return err
+}
+
+func findTestFiles(root string) ([]string, error) {
+	var out []string
+	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			if strings.HasPrefix(info.Name(), ".") && path != root {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if strings.HasSuffix(path, "_test.mx") {
+			out = append(out, path)
+		}
+		return nil
+	})
+	return out, err
+}
+
+func prettyTestName(name string) string {
+	stripped := strings.TrimPrefix(name, "test_")
+	return strings.ReplaceAll(stripped, "_", " ")
 }
 
 // ===== mx build =====

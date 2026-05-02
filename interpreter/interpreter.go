@@ -344,6 +344,19 @@ func (i *Interpreter) Exec(prog *parser.Program) (Value, error) {
 // DisplayValue formats a value for human-readable output, used by the REPL.
 func DisplayValue(v Value) string { return v.Display() }
 
+// CallByName invokes a user-defined function in the global scope by name.
+// Used by the test runner to call discovered `test_*` functions.
+func (i *Interpreter) CallByName(name string, args []Value) (Value, error) {
+	v, ok := i.globals.Get(name)
+	if !ok {
+		return Value{}, fmt.Errorf("undefined function %q", name)
+	}
+	if v.Kind != KindFunction {
+		return Value{}, fmt.Errorf("%q is not a function", name)
+	}
+	return i.callFunction(nil, v.Function, args)
+}
+
 // SetPort marks the CLI-provided port. It overrides any port set by the
 // program's `server { port: ... }` block so `mx run --port 3000` always wins.
 func (i *Interpreter) SetPort(p int) {

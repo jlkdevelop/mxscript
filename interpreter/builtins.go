@@ -139,6 +139,8 @@ func registerBuiltins(i *Interpreter) {
 
 	// --- Misc ---
 	def("retry", builtinRetry)
+	def("assert", builtinAssert)
+	def("assert_eq", builtinAssertEq)
 
 	// --- AI namespace ---
 	ai := NewOrderedMap()
@@ -1265,6 +1267,37 @@ func builtinURLDecode(i *Interpreter, args []Value) (Value, error) {
 }
 
 // ===== Misc =====
+
+// assert(cond, msg?) throws if cond is falsy. Used by `mx test`.
+func builtinAssert(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 1 {
+		return Value{}, fmt.Errorf("assert(cond, msg?) requires at least 1 argument")
+	}
+	if !args[0].IsTruthy() {
+		msg := "assertion failed"
+		if len(args) > 1 {
+			msg = "assertion failed: " + args[1].Display()
+		}
+		return Value{}, fmt.Errorf("%s", msg)
+	}
+	return NullValue(), nil
+}
+
+// assert_eq(a, b, msg?) throws if a != b. Includes both values in the
+// error message for easier debugging.
+func builtinAssertEq(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 2 {
+		return Value{}, fmt.Errorf("assert_eq(a, b, msg?) requires at least 2 arguments")
+	}
+	if !valuesEqual(args[0], args[1]) {
+		prefix := "assert_eq failed"
+		if len(args) > 2 {
+			prefix = "assert_eq failed: " + args[2].Display()
+		}
+		return Value{}, fmt.Errorf("%s — left: %s, right: %s", prefix, args[0].Display(), args[1].Display())
+	}
+	return NullValue(), nil
+}
 
 // retry(fn, attempts, delay_ms?) — call fn() up to `attempts` times,
 // returning the first non-error result. delay_ms defaults to 100.
