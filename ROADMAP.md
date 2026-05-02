@@ -8,6 +8,8 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.38.0** (2026-05-02)
+  - `validate(value, schema)` — JSON-Schema-lite input validation
 - **v0.37.0** (2026-05-02)
   - AI tool calling: `ai.complete(prompt, { tools, messages })` — structured tool_call response
   - `examples/agent.mx` — 60-line tool-calling agent

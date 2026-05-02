@@ -4,6 +4,41 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.38.0] — 2026-05-02
+
+### Added
+- **`validate(value, schema)`** — JSON-Schema-lite input validation.
+  Returns `{ valid, errors: [{ path, message }, ...] }`. Drop it
+  into a route to reject malformed bodies in two lines:
+
+  ```mx
+  let user_schema = {
+    type: "object",
+    properties: {
+      name:  { type: "string", min_length: 2, max_length: 50 },
+      age:   { type: "integer", minimum: 0, maximum: 150 },
+      email: { type: "string", format: "email" },
+      role:  { type: "string", enum: ["admin", "user", "guest"] },
+      tags:  { type: "array", items: { type: "string" } }
+    },
+    required: ["name", "email"]
+  }
+
+  post /users {
+    let r = validate(request.body, user_schema)
+    if (!r.valid) { return status(400, { errors: r.errors }) }
+    // ... save the user
+  }
+  ```
+
+  Supported keys: `type` (string / number / integer / bool / array /
+  object / any), `enum`, `required`, `properties`, `items`,
+  `minimum` / `maximum`, `min_length` / `max_length`, `min_items` /
+  `max_items`, `pattern` (regex), `format` (`email`, `url`, `uuid`,
+  `date`).
+
+[0.38.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.38.0
+
 ## [0.37.0] — 2026-05-02
 
 ### Added — AI tool calling

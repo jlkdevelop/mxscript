@@ -242,6 +242,7 @@ func registerBuiltins(i *Interpreter) {
 	def("retry", builtinRetry)
 	def("assert", builtinAssert)
 	def("assert_eq", builtinAssertEq)
+	def("validate", builtinValidate)
 	def("sign_cookie", builtinSignCookie)
 	def("verify_cookie", builtinVerifyCookie)
 	def("every", builtinEvery)
@@ -4070,6 +4071,162 @@ func builtinVerifyCookie(i *Interpreter, args []Value) (Value, error) {
 		return NullValue(), nil
 	}
 	return StringValue(value), nil
+}
+
+// validate(value, schema) checks `value` against a JSON-Schema-lite spec
+// and returns { valid: bool, errors: [{ path, message }, ...] }.
+//
+//	let schema = {
+//	  type: "object",
+//	  properties: {
+//	    name: { type: "string", min_length: 2 },
+//	    age:  { type: "number", minimum: 0, maximum: 150 },
+//	    email: { type: "string", format: "email" }
+//	  },
+//	  required: ["name", "email"]
+//	}
+//	let r = validate(request.body, schema)
+//	if (!r.valid) { return status(400, { errors: r.errors }) }
+//
+// Supported schema keys: type, required, properties, items, min/max,
+// min_length / max_length, pattern, format ("email"|"url"|"uuid"|"date"),
+// enum.
+func builtinValidate(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 2 {
+		return Value{}, fmt.Errorf("validate(value, schema) requires 2 arguments")
+	}
+	if args[1].Kind != KindObject {
+		return Value{}, fmt.Errorf("validate: schema must be an object")
+	}
+	var errs []Value
+	validateValue(args[0], args[1], "$", &errs)
+	out := NewOrderedMap()
+	out.Set("valid", BoolValue(len(errs) == 0))
+	out.Set("errors", ArrayValue(errs))
+	return ObjectValue(out), nil
+}
+
+func validateValue(v, schema Value, path string, errs *[]Value) {
+	if schema.Kind != KindObject {
+		return
+	}
+	s := schema.Object
+	pushErr := func(msg string) {
+		e := NewOrderedMap()
+		e.Set("path", StringValue(path))
+		e.Set("message", StringValue(msg))
+		*errs = append(*errs, ObjectValue(e))
+	}
+
+	// type
+	if t, ok := s.Get("type"); ok && t.Kind == KindString {
+		want := t.String
+		got := v.typeName()
+		// Accept "integer" as numeric int.
+		if want == "integer" {
+			if v.Kind != KindNumber || v.Number != float64(int64(v.Number)) {
+				pushErr(fmt.Sprintf("expected integer, got %s", got))
+				return
+			}
+		} else if want != got {
+			// "any" matches anything; null is its own type.
+			if want != "any" {
+				pushErr(fmt.Sprintf("expected %s, got %s", want, got))
+				return
+			}
+		}
+	}
+
+	// enum
+	if en, ok := s.Get("enum"); ok && en.Kind == KindArray {
+		matched := false
+		for _, e := range en.Array {
+			if valuesEqual(v, e) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			pushErr("value not in enum")
+		}
+	}
+
+	switch v.Kind {
+	case KindNumber:
+		if min, ok := s.Get("minimum"); ok && min.Kind == KindNumber && v.Number < min.Number {
+			pushErr(fmt.Sprintf("must be >= %g", min.Number))
+		}
+		if max, ok := s.Get("maximum"); ok && max.Kind == KindNumber && v.Number > max.Number {
+			pushErr(fmt.Sprintf("must be <= %g", max.Number))
+		}
+	case KindString:
+		if mn, ok := s.Get("min_length"); ok && mn.Kind == KindNumber && len([]rune(v.String)) < int(mn.Number) {
+			pushErr(fmt.Sprintf("must be at least %d chars", int(mn.Number)))
+		}
+		if mx, ok := s.Get("max_length"); ok && mx.Kind == KindNumber && len([]rune(v.String)) > int(mx.Number) {
+			pushErr(fmt.Sprintf("must be at most %d chars", int(mx.Number)))
+		}
+		if pat, ok := s.Get("pattern"); ok && pat.Kind == KindString {
+			if re, err := regexp.Compile(pat.String); err == nil && !re.MatchString(v.String) {
+				pushErr("does not match pattern")
+			}
+		}
+		if f, ok := s.Get("format"); ok && f.Kind == KindString {
+			if !validateFormat(v.String, f.String) {
+				pushErr("invalid " + f.String + " format")
+			}
+		}
+	case KindArray:
+		if items, ok := s.Get("items"); ok && items.Kind == KindObject {
+			for k, el := range v.Array {
+				validateValue(el, items, fmt.Sprintf("%s[%d]", path, k), errs)
+			}
+		}
+		if mn, ok := s.Get("min_items"); ok && mn.Kind == KindNumber && len(v.Array) < int(mn.Number) {
+			pushErr(fmt.Sprintf("must have at least %d items", int(mn.Number)))
+		}
+		if mx, ok := s.Get("max_items"); ok && mx.Kind == KindNumber && len(v.Array) > int(mx.Number) {
+			pushErr(fmt.Sprintf("must have at most %d items", int(mx.Number)))
+		}
+	case KindObject:
+		if req, ok := s.Get("required"); ok && req.Kind == KindArray {
+			for _, r := range req.Array {
+				if r.Kind != KindString {
+					continue
+				}
+				if _, present := v.Object.Get(r.String); !present {
+					pushErr(fmt.Sprintf("required property %q is missing", r.String))
+				}
+			}
+		}
+		if props, ok := s.Get("properties"); ok && props.Kind == KindObject {
+			for _, propName := range props.Object.Keys {
+				propSchema, _ := props.Object.Get(propName)
+				if propVal, present := v.Object.Get(propName); present {
+					validateValue(propVal, propSchema, path+"."+propName, errs)
+				}
+			}
+		}
+	}
+}
+
+var emailRE = regexp.MustCompile(`^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$`)
+var uuidRE = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+var dateRE = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
+
+func validateFormat(s, format string) bool {
+	switch format {
+	case "email":
+		return emailRE.MatchString(s)
+	case "uuid":
+		return uuidRE.MatchString(s)
+	case "url":
+		_, err := neturl.ParseRequestURI(s)
+		return err == nil
+	case "date":
+		return dateRE.MatchString(s)
+	}
+	return true // unknown formats pass; users can use `pattern` for stricter checks
 }
 
 // retry(fn, attempts, delay_ms?) — call fn() up to `attempts` times,
