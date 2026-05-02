@@ -8,6 +8,10 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.54.0** (2026-05-02)
+  - `ai.complete` & `ai.stream` now speak ten providers behind one API: OpenAI, Anthropic, Gemini, xAI Grok, Mistral, DeepSeek, Groq, OpenRouter, Together, Ollama
+  - Dispatch-table architecture — adding a new OpenAI-compatible provider is one entry
+  - Local-first via Ollama (no API key)
 - **v0.53.0** (2026-05-02)
   - VM lowers `let`, `=`, `if`, `while` — tight loops now run 2–3× faster on `--bytecode`
   - New opcodes: `OpStoreVar`, `OpAssignVar`; jumps moved to absolute PC addressing

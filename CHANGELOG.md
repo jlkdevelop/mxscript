@@ -4,6 +4,47 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.54.0] — 2026-05-02
+
+### Added — seven new AI providers, one API
+- **`ai.complete` and `ai.stream` now speak to ten providers** behind
+  the same surface. The four already shipped (OpenAI, Anthropic, Gemini)
+  are joined by **xAI Grok, Mistral, DeepSeek, Groq, OpenRouter,
+  Together AI, and a local Ollama instance**. Switching providers is
+  one string change:
+
+  ```mx
+  let summary = ai.complete(text, { provider: "groq",   model: "llama-3.3-70b-versatile" })
+  let summary = ai.complete(text, { provider: "deepseek" })
+  let summary = ai.complete(text, { provider: "ollama" })   // no API key needed
+  ai.stream(prompt, fn(chunk) { write(chunk) }, { provider: "mistral" })
+  ```
+
+- **Dispatch table architecture.** Adding the next OpenAI-compatible
+  provider is now a single entry in `openAICompatProviders`: name,
+  base URL, env-key, default model. The shared `aiCompleteOpenAICompat`
+  helper handles the request, parses the standard `choices[0].message`
+  envelope, and surfaces clear errors when the env key is missing.
+
+- **Local-first option.** Ollama runs entirely on the developer's
+  machine — `provider: "ollama"` posts to `localhost:11434` with no
+  API key. Works with any model the user has pulled (`llama3.2`,
+  `qwen2.5`, `mistral-small`, …).
+
+- **Tests.** `TestOpenAICompatProvidersTable` validates every entry has
+  the right shape and that the seven providers we ship are wired up.
+  `TestOpenAICompatRequiresKey` confirms missing env keys produce
+  named-after-the-key errors so users know exactly what to set.
+
+- **Example.** `examples/ai_providers.mx` is a copy-pasteable cheat
+  sheet with one commented-out line per provider — uncomment, set the
+  env var, run.
+
+- **README** now ships a provider matrix table so newcomers can find
+  their stack at a glance.
+
+[0.54.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.54.0
+
 ## [0.53.0] — 2026-05-02
 
 ### Added — VM lowers control flow (2–3× faster on tight loops)

@@ -1,0 +1,55 @@
+// ai_providers.mx — every AI provider MX Script speaks today.
+// Set the matching env var, uncomment a block, and `mx run ai_providers.mx`.
+//
+//   OPENAI_API_KEY      → openai (default)
+//   ANTHROPIC_API_KEY   → anthropic
+//   GEMINI_API_KEY      → gemini / google
+//   XAI_API_KEY         → grok / xai
+//   MISTRAL_API_KEY     → mistral
+//   DEEPSEEK_API_KEY    → deepseek
+//   GROQ_API_KEY        → groq
+//   OPENROUTER_API_KEY  → openrouter
+//   TOGETHER_API_KEY    → together
+//   (none)              → ollama  (local llama3.2 via Ollama)
+//
+// Every provider answers a single shared API: ai.complete(prompt, opts).
+// Switching providers is one string change. Nothing else moves.
+
+let prompt = "In one sentence, what is MX Script?"
+
+// --- OpenAI (default — no provider key needed in opts) ---------------
+println("openai:    ", ai.complete(prompt))
+
+// --- Anthropic Claude ------------------------------------------------
+// println("claude:    ", ai.complete(prompt, { provider: "anthropic" }))
+
+// --- Google Gemini ---------------------------------------------------
+// println("gemini:    ", ai.complete(prompt, { provider: "gemini" }))
+
+// --- xAI Grok --------------------------------------------------------
+// println("grok:      ", ai.complete(prompt, { provider: "grok" }))
+
+// --- Mistral ---------------------------------------------------------
+// println("mistral:   ", ai.complete(prompt, { provider: "mistral" }))
+
+// --- DeepSeek --------------------------------------------------------
+// println("deepseek:  ", ai.complete(prompt, { provider: "deepseek" }))
+
+// --- Groq (fast llama-3.3 inference) --------------------------------
+// println("groq:      ", ai.complete(prompt, { provider: "groq" }))
+
+// --- OpenRouter (route to any model from one key) -------------------
+// println("openrouter:", ai.complete(prompt, {
+//   provider: "openrouter",
+//   model: "anthropic/claude-3.5-sonnet"
+// }))
+
+// --- Together AI (Llama / Mixtral / etc.) ---------------------------
+// println("together:  ", ai.complete(prompt, { provider: "together" }))
+
+// --- Local Ollama (run `ollama serve` first) ------------------------
+// println("ollama:    ", ai.complete(prompt, { provider: "ollama" }))
+
+// Streaming works on every OpenAI-compatible provider too:
+//
+//   ai.stream(prompt, fn(chunk) { write(chunk) }, { provider: "groq" })

@@ -6,6 +6,7 @@ package interpreter
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 )
@@ -410,5 +411,60 @@ func TestEvalReportsDuration(t *testing.T) {
 	d, _ := r.Get("duration_ms")
 	if d.Kind != KindNumber || d.Number < 0 {
 		t.Errorf("expected non-negative duration_ms, got %#v", d)
+	}
+}
+
+// TestOpenAICompatProvidersTable sanity-checks the dispatch table:
+// every entry has a non-empty name, URL, env var (unless NoAuth), and
+// default model. Catches typos that would otherwise only show up the
+// first time a user actually calls the provider.
+func TestOpenAICompatProvidersTable(t *testing.T) {
+	if len(openAICompatProviders) == 0 {
+		t.Fatal("expected at least one OpenAI-compat provider")
+	}
+	for key, p := range openAICompatProviders {
+		if p.Name == "" {
+			t.Errorf("provider %q: empty Name", key)
+		}
+		if p.BaseURL == "" {
+			t.Errorf("provider %q: empty BaseURL", key)
+		}
+		if p.DefaultModel == "" {
+			t.Errorf("provider %q: empty DefaultModel", key)
+		}
+		if !p.NoAuth && p.EnvKey == "" {
+			t.Errorf("provider %q: missing EnvKey (and not NoAuth)", key)
+		}
+	}
+	// Verify the seven providers we ship are actually wired up.
+	expected := []string{"grok", "mistral", "deepseek", "groq", "openrouter", "together", "ollama"}
+	for _, name := range expected {
+		if _, ok := openAICompatProviders[name]; !ok {
+			t.Errorf("provider %q missing from dispatch table", name)
+		}
+	}
+}
+
+// TestOpenAICompatRequiresKey confirms each non-NoAuth provider returns
+// a clear error when its env var is missing — users hit this first.
+func TestOpenAICompatRequiresKey(t *testing.T) {
+	for key, p := range openAICompatProviders {
+		if p.NoAuth {
+			continue
+		}
+		// Stash and clear the env var so the call definitely fails.
+		prev := os.Getenv(p.EnvKey)
+		os.Unsetenv(p.EnvKey)
+		_, err := aiCompleteOpenAICompat(p, "hi", "", 16)
+		if prev != "" {
+			os.Setenv(p.EnvKey, prev)
+		}
+		if err == nil {
+			t.Errorf("provider %q: expected missing-key error, got nil", key)
+			continue
+		}
+		if !strings.Contains(err.Error(), p.EnvKey) {
+			t.Errorf("provider %q: error %q should mention %s", key, err.Error(), p.EnvKey)
+		}
 	}
 }

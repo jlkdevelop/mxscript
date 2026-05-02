@@ -278,7 +278,22 @@ route POST /summarise {
 }
 ```
 
-`ai.complete` reads `OPENAI_API_KEY` from the environment.
+`ai.complete(prompt, opts?)` works against ten providers behind a single API. Pass `{ provider: "..." }` to switch:
+
+| Provider | `provider:` value | API key env var |
+|---|---|---|
+| OpenAI (default) | `"openai"` | `OPENAI_API_KEY` |
+| Anthropic Claude | `"anthropic"` | `ANTHROPIC_API_KEY` |
+| Google Gemini | `"gemini"` / `"google"` | `GEMINI_API_KEY` |
+| xAI Grok | `"grok"` / `"xai"` | `XAI_API_KEY` |
+| Mistral | `"mistral"` | `MISTRAL_API_KEY` |
+| DeepSeek | `"deepseek"` | `DEEPSEEK_API_KEY` |
+| Groq | `"groq"` | `GROQ_API_KEY` |
+| OpenRouter | `"openrouter"` | `OPENROUTER_API_KEY` |
+| Together AI | `"together"` | `TOGETHER_API_KEY` |
+| Ollama (local) | `"ollama"` | _none — runs locally_ |
+
+`ai.stream(prompt, on_chunk, opts?)`, `ai.embed(text)`, `ai.vision(prompt, images)` and `ai.similarity(a, b)` round out the namespace. See `examples/ai_providers.mx` for a copy-pasteable cheat sheet.
 
 ### Pattern matching
 

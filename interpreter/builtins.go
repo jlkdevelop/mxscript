@@ -4563,6 +4563,9 @@ func builtinAIComplete(i *Interpreter, args []Value) (Value, error) {
 	if provider == "gemini" || provider == "google" {
 		return aiCompleteGemini(prompt, model, maxTokens)
 	}
+	if cfg, ok := openAICompatProviders[provider]; ok {
+		return aiCompleteOpenAICompat(cfg, prompt, model, maxTokens)
+	}
 
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
@@ -4819,6 +4822,130 @@ func aiCompleteGemini(prompt, model string, maxTokens int) (Value, error) {
 	return StringValue(parsed.Candidates[0].Content.Parts[0].Text), nil
 }
 
+// openAICompatProvider describes a provider that speaks the OpenAI
+// /v1/chat/completions wire format. We only need to know where to POST,
+// which env var holds the key, and what model to default to.
+type openAICompatProvider struct {
+	Name         string // user-facing name
+	BaseURL      string // full URL including /chat/completions
+	EnvKey       string // environment variable that holds the API key
+	DefaultModel string // used when the user passes no model (or the OpenAI default)
+	NoAuth       bool   // for local Ollama
+}
+
+// openAICompatProviders is the dispatch table for OpenAI-compatible
+// providers. Adding a new one is two lines: a name and an
+// openAICompatProvider entry. Today: xAI Grok, Mistral, DeepSeek, Groq,
+// OpenRouter, Together AI, and a local Ollama instance.
+var openAICompatProviders = map[string]openAICompatProvider{
+	"grok": {
+		Name:         "grok",
+		BaseURL:      "https://api.x.ai/v1/chat/completions",
+		EnvKey:       "XAI_API_KEY",
+		DefaultModel: "grok-3",
+	},
+	"xai": {
+		Name:         "grok",
+		BaseURL:      "https://api.x.ai/v1/chat/completions",
+		EnvKey:       "XAI_API_KEY",
+		DefaultModel: "grok-3",
+	},
+	"mistral": {
+		Name:         "mistral",
+		BaseURL:      "https://api.mistral.ai/v1/chat/completions",
+		EnvKey:       "MISTRAL_API_KEY",
+		DefaultModel: "mistral-large-latest",
+	},
+	"deepseek": {
+		Name:         "deepseek",
+		BaseURL:      "https://api.deepseek.com/v1/chat/completions",
+		EnvKey:       "DEEPSEEK_API_KEY",
+		DefaultModel: "deepseek-chat",
+	},
+	"groq": {
+		Name:         "groq",
+		BaseURL:      "https://api.groq.com/openai/v1/chat/completions",
+		EnvKey:       "GROQ_API_KEY",
+		DefaultModel: "llama-3.3-70b-versatile",
+	},
+	"openrouter": {
+		Name:         "openrouter",
+		BaseURL:      "https://openrouter.ai/api/v1/chat/completions",
+		EnvKey:       "OPENROUTER_API_KEY",
+		DefaultModel: "openai/gpt-4o-mini",
+	},
+	"together": {
+		Name:         "together",
+		BaseURL:      "https://api.together.xyz/v1/chat/completions",
+		EnvKey:       "TOGETHER_API_KEY",
+		DefaultModel: "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+	},
+	"ollama": {
+		Name:         "ollama",
+		BaseURL:      "http://localhost:11434/v1/chat/completions",
+		DefaultModel: "llama3.2",
+		NoAuth:       true, // local instance, no key required
+	},
+}
+
+// aiCompleteOpenAICompat handles every provider in openAICompatProviders.
+// They all speak the OpenAI /chat/completions wire format, so the only
+// per-provider thing is the URL, the env var, and the default model.
+func aiCompleteOpenAICompat(p openAICompatProvider, prompt, model string, maxTokens int) (Value, error) {
+	apiKey := ""
+	if !p.NoAuth {
+		apiKey = os.Getenv(p.EnvKey)
+		if apiKey == "" {
+			return Value{}, fmt.Errorf("ai.complete with provider=%s requires %s", p.Name, p.EnvKey)
+		}
+	}
+	if model == "" || model == "gpt-4o-mini" {
+		model = p.DefaultModel
+	}
+	body, _ := json.Marshal(map[string]any{
+		"model":      model,
+		"max_tokens": maxTokens,
+		"messages": []map[string]string{
+			{"role": "user", "content": prompt},
+		},
+	})
+	req, err := http.NewRequest("POST", p.BaseURL, bytes.NewReader(body))
+	if err != nil {
+		return Value{}, err
+	}
+	if !p.NoAuth {
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{Timeout: 60 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return Value{}, err
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return Value{}, err
+	}
+	if resp.StatusCode >= 400 {
+		return Value{}, fmt.Errorf("%s ai.complete failed (%d): %s", p.Name, resp.StatusCode, string(raw))
+	}
+	var parsed struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return Value{}, err
+	}
+	if len(parsed.Choices) == 0 {
+		return StringValue(""), nil
+	}
+	return StringValue(parsed.Choices[0].Message.Content), nil
+}
+
 // aiCompleteAnthropic calls Anthropic's /v1/messages endpoint. The model
 // defaults to a recent Claude model if the user passed the OpenAI default.
 func aiCompleteAnthropic(prompt, model string, maxTokens int) (Value, error) {
@@ -4886,6 +5013,7 @@ func builtinAIStream(i *Interpreter, args []Value) (Value, error) {
 	onChunk := args[1].Function
 	model := "gpt-4o-mini"
 	maxTokens := 512
+	provider := "openai"
 	if len(args) > 2 && args[2].Kind == KindObject {
 		opts := args[2].Object
 		if v, ok := opts.Get("model"); ok && v.Kind == KindString {
@@ -4894,10 +5022,29 @@ func builtinAIStream(i *Interpreter, args []Value) (Value, error) {
 		if v, ok := opts.Get("max_tokens"); ok && v.Kind == KindNumber {
 			maxTokens = int(v.Number)
 		}
+		if v, ok := opts.Get("provider"); ok && v.Kind == KindString {
+			provider = strings.ToLower(v.String)
+		}
 	}
+	// Resolve provider — default OpenAI, or any OpenAI-compatible one.
+	url := "https://api.openai.com/v1/chat/completions"
 	apiKey := os.Getenv("OPENAI_API_KEY")
-	if apiKey == "" {
-		return Value{}, fmt.Errorf("ai.stream requires OPENAI_API_KEY")
+	envKey := "OPENAI_API_KEY"
+	noAuth := false
+	if cfg, ok := openAICompatProviders[provider]; ok {
+		url = cfg.BaseURL
+		envKey = cfg.EnvKey
+		noAuth = cfg.NoAuth
+		if model == "" || model == "gpt-4o-mini" {
+			model = cfg.DefaultModel
+		}
+		apiKey = ""
+		if !noAuth {
+			apiKey = os.Getenv(envKey)
+		}
+	}
+	if !noAuth && apiKey == "" {
+		return Value{}, fmt.Errorf("ai.stream with provider=%s requires %s", provider, envKey)
 	}
 	body, _ := json.Marshal(map[string]any{
 		"model":      model,
@@ -4905,11 +5052,13 @@ func builtinAIStream(i *Interpreter, args []Value) (Value, error) {
 		"stream":     true,
 		"messages":   []map[string]string{{"role": "user", "content": prompt}},
 	})
-	req, err := http.NewRequest("POST", "https://api.openai.com/v1/chat/completions", bytes.NewReader(body))
+	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
 	if err != nil {
 		return Value{}, err
 	}
-	req.Header.Set("Authorization", "Bearer "+apiKey)
+	if !noAuth {
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "text/event-stream")
 	client := &http.Client{Timeout: 5 * time.Minute}
