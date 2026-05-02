@@ -8,6 +8,10 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.58.0** (2026-05-02)
+  - `magic_link.create` / `verify` — signed, stateless, time-limited tokens for passwordless email sign-in
+  - `totp.generate` / `verify` / `uri` — RFC 6238 TOTP (Google Authenticator compatible) with ±drift windows
+  - Secret normalisation tolerates upper/lower case, spaces, and `=` padding variants
 - **v0.57.0** (2026-05-02)
   - `cron(spec, fn)` builtin — Vixie 5-field cron with `*/step`, ranges, lists, OR semantics for DOM/DOW
   - `mx routes <file.mx>` lists every registered route without booting the HTTP server

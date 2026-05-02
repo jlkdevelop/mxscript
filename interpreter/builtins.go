@@ -221,6 +221,21 @@ func registerBuiltins(i *Interpreter) {
 	pwNS.Set("verify_argon2", FunctionValue(&Function{Name: "password.verify_argon2", Native: builtinPasswordVerifyArgon2}))
 	pwNS.Set("hash_scrypt", FunctionValue(&Function{Name: "password.hash_scrypt", Native: builtinPasswordHashScrypt}))
 	pwNS.Set("verify_scrypt", FunctionValue(&Function{Name: "password.verify_scrypt", Native: builtinPasswordVerifyScrypt}))
+
+	// --- Passwordless: magic_link namespace ---
+	mlNS := NewOrderedMap()
+	mlNS.Set("create", FunctionValue(&Function{Name: "magic_link.create", Native: builtinMagicLinkCreate}))
+	mlNS.Set("verify", FunctionValue(&Function{Name: "magic_link.verify", Native: builtinMagicLinkVerify}))
+	g.Set("magic_link", ObjectValue(mlNS))
+	builtinNames["magic_link"] = true
+
+	// --- TOTP (RFC 6238 — Google Authenticator compatible) ---
+	totpNS := NewOrderedMap()
+	totpNS.Set("generate", FunctionValue(&Function{Name: "totp.generate", Native: builtinTOTPGenerate}))
+	totpNS.Set("verify", FunctionValue(&Function{Name: "totp.verify", Native: builtinTOTPVerify}))
+	totpNS.Set("uri", FunctionValue(&Function{Name: "totp.uri", Native: builtinTOTPURI}))
+	g.Set("totp", ObjectValue(totpNS))
+	builtinNames["totp"] = true
 	g.Set("password", ObjectValue(pwNS))
 	builtinNames["password"] = true
 

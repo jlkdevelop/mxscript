@@ -54,7 +54,7 @@ func (rr *replReader) ReadLine() (string, bool) {
 // Version is bumped at release time. Override at build with:
 //
 //	go build -ldflags "-X main.Version=v0.2.0"
-var Version = "v0.57.0"
+var Version = "v0.58.0"
 
 const (
 	cReset  = "\033[0m"

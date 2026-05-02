@@ -4,6 +4,69 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.58.0] — 2026-05-02
+
+### Added — passwordless auth (`magic_link.*` + `totp.*`)
+
+- **`magic_link.create(email, secret, opts?)` and `magic_link.verify(token, secret)`.**
+  Signed, stateless, time-limited tokens for "send me a sign-in
+  email" flows. No DB roundtrip needed at click time — the HMAC
+  signature carries the email and expiry inline.
+
+  ```mx
+  route POST /auth/request {
+    let token = magic_link.create(request.body.email, env("SECRET"), {
+      expires_minutes: 15
+    })
+    email.send(request.body.email, "Your sign-in link",
+      "Click: https://app.example/auth/click?token=" + token)
+    return json({ sent: true })
+  }
+
+  route GET /auth/click {
+    let email = magic_link.verify(request.query.token, env("SECRET"))
+    if (email == null) {
+      return status(401, { error: "invalid or expired link" })
+    }
+    return json({ logged_in: true, email: email })
+  }
+  ```
+
+  Tampered tokens, expired tokens, and tokens signed with the wrong
+  secret all return `null` — handlers stay declarative.
+
+- **`totp.generate(secret)`, `totp.verify(code, secret, drift?)`,
+  `totp.uri(account, secret, issuer?)`.** RFC 6238 TOTP, fully
+  Google Authenticator / Authy / 1Password compatible. Drift defaults
+  to ±1 slot (90-second window) so slow users / clock skew don't
+  lock people out. Pass `drift=0` for strict 30s windows.
+
+  ```mx
+  let totp_secret = upper(base32_encode(random_bytes(20)))
+  let provisioning = totp.uri("alice@app.com", totp_secret, "Acme")
+  // Pass `provisioning` to a QR-code generator and the user scans it.
+
+  if (totp.verify(request.body.code, totp_secret)) {
+    return json({ logged_in: true })
+  }
+  ```
+
+- **Secret normalisation.** Authenticator apps emit upper-case base32
+  with no padding; users sometimes paste lower-case, with spaces, or
+  with trailing `=` padding. All four forms produce the same code.
+
+- **Constant-time comparison everywhere** (`hmac.Equal`) to defend
+  signature-verification calls against timing attacks.
+
+- **10 round-trip tests** covering happy paths, tampered emails,
+  expired tokens, wrong secrets, drift windows, and base32 input
+  variants.
+
+- **`examples/passwordless.mx`** — magic-link sign-in plus optional
+  TOTP 2FA enrolment, in 50 lines.
+
+[0.58.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.58.0
+
 ## [0.57.0] — 2026-05-02
 
 ### Added — `cron()` scheduler + `mx routes` introspection
