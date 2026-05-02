@@ -8,6 +8,8 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.41.0** (2026-05-02)
+  - `mx new <template>` — five opinionated starters: api / todo / chat / ai / blog
 - **v0.40.0** (2026-05-02)
   - Durable background jobs: `jobs.create / enqueue / process / stats / close`
   - SQLite-backed, retries with exponential backoff, delayed scheduling

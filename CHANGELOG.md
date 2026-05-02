@@ -4,6 +4,27 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.41.0] — 2026-05-02
+
+### Added
+- **`mx new <template> [name]`** — opinionated project starters. Each
+  template scaffolds a complete, runnable app (one .mx file plus
+  README, .env.example, .gitignore):
+
+  ```
+  mx new api my-api      # REST API + OpenAPI + Swagger UI + status page
+  mx new todo my-todos   # Auth + JWT + SQLite + groups + validate
+  mx new chat realtime   # WebSockets + sessions + broadcast
+  mx new ai bot          # Tool-calling agent with 5-turn loop
+  mx new blog blog       # SSR blog with markdown posts + admin
+  ```
+
+  Each template is a complete reference implementation showing how
+  the relevant subset of MX fits together — `mx new` itself is the
+  best way to learn the language.
+
+[0.41.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.41.0
+
 ## [0.40.0] — 2026-05-02
 
 ### Added — durable background jobs
