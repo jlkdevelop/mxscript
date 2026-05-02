@@ -4,6 +4,41 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.40.0] — 2026-05-02
+
+### Added — durable background jobs
+- **`jobs` namespace** — SQLite-backed job queue. Jobs survive
+  restarts; workers retry failures with exponential backoff
+  (5s → 10s → 20s …) until `max_attempts` is reached.
+
+  ```mx
+  let q = jobs.create({
+    db: "./jobs.db",
+    queue: "emails",
+    max_attempts: 3
+  })
+
+  // Producer
+  q.enqueue({ to: "alice@example.com", subject: "Hi" })
+  q.enqueue({ to: "bob@example.com", subject: "Hi" }, { delay_seconds: 60 })
+
+  // Consumer — N concurrent workers
+  let stop = q.process(2, fn(job) {
+    email.send({ to: job.to, subject: job.subject, ... })
+  })
+
+  // Inspection
+  print(q.stats())   // { pending, running, done, failed }
+  ```
+
+  The underlying `mx_jobs` table is created on first call. Schema:
+  `id`, `queue`, `payload`, `status` (pending|running|done|failed),
+  `attempts`, `last_error`, `run_at`, `created_at`. WAL mode +
+  busy-timeout + an in-process mutex on the claim path keep
+  concurrent workers safe.
+
+[0.40.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.40.0
+
 ## [0.39.0] — 2026-05-02
 
 ### Added

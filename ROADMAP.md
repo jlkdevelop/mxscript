@@ -8,6 +8,9 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.40.0** (2026-05-02)
+  - Durable background jobs: `jobs.create / enqueue / process / stats / close`
+  - SQLite-backed, retries with exponential backoff, delayed scheduling
 - **v0.39.0** (2026-05-02)
   - Route groups: `group /api/v1 { use auth; get /users { ... } }` — shared path prefix + middleware
 - **v0.38.0** (2026-05-02)
