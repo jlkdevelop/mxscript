@@ -4,6 +4,34 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.32.0] — 2026-05-02
+
+### Added
+- **`openapi(info?)`** — generates a valid OpenAPI 3.1 spec from your
+  declared routes. Path params are automatically converted from MX's
+  `:id` syntax to OpenAPI's `{id}` and emitted as parameter declarations.
+
+  ```mx
+  get /api/users/:id { return json({}) }
+  post /api/users    { return json({}, ...) }
+
+  get /api/openapi.json {
+    return json(openapi({
+      title: "My API",
+      version: "1.0.0",
+      description: "Auto-introspected by MX Script."
+    }))
+  }
+  ```
+
+  Drop the URL into Swagger UI / Stoplight Elements / Redoc and you
+  have an instant interactive API browser.
+- **`routes()`** — companion helper that returns an array of
+  `{ method, path }` for every registered route. Handy for status
+  pages or admin dashboards.
+
+[0.32.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.32.0
+
 ## [0.31.0] — 2026-05-02
 
 ### Added

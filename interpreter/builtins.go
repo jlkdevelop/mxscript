@@ -59,6 +59,10 @@ func registerBuiltins(i *Interpreter) {
 	def("write", builtinWrite)     // space-separated, NO trailing newline
 	def("eprint", builtinEprint)   // print to stderr (with newline)
 
+	// --- API introspection ---
+	def("openapi", builtinOpenAPI)
+	def("routes", builtinRoutesList)
+
 	// --- HTTP response helpers ---
 	def("json", builtinJSON)
 	def("text", builtinText)
@@ -333,6 +337,111 @@ func builtinEprint(i *Interpreter, args []Value) (Value, error) {
 	}
 	fmt.Fprintln(os.Stderr, strings.Join(parts, " "))
 	return NullValue(), nil
+}
+
+// ===== API introspection =====
+
+// openapi(info?) returns an OpenAPI 3.1 spec object. The info argument
+// optionally overrides title / version / description / contact. Path
+// params are auto-extracted (`/users/:id` becomes `/users/{id}` with a
+// matching parameter declaration).
+//
+//	get /openapi.json {
+//	  return json(openapi({ title: "My API", version: "1.0" }))
+//	}
+func builtinOpenAPI(i *Interpreter, args []Value) (Value, error) {
+	info := NewOrderedMap()
+	info.Set("title", StringValue("MX Script API"))
+	info.Set("version", StringValue("1.0.0"))
+	if len(args) > 0 && args[0].Kind == KindObject {
+		for _, k := range args[0].Object.Keys {
+			v, _ := args[0].Object.Get(k)
+			info.Set(k, v)
+		}
+	}
+
+	paths := NewOrderedMap()
+	for _, r := range i.routes {
+		method := strings.ToLower(r.Method)
+		// SSE / WS routes describe themselves as GET in OpenAPI; they
+		// share the same Upgrade-from-GET contract.
+		if method == "sse" || method == "ws" {
+			method = "get"
+		}
+
+		// Convert /users/:id to /users/{id} and collect parameters.
+		var pathOut strings.Builder
+		var params []Value
+		pathOut.WriteByte('/')
+		for k, part := range r.PathParts {
+			if k > 0 {
+				pathOut.WriteByte('/')
+			}
+			if strings.HasPrefix(part, ":") {
+				name := part[1:]
+				pathOut.WriteByte('{')
+				pathOut.WriteString(name)
+				pathOut.WriteByte('}')
+				p := NewOrderedMap()
+				p.Set("name", StringValue(name))
+				p.Set("in", StringValue("path"))
+				p.Set("required", BoolValue(true))
+				schema := NewOrderedMap()
+				schema.Set("type", StringValue("string"))
+				p.Set("schema", ObjectValue(schema))
+				params = append(params, ObjectValue(p))
+			} else {
+				pathOut.WriteString(part)
+			}
+		}
+		pathStr := pathOut.String()
+		if pathStr == "/" && len(r.PathParts) == 0 {
+			pathStr = "/"
+		}
+
+		// Build the operation object.
+		op := NewOrderedMap()
+		op.Set("summary", StringValue(strings.ToUpper(r.Method)+" "+pathStr))
+		if len(params) > 0 {
+			op.Set("parameters", ArrayValue(params))
+		}
+		responses := NewOrderedMap()
+		ok := NewOrderedMap()
+		ok.Set("description", StringValue("OK"))
+		responses.Set("200", ObjectValue(ok))
+		op.Set("responses", ObjectValue(responses))
+		op.Set("tags", ArrayValue([]Value{StringValue("default")}))
+
+		// Path may already exist (multiple methods on same path).
+		entry, exists := paths.Get(pathStr)
+		var item *OrderedMap
+		if exists && entry.Kind == KindObject {
+			item = entry.Object
+		} else {
+			item = NewOrderedMap()
+		}
+		item.Set(method, ObjectValue(op))
+		paths.Set(pathStr, ObjectValue(item))
+	}
+
+	out := NewOrderedMap()
+	out.Set("openapi", StringValue("3.1.0"))
+	out.Set("info", ObjectValue(info))
+	out.Set("paths", ObjectValue(paths))
+	return ObjectValue(out), nil
+}
+
+// routes() returns an array of { method, path } objects for every
+// registered route — useful for ad-hoc introspection / status pages.
+func builtinRoutesList(i *Interpreter, args []Value) (Value, error) {
+	out := make([]Value, 0, len(i.routes))
+	for _, r := range i.routes {
+		o := NewOrderedMap()
+		o.Set("method", StringValue(r.Method))
+		o.Set("path", StringValue("/"+strings.Join(r.PathParts, "/")))
+		out = append(out, ObjectValue(o))
+	}
+	return ArrayValue(out), nil
 }
 
 // ===== HTTP response helpers =====

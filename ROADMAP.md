@@ -8,6 +8,9 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.32.0** (2026-05-02)
+  - `openapi(info?)` auto-generates an OpenAPI 3.1 spec from registered routes
+  - `routes()` returns an array of `{ method, path }`
 - **v0.31.0** (2026-05-02)
   - `mx test --cover` — line coverage report
 - **v0.30.0** (2026-05-02)
