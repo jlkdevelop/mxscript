@@ -1,5 +1,5 @@
 {
-  "name": "mxscript",
+  "name": "mxscript-lang",
   "displayName": "MX Script",
   "description": "Syntax highlighting, formatting, and diagnostics for MX Script (.mx files) via the bundled Language Server.",
   "version": "0.24.0",

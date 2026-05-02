@@ -6,3 +6,17 @@ node_modules/**
 *.vsix
 .DS_Store
 **/.DS_Store
+
+# Local agent / tool state — never ship
+.claude/**
+**/.claude/**
+.vercel/**
+**/.vercel/**
+
+# Secrets / env — never ship
+.env
+.env.*
+**/.env
+**/.env.*
+*.pem
+*.key
