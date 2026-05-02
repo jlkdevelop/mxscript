@@ -195,18 +195,20 @@ route POST /admin {
 
 ### Built-in functions
 
-| Category | Functions |
-|----------|-----------|
-| Output   | `print`, `println` |
-| HTTP     | `json`, `text`, `html`, `status`, `redirect`, `fetch` |
-| Env      | `env(name)` |
-| String   | `len`, `upper`, `lower`, `split`, `trim`, `contains`, `replace`, `starts_with`, `ends_with` |
-| Array    | `push`, `pop`, `map`, `filter`, `find`, `join`, `reverse`, `range` |
-| Math     | `round`, `floor`, `ceil`, `abs`, `min`, `max`, `random` |
-| Types    | `typeof`, `isString`, `isNumber`, `isBool`, `isNull`, `isArray`, `isObject` |
-| JSON     | `json_parse`, `json_stringify` |
-| AI       | `ai.complete(prompt)`, `ai.embed(text)` |
-| Time     | `now()`, `sleep(ms)` |
+| Category   | Functions |
+|------------|-----------|
+| Output     | `print`, `println` |
+| HTTP       | `json`, `text`, `html`, `status`, `redirect`, `fetch` |
+| Env        | `env(name)` |
+| String     | `len`, `upper`, `lower`, `split`, `trim`, `contains`, `replace`, `starts_with`, `ends_with` |
+| Array      | `push`, `pop`, `map`, `filter`, `find`, `join`, `reverse`, `range` |
+| Math       | `round`, `floor`, `ceil`, `abs`, `min`, `max`, `random` |
+| Types      | `typeof`, `isString`, `isNumber`, `isBool`, `isNull`, `isArray`, `isObject` |
+| JSON       | `json_parse`, `json_stringify` |
+| File I/O   | `read_file`, `write_file`, `file_exists`, `list_files`, `delete_file` |
+| Crypto     | `hash_sha256`, `base64_encode`, `base64_decode`, `uuid` |
+| Time       | `now()`, `now_iso()`, `sleep(ms)` |
+| AI         | `ai.complete(prompt)`, `ai.embed(text)` |
 
 See [docs/api.md](docs/api.md) for the full reference.
 

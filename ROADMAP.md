@@ -8,6 +8,12 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.3.0** (2026-05-02)
+  - Static file serving via `static "./public"` directive
+  - Spread operator (`...`) for arrays, objects, and call arguments
+  - File I/O built-ins: `read_file`, `write_file`, `file_exists`, `list_files`, `delete_file`
+  - Crypto / encoding: `hash_sha256`, `base64_encode`, `base64_decode`
+  - `uuid()` (RFC 4122 v4) and `now_iso()` (RFC 3339)
 - **v0.2.0** (2026-05-02)
   - String interpolation (`"hello ${name}"`)
   - `while` loops, `break`, `continue`
@@ -27,17 +33,16 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ---
 
-## Next up (v0.3 candidates)
+## Next up (v0.4 candidates)
 
 These are the things we'd most like help with.
 
-- [ ] **Pre-built binaries** for macOS / Linux / Windows on every tag (GoReleaser config exists; verify on first tag).
+- [ ] **Cookies** — `request.cookies` (read) and chainable `cookie()` on responses (write).
 - [ ] **`mx fmt`** — opinionated formatter for `.mx` files.
 - [ ] **WebSocket routes** — `route WS /chat { ... }`.
 - [ ] **SQLite driver** — `db.query("select ...")` as a built-in.
-- [ ] **Cookies** — `request.cookies` and `set_cookie(name, value)`.
-- [ ] **Static file serving** — `static "./public"` directive.
-- [ ] **Spread operator** — `let combined = [...a, ...b]`.
+- [ ] **Optional chaining** — `user?.address?.street`.
+- [ ] **Pattern matching** — `match value { 1 => "one", _ => "other" }`.
 
 ---
 

@@ -4,6 +4,33 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] — 2026-05-02
+
+### Added
+- **Static file serving**: `static "./public"` mounts a directory at `/`.
+  Add `at "/cdn"` for a custom mount prefix. `index.html` is served
+  automatically for directory requests; path-traversal attempts return 403.
+- **Spread operator** `...`: works in array literals, object literals,
+  and function call arguments.
+
+  ```mx
+  let combined = [...a, ...b, 7]
+  let merged   = { ...base, ...extra, x: 1 }
+  sum(...nums)
+  ```
+- **File I/O built-ins**: `read_file`, `write_file`, `file_exists`,
+  `list_files`, `delete_file`.
+- **Crypto / encoding**: `hash_sha256`, `base64_encode`, `base64_decode`.
+- **IDs**: `uuid()` returns an RFC 4122 v4 UUID using `crypto/rand`.
+- **Time**: `now_iso()` returns an ISO 8601 / RFC 3339 timestamp.
+
+### Changed
+- Spread in object literals merges later keys over earlier ones while
+  preserving the *original* insertion position of duplicated keys
+  (matches JavaScript semantics).
+
+[0.3.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.3.0
+
 ## [0.2.0] — 2026-05-02
 
 ### Added

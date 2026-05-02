@@ -214,6 +214,31 @@ route GET /admin {
 
 A middleware that `return`s a value short-circuits the request — the route body is skipped.
 
+## Spread operator
+
+`...expr` expands an array, object, or call argument list inline.
+
+```mx
+// Arrays
+let combined = [...a, ...b, 7]
+
+// Objects (later keys override earlier ones)
+let merged = { ...defaults, ...overrides, debug: true }
+
+// Function calls
+fn add4(a, b, c, d) { return a + b + c + d }
+print(add4(...[1, 2, 3, 4]))   // 10
+```
+
+## Static files
+
+```mx
+static "./public"            // serves files at /
+static "./assets" at "/cdn"  // serves files at /cdn/...
+```
+
+Routes are matched first; static mounts are tried only on no-match. `index.html` is served automatically for directory requests. Path traversal (`..`) returns 403.
+
 ## Imports
 
 ```mx

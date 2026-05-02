@@ -138,10 +138,41 @@ Parse a JSON string into an MX value.
 ### `json_stringify(v)`
 Serialize a value to a JSON string.
 
+## File I/O
+
+### `read_file(path)`
+Returns the file contents as a string.
+
+### `write_file(path, content)`
+Writes a string to disk. Creates the file if it doesn't exist; overwrites otherwise.
+
+### `file_exists(path)`
+Boolean check.
+
+### `list_files(dir)`
+Returns an array of paths in `dir`.
+
+### `delete_file(path)`
+Removes the file at `path`.
+
+## Crypto / encoding
+
+### `hash_sha256(s)`
+Returns the SHA-256 hex digest of a string.
+
+### `base64_encode(s)` / `base64_decode(s)`
+Standard base64 encode and decode.
+
+### `uuid()`
+Returns an RFC 4122 v4 UUID using `crypto/rand`.
+
 ## Time
 
 ### `now()`
 Current Unix time in milliseconds.
+
+### `now_iso()`
+Current UTC time as an RFC 3339 / ISO 8601 string.
 
 ### `sleep(ms)`
 Block for `ms` milliseconds.
