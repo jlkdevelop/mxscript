@@ -4,6 +4,27 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.12.0] — 2026-05-02
+
+### Added
+- **Server-sent events (SSE)** as a first-class route type:
+
+  ```mx
+  sse /events {
+    while (true) {
+      send({ tick: now() })
+      sleep(1000)
+    }
+  }
+  ```
+
+  Real-time streaming over plain HTTP. Works with any browser via the
+  built-in `EventSource` API — no WebSocket dependency. The body is
+  invoked once per connection with a `send(value)` function that
+  JSON-encodes and immediately flushes a single SSE frame.
+
+[0.12.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.12.0
+
 ## [0.11.0] — 2026-05-02
 
 ### Added

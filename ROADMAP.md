@@ -8,6 +8,8 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.12.0** (2026-05-02)
+  - Server-sent events: `sse /events { send(...) }`
 - **v0.11.0** (2026-05-02)
   - JSON KV store (kv_get / kv_set / kv_delete / kv_keys / kv_clear)
   - `examples/todo_api.mx` — 100-line full-stack showcase
