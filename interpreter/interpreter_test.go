@@ -268,3 +268,65 @@ func TestJSONOrderPreserved(t *testing.T) {
 		t.Errorf("ordered JSON: got %s, want %s", got, want)
 	}
 }
+
+// TestEmbedderAPI verifies the Load + Handler + HasRoutes surface used by the
+// Vercel adapter (and any other host that wants to mount an MX app inside its
+// own HTTP server). The semantics must stay stable across versions.
+func TestEmbedderAPI(t *testing.T) {
+	src := `
+route GET /ping {
+  return json({ pong: true })
+}
+`
+	prog, err := ParseSource(src)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+
+	interp := New()
+	if err := interp.Load(prog); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !interp.HasRoutes() {
+		t.Fatal("HasRoutes should be true after loading a program with routes")
+	}
+
+	handler := interp.Handler()
+	if handler == nil {
+		t.Fatal("Handler returned nil")
+	}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/ping", nil)
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != 200 {
+		t.Errorf("status: got %d, want 200", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), `"pong":true`) {
+		t.Errorf("body: got %q, want pong:true", rec.Body.String())
+	}
+}
+
+// TestHandlerWithoutRoutes confirms that an MX program with no routes still
+// produces a usable handler (it just 404s on every path), so embedders don't
+// have to special-case empty programs.
+func TestHandlerWithoutRoutes(t *testing.T) {
+	prog, err := ParseSource(`let x = 42`)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	interp := New()
+	if err := interp.Load(prog); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if interp.HasRoutes() {
+		t.Error("HasRoutes should be false for a routeless program")
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/", nil)
+	interp.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("expected 404 from empty handler, got %d", rec.Code)
+	}
+}

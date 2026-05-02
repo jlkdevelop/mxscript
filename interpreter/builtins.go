@@ -81,6 +81,9 @@ func registerBuiltins(i *Interpreter) {
 	def("repeat", builtinRepeat)
 	def("substr", builtinSubstr)
 	def("index_of", builtinIndexOf)
+	def("html_escape", builtinHTMLEscape)
+	def("html_unescape", builtinHTMLUnescape)
+	def("slug", builtinSlug)
 
 	// --- Array ops ---
 	def("push", builtinPush)
@@ -180,6 +183,9 @@ func registerBuiltins(i *Interpreter) {
 	def("assert_eq", builtinAssertEq)
 	def("sign_cookie", builtinSignCookie)
 	def("verify_cookie", builtinVerifyCookie)
+	def("every", builtinEvery)
+	def("after", builtinAfter)
+	def("debounce", builtinDebounce)
 
 	// --- AI namespace ---
 	ai := NewOrderedMap()
@@ -684,6 +690,63 @@ func builtinNum(i *Interpreter, args []Value) (Value, error) {
 		return NumberValue(0), nil
 	}
 	return Value{}, fmt.Errorf("cannot convert %s to number", args[0].typeName())
+}
+
+// html_escape escapes the five HTML special chars: & < > " '. Use this
+// before interpolating user input into html() responses to prevent XSS.
+func builtinHTMLEscape(i *Interpreter, args []Value) (Value, error) {
+	s, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	r := strings.NewReplacer(
+		"&", "&amp;",
+		"<", "&lt;",
+		">", "&gt;",
+		`"`, "&quot;",
+		"'", "&#39;",
+	)
+	return StringValue(r.Replace(s)), nil
+}
+
+func builtinHTMLUnescape(i *Interpreter, args []Value) (Value, error) {
+	s, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	r := strings.NewReplacer(
+		"&amp;", "&",
+		"&lt;", "<",
+		"&gt;", ">",
+		"&quot;", `"`,
+		"&#39;", "'",
+		"&apos;", "'",
+	)
+	return StringValue(r.Replace(s)), nil
+}
+
+// slug turns "Hello, World!" into "hello-world" — useful for URL-safe IDs.
+func builtinSlug(i *Interpreter, args []Value) (Value, error) {
+	s, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	var b strings.Builder
+	prevDash := false
+	for _, r := range strings.ToLower(s) {
+		switch {
+		case (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9'):
+			b.WriteRune(r)
+			prevDash = false
+		default:
+			if !prevDash && b.Len() > 0 {
+				b.WriteRune('-')
+				prevDash = true
+			}
+		}
+	}
+	out := strings.TrimRight(b.String(), "-")
+	return StringValue(out), nil
 }
 
 // pad_left(s, width, ch?) pads s on the left with ch (default " ") until
@@ -1854,6 +1917,108 @@ func builtinAssertEq(i *Interpreter, args []Value) (Value, error) {
 		return Value{}, fmt.Errorf("%s — left: %s, right: %s", prefix, args[0].Display(), args[1].Display())
 	}
 	return NullValue(), nil
+}
+
+// every(duration, fn) runs fn() in a goroutine every `duration` (number=ms
+// or string like "5s"). Returns a stop function — call it to cancel.
+//
+//	let stop = every("5s", fn() { print("tick", now_iso()) })
+//	// later... stop()
+func builtinEvery(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 2 || args[1].Kind != KindFunction {
+		return Value{}, fmt.Errorf("every(duration, fn) requires (duration, function)")
+	}
+	d, err := durationFromValue(args[0])
+	if err != nil {
+		return Value{}, err
+	}
+	fn := args[1].Function
+	stop := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(d)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-ticker.C:
+				if _, err := i.callFunction(nil, fn, nil); err != nil {
+					fmt.Fprintf(os.Stderr, "[mx every] %v\n", err)
+					return
+				}
+			}
+		}
+	}()
+	cancel := &Function{Name: "stop", Native: func(_ *Interpreter, _ []Value) (Value, error) {
+		select {
+		case <-stop: // already closed
+		default:
+			close(stop)
+		}
+		return NullValue(), nil
+	}}
+	return FunctionValue(cancel), nil
+}
+
+// after(duration, fn) runs fn() once after `duration`. Returns a cancel fn.
+func builtinAfter(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 2 || args[1].Kind != KindFunction {
+		return Value{}, fmt.Errorf("after(duration, fn) requires (duration, function)")
+	}
+	d, err := durationFromValue(args[0])
+	if err != nil {
+		return Value{}, err
+	}
+	fn := args[1].Function
+	stop := make(chan struct{})
+	go func() {
+		select {
+		case <-stop:
+			return
+		case <-time.After(d):
+			if _, err := i.callFunction(nil, fn, nil); err != nil {
+				fmt.Fprintf(os.Stderr, "[mx after] %v\n", err)
+			}
+		}
+	}()
+	cancel := &Function{Name: "cancel", Native: func(_ *Interpreter, _ []Value) (Value, error) {
+		select {
+		case <-stop:
+		default:
+			close(stop)
+		}
+		return NullValue(), nil
+	}}
+	return FunctionValue(cancel), nil
+}
+
+// debounce(duration, fn) returns a wrapper that, when called repeatedly,
+// only fires fn() once `duration` has passed since the last call.
+func builtinDebounce(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 2 || args[1].Kind != KindFunction {
+		return Value{}, fmt.Errorf("debounce(duration, fn) requires (duration, function)")
+	}
+	d, err := durationFromValue(args[0])
+	if err != nil {
+		return Value{}, err
+	}
+	fn := args[1].Function
+	var mu sync.Mutex
+	var timer *time.Timer
+	wrapper := &Function{Name: "debounced", Native: func(_ *Interpreter, _ []Value) (Value, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		if timer != nil {
+			timer.Stop()
+		}
+		timer = time.AfterFunc(d, func() {
+			if _, err := i.callFunction(nil, fn, nil); err != nil {
+				fmt.Fprintf(os.Stderr, "[mx debounce] %v\n", err)
+			}
+		})
+		return NullValue(), nil
+	}}
+	return FunctionValue(wrapper), nil
 }
 
 // sign_cookie(secret, value) returns "value.signature" — a tamper-evident

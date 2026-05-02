@@ -8,6 +8,10 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.13.0** (2026-05-02)
+  - Multipart file uploads via `request.files`
+  - Schedulers: `every` / `after` / `debounce`
+  - `html_escape` / `html_unescape` / `slug`
 - **v0.12.0** (2026-05-02)
   - Server-sent events: `sse /events { send(...) }`
 - **v0.11.0** (2026-05-02)

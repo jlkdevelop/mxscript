@@ -4,6 +4,31 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.13.0] — 2026-05-02
+
+### Added
+- **Multipart file uploads**: `request.files` is auto-populated when the
+  request body is `multipart/form-data`. Each file is an object with
+  `name`, `size`, `content_type`, and `content` (raw bytes as string).
+  Plain form fields stay in `request.body` as a flat object.
+
+  ```mx
+  post /upload {
+    let f = request.files?.avatar
+    write_file("./uploads/${f.name}", f.content)
+    return json({ saved: f.name, bytes: f.size })
+  }
+  ```
+- **Schedulers**:
+  - `every(duration, fn)` — run `fn()` periodically. Returns a stop fn.
+  - `after(duration, fn)` — run once after a delay. Returns a cancel fn.
+  - `debounce(duration, fn)` — wrapper that fires only once `duration`
+    has passed since the last call.
+- **HTML helpers**: `html_escape` / `html_unescape` for XSS-safe templating.
+- **`slug(s)`**: turn `"Hello, World!"` into `"hello-world"` for URL-safe IDs.
+
+[0.13.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.13.0
+
 ## [0.12.0] — 2026-05-02
 
 ### Added
