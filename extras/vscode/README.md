@@ -11,22 +11,23 @@ Syntax highlighting and language support for [MX Script](https://github.com/jlkd
 
 ## Install
 
-### Via VS Code Marketplace *(once published)*
+### Via VS Code Marketplace
 
 ```
-ext install jlkdevelop.mxscript
+ext install jlkdevelop.mxscript-lang
 ```
 
 Or search **"MX Script"** in the Extensions panel.
 
-### Via prebuilt .vsix *(works today)*
+Direct link: <https://marketplace.visualstudio.com/items?itemName=jlkdevelop.mxscript-lang>
 
-Each [mxscript release](https://github.com/jlkdevelop/mxscript/releases/latest) ships a `.vsix` asset:
+### Via prebuilt .vsix
+
+Useful for offline installs or air-gapped environments:
 
 ```bash
-curl -fsSL -o mx.vsix \
-  https://github.com/jlkdevelop/mxscript/releases/latest/download/mxscript-0.5.0.vsix
-code --install-extension mx.vsix
+npx @vscode/vsce package         # builds mxscript-lang-<version>.vsix locally
+code --install-extension *.vsix
 ```
 
 Restart VS Code, open any `.mx` file, and highlighting kicks in.
