@@ -13,7 +13,9 @@ package interpreter
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 
+	_ "github.com/lib/pq"  // Postgres driver, registered as "postgres"
 	_ "modernc.org/sqlite" // pure-Go SQLite driver, registered as "sqlite"
 )
 
@@ -40,8 +42,22 @@ func (h *dbHandle) runner() sqlRunner {
 	return h.db
 }
 
+// sqlOpen picks a driver from the DSN shape:
+//
+//	"./local.db"                            -> SQLite
+//	"file:..." or any plain path / :memory: -> SQLite
+//	"postgres://..." or "postgresql://..."  -> Postgres (lib/pq)
+//
+// Future drivers can be added by extending the switch — every dep is
+// imported as a side-effect (database/sql.Register-driven).
 func sqlOpen(path string) (*dbHandle, error) {
-	d, err := sql.Open("sqlite", path)
+	driver := "sqlite"
+	dsn := path
+	switch {
+	case strings.HasPrefix(path, "postgres://"), strings.HasPrefix(path, "postgresql://"):
+		driver = "postgres"
+	}
+	d, err := sql.Open(driver, dsn)
 	if err != nil {
 		return nil, err
 	}

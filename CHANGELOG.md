@@ -4,6 +4,32 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.36.0] — 2026-05-02
+
+### Added
+- **PostgreSQL support** — `sql.open` now picks the driver from the
+  DSN shape:
+  - `"./local.db"` / `":memory:"` → SQLite (modernc.org/sqlite)
+  - `"postgres://..."` / `"postgresql://..."` → Postgres (`lib/pq`)
+
+  ```mx
+  let db = sql.open(env_required("DATABASE_URL"))
+  sql.exec(db, "CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, name TEXT)")
+  let r = sql.exec(db, "INSERT INTO users (name) VALUES ($1) RETURNING id", "Jassim")
+  ```
+
+  All existing helpers (`exec` / `query` / `query_one` / `transaction`
+  / `migrate`) work transparently against both backends.
+- **`status_page(opts?)`** — drop-in HTML status dashboard. Renders
+  uptime, route count, static-mount count, middleware count, plus a
+  color-coded route table.
+
+  ```mx
+  get /status { return status_page({ app: "My API" }) }
+  ```
+
+[0.36.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.36.0
+
 ## [0.35.0] — 2026-05-02
 
 ### Added

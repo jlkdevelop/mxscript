@@ -41,6 +41,10 @@ import (
 // registerBuiltins. The REPL uses it to filter built-ins out of `.vars`.
 var builtinNames = map[string]bool{}
 
+// serverStartTime is captured the first time builtins are registered;
+// status_page() uses it to compute uptime.
+var serverStartTime = time.Now()
+
 // IsBuiltin reports whether a global name was installed by the standard
 // library rather than the user's program.
 func IsBuiltin(name string) bool { return builtinNames[name] }
@@ -64,6 +68,7 @@ func registerBuiltins(i *Interpreter) {
 	def("routes", builtinRoutesList)
 	def("swagger_ui", builtinSwaggerUI)
 	def("redoc_ui", builtinRedocUI)
+	def("status_page", builtinStatusPage)
 
 	// --- HTTP response helpers ---
 	def("json", builtinJSON)
@@ -499,6 +504,69 @@ func builtinRedocUI(i *Interpreter, args []Value) (Value, error) {
 <script src="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js"></script>
 </body></html>`
 	return ResponseValue(&Response{ContentType: "text/html; charset=utf-8", Body: StringValue(html)}), nil
+}
+
+// status_page(opts?) returns an HTML response with a small status
+// dashboard: app name, uptime (computed from server start), Go runtime,
+// route count, route table. Mounting it costs one route:
+//
+//	get /status { return status_page({ app: "My API" }) }
+func builtinStatusPage(i *Interpreter, args []Value) (Value, error) {
+	app := "MX Script app"
+	if len(args) > 0 && args[0].Kind == KindObject {
+		if v, ok := args[0].Object.Get("app"); ok && v.Kind == KindString {
+			app = v.String
+		}
+	}
+	uptime := time.Since(serverStartTime)
+	var rows strings.Builder
+	for _, r := range i.routes {
+		path := "/" + strings.Join(r.PathParts, "/")
+		fmt.Fprintf(&rows, `<tr><td><span class=method m-%s>%s</span></td><td><code>%s</code></td></tr>`,
+			strings.ToLower(r.Method), r.Method, htmlEscapeString(path))
+	}
+	html := `<!doctype html><html><head><meta charset=utf-8><title>` + htmlEscapeString(app) + ` · status</title>
+<style>
+  body { font: 14px/1.5 -apple-system,sans-serif; max-width: 720px; margin: 40px auto; padding: 0 20px; color: #1d2333; }
+  h1 { margin: 0 0 8px; font-weight: 600; }
+  .sub { color: #5a6072; margin: 0 0 32px; font-size: 13px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; margin-bottom: 32px; }
+  .card { padding: 14px 16px; background: #f6f7fb; border-radius: 8px; }
+  .card .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #5a6072; }
+  .card .value { font-size: 18px; font-weight: 600; margin-top: 2px; }
+  .ok { color: #16a34a; }
+  table { width: 100%; border-collapse: collapse; }
+  td { padding: 8px 12px; border-bottom: 1px solid #e5e7ef; }
+  td code { font-family: ui-monospace, monospace; font-size: 13px; }
+  .method { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; color: #fff; }
+  .m-get { background: #2752ba; } .m-post { background: #16a34a; } .m-put { background: #d97706; }
+  .m-delete { background: #dc2626; } .m-patch { background: #7c3aed; }
+  .m-sse, .m-ws { background: #0891b2; }
+</style></head><body>
+<h1>` + htmlEscapeString(app) + ` <span class=ok>●</span></h1>
+<p class=sub>Status as of ` + time.Now().UTC().Format(time.RFC3339) + `</p>
+<div class=grid>
+  <div class=card><div class=label>uptime</div><div class=value>` + humanDuration(uptime) + `</div></div>
+  <div class=card><div class=label>routes</div><div class=value>` + strconv.Itoa(len(i.routes)) + `</div></div>
+  <div class=card><div class=label>statics</div><div class=value>` + strconv.Itoa(len(i.statics)) + `</div></div>
+  <div class=card><div class=label>middlewares</div><div class=value>` + strconv.Itoa(len(i.middlewares)) + `</div></div>
+</div>
+<table>` + rows.String() + `</table>
+</body></html>`
+	return ResponseValue(&Response{ContentType: "text/html; charset=utf-8", Body: StringValue(html)}), nil
+}
+
+func humanDuration(d time.Duration) string {
+	switch {
+	case d < time.Minute:
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	case d < time.Hour:
+		return fmt.Sprintf("%dm %ds", int(d.Minutes()), int(d.Seconds())%60)
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh %dm", int(d.Hours()), int(d.Minutes())%60)
+	default:
+		return fmt.Sprintf("%dd %dh", int(d.Hours()/24), int(d.Hours())%24)
+	}
 }
 
 // routes() returns an array of { method, path } objects for every

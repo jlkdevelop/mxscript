@@ -8,6 +8,9 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.36.0** (2026-05-02)
+  - PostgreSQL support — `sql.open` auto-routes by DSN scheme
+  - `status_page(opts?)` health dashboard
 - **v0.35.0** (2026-05-02)
   - `mx bench` runner — auto-scales iterations to a 1s budget
   - `fs.watch(path, fn)` polling directory watcher
