@@ -63,6 +63,7 @@ type Response struct {
 	ContentType string
 	Body        Value
 	Headers     map[string]string
+	Cookies     []*http.Cookie
 }
 
 // OrderedMap preserves insertion order of object keys for predictable JSON output.
@@ -1252,6 +1253,9 @@ func writeResponse(w http.ResponseWriter, v Value) {
 		for k, vv := range resp.Headers {
 			w.Header().Set(k, vv)
 		}
+		for _, c := range resp.Cookies {
+			http.SetCookie(w, c)
+		}
 		status := resp.Status
 		if status == 0 {
 			status = http.StatusOK
@@ -1318,6 +1322,12 @@ func buildRequestObject(r *http.Request, params map[string]string) Value {
 		pm.Set(k, StringValue(params[k]))
 	}
 	req.Set("params", ObjectValue(pm))
+
+	cookies := NewOrderedMap()
+	for _, c := range r.Cookies() {
+		cookies.Set(c.Name, StringValue(c.Value))
+	}
+	req.Set("cookies", ObjectValue(cookies))
 
 	bodyVal := NullValue()
 	if r.Body != nil {

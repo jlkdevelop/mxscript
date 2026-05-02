@@ -146,7 +146,13 @@ func builtinJSON(i *Interpreter, args []Value) (Value, error) {
 	if len(args) > 0 {
 		body = args[0]
 	}
-	return ResponseValue(&Response{ContentType: "application/json", Body: body}), nil
+	resp := &Response{ContentType: "application/json", Body: body}
+	if len(args) > 1 {
+		if err := applyResponseOpts(resp, args[1]); err != nil {
+			return Value{}, err
+		}
+	}
+	return ResponseValue(resp), nil
 }
 
 func builtinText(i *Interpreter, args []Value) (Value, error) {
@@ -157,7 +163,13 @@ func builtinText(i *Interpreter, args []Value) (Value, error) {
 	if body.Kind != KindString {
 		body = StringValue(body.Display())
 	}
-	return ResponseValue(&Response{ContentType: "text/plain; charset=utf-8", Body: body}), nil
+	resp := &Response{ContentType: "text/plain; charset=utf-8", Body: body}
+	if len(args) > 1 {
+		if err := applyResponseOpts(resp, args[1]); err != nil {
+			return Value{}, err
+		}
+	}
+	return ResponseValue(resp), nil
 }
 
 func builtinHTML(i *Interpreter, args []Value) (Value, error) {
@@ -168,18 +180,112 @@ func builtinHTML(i *Interpreter, args []Value) (Value, error) {
 	if body.Kind != KindString {
 		body = StringValue(body.Display())
 	}
-	return ResponseValue(&Response{ContentType: "text/html; charset=utf-8", Body: body}), nil
+	resp := &Response{ContentType: "text/html; charset=utf-8", Body: body}
+	if len(args) > 1 {
+		if err := applyResponseOpts(resp, args[1]); err != nil {
+			return Value{}, err
+		}
+	}
+	return ResponseValue(resp), nil
 }
 
 func builtinStatus(i *Interpreter, args []Value) (Value, error) {
 	if len(args) < 1 || args[0].Kind != KindNumber {
-		return Value{}, fmt.Errorf("status(code, body?) requires a numeric status code")
+		return Value{}, fmt.Errorf("status(code, body?, opts?) requires a numeric status code")
 	}
 	resp := &Response{Status: int(args[0].Number), ContentType: "application/json"}
 	if len(args) > 1 {
 		resp.Body = args[1]
 	}
+	if len(args) > 2 {
+		if err := applyResponseOpts(resp, args[2]); err != nil {
+			return Value{}, err
+		}
+	}
 	return ResponseValue(resp), nil
+}
+
+// applyResponseOpts merges an options object into the response. Recognised
+// keys: `cookies` (array of cookie objects), `headers` (object of strings).
+func applyResponseOpts(resp *Response, optsVal Value) error {
+	if optsVal.Kind != KindObject {
+		return fmt.Errorf("response options must be an object")
+	}
+	opts := optsVal.Object
+	if v, ok := opts.Get("headers"); ok {
+		if v.Kind != KindObject {
+			return fmt.Errorf("opts.headers must be an object")
+		}
+		if resp.Headers == nil {
+			resp.Headers = map[string]string{}
+		}
+		for _, k := range v.Object.Keys {
+			hv, _ := v.Object.Get(k)
+			if hv.Kind != KindString {
+				return fmt.Errorf("header %q must be a string", k)
+			}
+			resp.Headers[k] = hv.String
+		}
+	}
+	if v, ok := opts.Get("cookies"); ok {
+		if v.Kind != KindArray {
+			return fmt.Errorf("opts.cookies must be an array")
+		}
+		for _, c := range v.Array {
+			cookie, err := mxCookieToHTTP(c)
+			if err != nil {
+				return err
+			}
+			resp.Cookies = append(resp.Cookies, cookie)
+		}
+	}
+	return nil
+}
+
+// mxCookieToHTTP converts an MX cookie object into a net/http Cookie.
+func mxCookieToHTTP(v Value) (*http.Cookie, error) {
+	if v.Kind != KindObject {
+		return nil, fmt.Errorf("cookie must be an object with at least name and value")
+	}
+	getStr := func(k string) string {
+		if val, ok := v.Object.Get(k); ok && val.Kind == KindString {
+			return val.String
+		}
+		return ""
+	}
+	getNum := func(k string) int {
+		if val, ok := v.Object.Get(k); ok && val.Kind == KindNumber {
+			return int(val.Number)
+		}
+		return 0
+	}
+	getBool := func(k string) bool {
+		if val, ok := v.Object.Get(k); ok && val.Kind == KindBool {
+			return val.Bool
+		}
+		return false
+	}
+	c := &http.Cookie{
+		Name:     getStr("name"),
+		Value:    getStr("value"),
+		Path:     getStr("path"),
+		Domain:   getStr("domain"),
+		MaxAge:   getNum("max_age"),
+		HttpOnly: getBool("http_only"),
+		Secure:   getBool("secure"),
+	}
+	if c.Name == "" {
+		return nil, fmt.Errorf("cookie.name is required")
+	}
+	switch strings.ToLower(getStr("same_site")) {
+	case "strict":
+		c.SameSite = http.SameSiteStrictMode
+	case "lax":
+		c.SameSite = http.SameSiteLaxMode
+	case "none":
+		c.SameSite = http.SameSiteNoneMode
+	}
+	return c, nil
 }
 
 func builtinRedirect(i *Interpreter, args []Value) (Value, error) {
