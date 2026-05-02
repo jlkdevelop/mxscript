@@ -85,6 +85,7 @@ func registerBuiltins(i *Interpreter) {
 	def("html_escape", builtinHTMLEscape)
 	def("html_unescape", builtinHTMLUnescape)
 	def("slug", builtinSlug)
+	def("markdown", builtinMarkdown)
 
 	// --- Array ops ---
 	def("push", builtinPush)
@@ -756,6 +757,184 @@ func builtinHTMLUnescape(i *Interpreter, args []Value) (Value, error) {
 		"&apos;", "'",
 	)
 	return StringValue(r.Replace(s)), nil
+}
+
+// markdown renders a small subset of CommonMark to safe HTML. Supports
+// headings, paragraphs, bold (**), italic (*), inline code (`), links
+// ([text](url)), lists (- and 1.), block code fences (```), and blank-line
+// separated paragraphs. All text is HTML-escaped before formatting so it's
+// safe for untrusted input. Not a full CommonMark implementation — for
+// rich features pull in a community library.
+func builtinMarkdown(i *Interpreter, args []Value) (Value, error) {
+	s, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	return StringValue(renderMarkdown(s)), nil
+}
+
+func renderMarkdown(s string) string {
+	var out strings.Builder
+	lines := strings.Split(s, "\n")
+	inCode := false
+	inUL := false
+	inOL := false
+	var paraBuf []string
+
+	flushPara := func() {
+		if len(paraBuf) == 0 {
+			return
+		}
+		joined := strings.Join(paraBuf, " ")
+		out.WriteString("<p>")
+		out.WriteString(renderInline(joined))
+		out.WriteString("</p>\n")
+		paraBuf = nil
+	}
+	closeLists := func() {
+		if inUL {
+			out.WriteString("</ul>\n")
+			inUL = false
+		}
+		if inOL {
+			out.WriteString("</ol>\n")
+			inOL = false
+		}
+	}
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+
+		if strings.HasPrefix(trimmed, "```") {
+			flushPara()
+			closeLists()
+			if !inCode {
+				out.WriteString("<pre><code>")
+				inCode = true
+			} else {
+				out.WriteString("</code></pre>\n")
+				inCode = false
+			}
+			continue
+		}
+		if inCode {
+			out.WriteString(htmlEscapeString(line))
+			out.WriteByte('\n')
+			continue
+		}
+
+		if trimmed == "" {
+			flushPara()
+			closeLists()
+			continue
+		}
+
+		// Headings
+		if strings.HasPrefix(trimmed, "#") {
+			flushPara()
+			closeLists()
+			level := 0
+			for level < 6 && level < len(trimmed) && trimmed[level] == '#' {
+				level++
+			}
+			text := strings.TrimSpace(trimmed[level:])
+			fmt.Fprintf(&out, "<h%d>%s</h%d>\n", level, renderInline(text), level)
+			continue
+		}
+
+		// Unordered list
+		if strings.HasPrefix(trimmed, "- ") || strings.HasPrefix(trimmed, "* ") {
+			flushPara()
+			if !inUL {
+				closeLists()
+				out.WriteString("<ul>\n")
+				inUL = true
+			}
+			fmt.Fprintf(&out, "  <li>%s</li>\n", renderInline(trimmed[2:]))
+			continue
+		}
+
+		// Ordered list (very loose: starts with digit + ".")
+		if len(trimmed) > 2 && trimmed[0] >= '0' && trimmed[0] <= '9' {
+			dot := strings.Index(trimmed, ". ")
+			if dot > 0 {
+				flushPara()
+				if !inOL {
+					closeLists()
+					out.WriteString("<ol>\n")
+					inOL = true
+				}
+				fmt.Fprintf(&out, "  <li>%s</li>\n", renderInline(trimmed[dot+2:]))
+				continue
+			}
+		}
+
+		closeLists()
+		paraBuf = append(paraBuf, trimmed)
+	}
+	flushPara()
+	closeLists()
+	if inCode {
+		out.WriteString("</code></pre>\n")
+	}
+	return out.String()
+}
+
+// renderInline handles **bold**, *italic*, `code`, [text](url) inside a
+// run of body text. Escapes everything else first to keep XSS safe.
+func renderInline(s string) string {
+	s = htmlEscapeString(s)
+	// `code`
+	s = inlineWrap(s, "`", "<code>", "</code>")
+	// **bold**
+	s = inlineWrap(s, "**", "<strong>", "</strong>")
+	// *italic*
+	s = inlineWrap(s, "*", "<em>", "</em>")
+	// [text](url)
+	s = inlineLinks(s)
+	return s
+}
+
+func inlineWrap(s, delim, open, close string) string {
+	var out strings.Builder
+	in := false
+	for i := 0; i < len(s); {
+		if strings.HasPrefix(s[i:], delim) {
+			if in {
+				out.WriteString(close)
+			} else {
+				out.WriteString(open)
+			}
+			in = !in
+			i += len(delim)
+			continue
+		}
+		out.WriteByte(s[i])
+		i++
+	}
+	return out.String()
+}
+
+func inlineLinks(s string) string {
+	var out strings.Builder
+	for i := 0; i < len(s); {
+		if s[i] == '[' {
+			closeBracket := strings.Index(s[i:], "]")
+			if closeBracket > 0 && i+closeBracket+1 < len(s) && s[i+closeBracket+1] == '(' {
+				closeParen := strings.Index(s[i+closeBracket+1:], ")")
+				if closeParen > 0 {
+					text := s[i+1 : i+closeBracket]
+					url := s[i+closeBracket+2 : i+closeBracket+1+closeParen]
+					fmt.Fprintf(&out, `<a href="%s">%s</a>`, url, text)
+					i = i + closeBracket + 1 + closeParen + 1
+					continue
+				}
+			}
+		}
+		out.WriteByte(s[i])
+		i++
+	}
+	return out.String()
 }
 
 // slug turns "Hello, World!" into "hello-world" — useful for URL-safe IDs.
@@ -2552,12 +2731,15 @@ func builtinAIComplete(i *Interpreter, args []Value) (Value, error) {
 	}
 	prompt := args[0].String
 
+	provider := "openai"
 	model := "gpt-4o-mini"
-	apiKey := os.Getenv("OPENAI_API_KEY")
 	maxTokens := 256
 
 	if len(args) > 1 && args[1].Kind == KindObject {
 		opts := args[1].Object
+		if v, ok := opts.Get("provider"); ok && v.Kind == KindString {
+			provider = strings.ToLower(v.String)
+		}
 		if v, ok := opts.Get("model"); ok && v.Kind == KindString {
 			model = v.String
 		}
@@ -2566,6 +2748,11 @@ func builtinAIComplete(i *Interpreter, args []Value) (Value, error) {
 		}
 	}
 
+	if provider == "anthropic" {
+		return aiCompleteAnthropic(prompt, model, maxTokens)
+	}
+
+	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
 		return Value{}, fmt.Errorf("ai.complete requires OPENAI_API_KEY environment variable")
 	}
@@ -2610,6 +2797,60 @@ func builtinAIComplete(i *Interpreter, args []Value) (Value, error) {
 		return StringValue(""), nil
 	}
 	return StringValue(parsed.Choices[0].Message.Content), nil
+}
+
+// aiCompleteAnthropic calls Anthropic's /v1/messages endpoint. The model
+// defaults to a recent Claude model if the user passed the OpenAI default.
+func aiCompleteAnthropic(prompt, model string, maxTokens int) (Value, error) {
+	apiKey := os.Getenv("ANTHROPIC_API_KEY")
+	if apiKey == "" {
+		return Value{}, fmt.Errorf("ai.complete with provider=anthropic requires ANTHROPIC_API_KEY")
+	}
+	if model == "" || model == "gpt-4o-mini" {
+		model = "claude-haiku-4-5-20251001"
+	}
+	body, _ := json.Marshal(map[string]any{
+		"model":      model,
+		"max_tokens": maxTokens,
+		"messages": []map[string]string{
+			{"role": "user", "content": prompt},
+		},
+	})
+	req, err := http.NewRequest("POST", "https://api.anthropic.com/v1/messages", bytes.NewReader(body))
+	if err != nil {
+		return Value{}, err
+	}
+	req.Header.Set("x-api-key", apiKey)
+	req.Header.Set("anthropic-version", "2023-06-01")
+	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{Timeout: 60 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return Value{}, err
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return Value{}, err
+	}
+	if resp.StatusCode >= 400 {
+		return Value{}, fmt.Errorf("anthropic ai.complete failed (%d): %s", resp.StatusCode, string(raw))
+	}
+	var parsed struct {
+		Content []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		} `json:"content"`
+	}
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return Value{}, err
+	}
+	for _, c := range parsed.Content {
+		if c.Type == "text" {
+			return StringValue(c.Text), nil
+		}
+	}
+	return StringValue(""), nil
 }
 
 func builtinAIEmbed(i *Interpreter, args []Value) (Value, error) {

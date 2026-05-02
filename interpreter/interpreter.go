@@ -6,6 +6,7 @@ package interpreter
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
@@ -108,6 +109,14 @@ func parseMultipart(r *http.Request) (*OrderedMap, *OrderedMap, error) {
 	}
 	return fields, files, nil
 }
+
+// gzipWriter wraps an http.ResponseWriter so writes go through a gzip stream.
+type gzipWriter struct {
+	http.ResponseWriter
+	gz *gzip.Writer
+}
+
+func (g *gzipWriter) Write(b []byte) (int, error) { return g.gz.Write(b) }
 
 // statusRecorder captures the response status for the access logger.
 type statusRecorder struct {
@@ -506,6 +515,7 @@ type Interpreter struct {
 	serverLog          bool
 	serverCORS         *corsConfig
 	serverRateLimit    *rateLimitConfig
+	serverCompression  bool
 
 	cliPort int // when > 0, overrides anything the program sets in its `server` block.
 	file    string
@@ -825,6 +835,11 @@ func (i *Interpreter) execServer(n *parser.ServerBlock, env *Env) error {
 				return runtimeErrorf(n, "server.log must be true or false")
 			}
 			i.serverLog = v.Bool
+		case "compression":
+			if v.Kind != KindBool {
+				return runtimeErrorf(n, "server.compression must be true or false")
+			}
+			i.serverCompression = v.Bool
 		case "rate_limit":
 			if v.Kind != KindObject {
 				return runtimeErrorf(n, "server.rate_limit must be an object")
@@ -1592,6 +1607,20 @@ func (i *Interpreter) Handler() http.Handler {
 				r.Body = http.MaxBytesReader(w, r.Body, maxBody)
 			}
 			inner.ServeHTTP(w, r)
+		})
+	}
+	if i.serverCompression {
+		inner := handler
+		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+				inner.ServeHTTP(w, r)
+				return
+			}
+			w.Header().Set("Content-Encoding", "gzip")
+			w.Header().Set("Vary", "Accept-Encoding")
+			gz := gzip.NewWriter(w)
+			defer gz.Close()
+			inner.ServeHTTP(&gzipWriter{ResponseWriter: w, gz: gz}, r)
 		})
 	}
 	if i.serverLog {

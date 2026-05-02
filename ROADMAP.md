@@ -8,6 +8,10 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.17.0** (2026-05-02)
+  - gzip compression: `server.compression: true`
+  - `markdown(s)` — built-in CommonMark subset → safe HTML
+  - Anthropic Claude provider: `ai.complete(..., { provider: "anthropic" })`
 - **v0.16.0** (2026-05-02) — concurrency
   - `spawn { ... }` runs a block in a goroutine
   - Channels: `chan(cap?)`, `send`, `recv`, `close_chan`

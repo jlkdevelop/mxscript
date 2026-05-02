@@ -4,6 +4,31 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.17.0] — 2026-05-02
+
+### Added
+- **gzip compression**: `server { compression: true }` adds a transparent
+  gzip middleware. Clients sending `Accept-Encoding: gzip` get a
+  ~10x-smaller response; everyone else gets the unencoded body.
+- **`markdown(s)`**: render a small subset of CommonMark to safe HTML —
+  headings, paragraphs, bold, italic, inline code, links, ordered &
+  unordered lists, fenced code blocks. All input is HTML-escaped first
+  so it's safe for untrusted text.
+- **Anthropic Claude provider** for `ai.complete`:
+
+  ```mx
+  let answer = ai.complete("In one sentence, what is MX Script?", {
+    provider: "anthropic",
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 200
+  })
+  ```
+
+  Reads `ANTHROPIC_API_KEY` from the env. Default OpenAI provider
+  unchanged.
+
+[0.17.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.17.0
+
 ## [0.16.0] — 2026-05-02
 
 ### Added — Concurrency
