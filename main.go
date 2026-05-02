@@ -187,7 +187,8 @@ func cmdRun(args []string) {
 }
 
 // printError formats an MX Script error with source context: the offending
-// line is shown in red with a caret pointing at the column.
+// line is shown in red with a caret pointing at the column. If a runtime
+// stack is attached (from interpreter.MXError), it's printed below.
 func printError(file string, err error) {
 	line, col, msg := errorLocation(err)
 
@@ -208,6 +209,19 @@ func printError(file string, err error) {
 				}
 				fmt.Fprintf(os.Stderr, "   %s%s |%s %s%s^%s\n", cGray, pad, cReset, caretPad, cRed, cReset)
 			}
+		}
+	}
+
+	var rt *interpreter.MXError
+	if errors.As(err, &rt) && len(rt.Stack) > 0 {
+		fmt.Fprintf(os.Stderr, "\n  %sstack:%s\n", cYellow, cReset)
+		for k := len(rt.Stack) - 1; k >= 0; k-- {
+			f := rt.Stack[k]
+			fmt.Fprintf(os.Stderr, "    in %s%s%s", cBold, f.Name, cReset)
+			if f.Line > 0 {
+				fmt.Fprintf(os.Stderr, " %s(called at %s:%d:%d)%s", cGray, file, f.Line, f.Col, cReset)
+			}
+			fmt.Fprintln(os.Stderr)
 		}
 	}
 	fmt.Fprintln(os.Stderr)

@@ -240,12 +240,21 @@ type continueSignal struct{}
 
 func (*continueSignal) Error() string { return "continue" }
 
-// MXError is a structured runtime error with file/line context.
+// MXError is a structured runtime error with file/line context and
+// the active call stack at the moment of failure.
 type MXError struct {
 	Message string
 	Line    int
 	Col     int
 	File    string
+	Stack   []StackFrame
+}
+
+// StackFrame describes one active call when an error fired.
+type StackFrame struct {
+	Name string
+	Line int
+	Col  int
 }
 
 func (e *MXError) Error() string {
@@ -290,6 +299,10 @@ type Interpreter struct {
 
 	cliPort int // when > 0, overrides anything the program sets in its `server` block.
 	file    string
+
+	// callStack tracks active user-defined function calls so runtime
+	// errors can include a traceback.
+	callStack []StackFrame
 }
 
 // New constructs an interpreter pre-populated with all built-ins.
@@ -391,6 +404,9 @@ func (i *Interpreter) wrapErr(err error) error {
 	var mx *MXError
 	if errors.As(err, &mx) {
 		mx.File = i.file
+		if mx.Stack == nil && len(i.callStack) > 0 {
+			mx.Stack = append([]StackFrame(nil), i.callStack...)
+		}
 		return mx
 	}
 	return err
@@ -1126,6 +1142,17 @@ func (i *Interpreter) callFunction(node parser.Node, fn *Function, args []Value)
 	if fn.Native != nil {
 		return fn.Native(i, args)
 	}
+	// Record the call site so runtime errors carry a stack trace.
+	frame := StackFrame{Name: fn.Name}
+	if frame.Name == "" {
+		frame.Name = "<anon>"
+	}
+	if node != nil {
+		frame.Line, frame.Col = node.Pos()
+	}
+	i.callStack = append(i.callStack, frame)
+	defer func() { i.callStack = i.callStack[:len(i.callStack)-1] }()
+
 	scope := NewEnv(fn.Closure)
 	for k, p := range fn.Params {
 		if k < len(args) {
@@ -1139,6 +1166,13 @@ func (i *Interpreter) callFunction(node parser.Node, fn *Function, args []Value)
 		if err != nil {
 			if rs, ok := err.(*returnSignal); ok {
 				return rs.Value, nil
+			}
+			// Capture the call stack into the error the first time it
+			// passes through a function boundary. Subsequent re-raises
+			// keep the original (deepest) snapshot.
+			var mx *MXError
+			if errors.As(err, &mx) && mx.Stack == nil {
+				mx.Stack = append([]StackFrame(nil), i.callStack...)
 			}
 			return Value{}, err
 		}
