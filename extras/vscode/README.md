@@ -1,6 +1,6 @@
 # MX Script — VS Code extension
 
-Syntax highlighting and basic language support for [MX Script](https://github.com/jlkdevelop/mxscript) (`.mx` files).
+Syntax highlighting and language support for [MX Script](https://github.com/jlkdevelop/mxscript) (`.mx` files).
 
 ## Features
 
@@ -9,9 +9,29 @@ Syntax highlighting and basic language support for [MX Script](https://github.co
 - Block-aware indentation
 - File icon association for `.mx`
 
-## Install (local development)
+## Install
 
-While we wait for the Marketplace listing, you can install the extension straight from this folder:
+### Via VS Code Marketplace *(once published)*
+
+```
+ext install jlkdevelop.mxscript
+```
+
+Or search **"MX Script"** in the Extensions panel.
+
+### Via prebuilt .vsix *(works today)*
+
+Each [mxscript release](https://github.com/jlkdevelop/mxscript/releases/latest) ships a `.vsix` asset:
+
+```bash
+curl -fsSL -o mx.vsix \
+  https://github.com/jlkdevelop/mxscript/releases/latest/download/mxscript-0.5.0.vsix
+code --install-extension mx.vsix
+```
+
+Restart VS Code, open any `.mx` file, and highlighting kicks in.
+
+### From source
 
 ```bash
 git clone https://github.com/jlkdevelop/mxscript.git
@@ -19,22 +39,49 @@ cd mxscript/extras/vscode
 code --install-extension .
 ```
 
-Or symlink it into your VS Code extensions directory:
+---
+
+## Publishing to the Marketplace *(maintainers)*
+
+The first publish needs a one-time Azure DevOps setup; after that, every release is one command.
+
+### One-time setup
+
+1. Sign in (or sign up) at [dev.azure.com](https://dev.azure.com) with the GitHub account you want to publish under.
+2. Create a Personal Access Token:
+   - Click your profile avatar → **Personal access tokens** → **New Token**
+   - Organization: **All accessible organizations**
+   - Scopes: **Marketplace → Manage**
+   - Copy the token (you won't see it again).
+3. Create the publisher and authenticate `vsce`:
+   ```bash
+   npx @vscode/vsce login jlkdevelop
+   ```
+   Paste the token when prompted. The `jlkdevelop` publisher matches `package.json`'s `publisher` field.
+
+### Each release
+
+From this directory:
 
 ```bash
-ln -s "$(pwd)" "$HOME/.vscode/extensions/mxscript-0.5.0"
+npx @vscode/vsce package      # creates .vsix locally
+npx @vscode/vsce publish      # uploads to Marketplace
 ```
 
-Restart VS Code, open any `.mx` file, and highlighting should kick in.
+Or in one shot when bumping the version:
 
-## Install (Marketplace)
+```bash
+npx @vscode/vsce publish patch   # 0.5.0 → 0.5.1
+npx @vscode/vsce publish minor   # 0.5.0 → 0.6.0
+npx @vscode/vsce publish major   # 0.5.0 → 1.0.0
+```
 
-Coming soon. Track progress at [#vscode-marketplace](https://github.com/jlkdevelop/mxscript/issues).
+---
 
 ## Contributing
 
-The grammar lives in [`syntaxes/mxscript.tmLanguage.json`](syntaxes/mxscript.tmLanguage.json). It's a standard TextMate grammar — every editor that speaks TextMate (Sublime, Atom, TextMate, etc.) can use it directly.
+The grammar lives in [`syntaxes/mxscript.tmLanguage.json`](syntaxes/mxscript.tmLanguage.json). It's a standard TextMate grammar — every editor that speaks TextMate (Sublime, Zed, Atom, etc.) can use it directly.
 
 ## License
 
-MIT © Jassim Alkharafi
+[MIT](./LICENSE) © Jassim Alkharafi
