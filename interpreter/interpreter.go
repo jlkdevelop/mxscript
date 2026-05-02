@@ -129,6 +129,75 @@ func (r *statusRecorder) WriteHeader(code int) {
 	r.ResponseWriter.WriteHeader(code)
 }
 
+// suggestIdentifier walks the env chain looking for a known name within
+// edit-distance 2 of `name`. Returns the closest match (or "" if none).
+// Used to power the "did you mean ___" hint on undefined-identifier errors.
+func suggestIdentifier(env *Env, name string) string {
+	candidates := allKnownIdents(env)
+	best := ""
+	bestDist := 3 // require <= 2 to suggest
+	lower := strings.ToLower(name)
+	for _, c := range candidates {
+		d := levenshtein(lower, strings.ToLower(c))
+		if d < bestDist {
+			bestDist = d
+			best = c
+		}
+	}
+	return best
+}
+
+func allKnownIdents(env *Env) []string {
+	seen := map[string]bool{}
+	var out []string
+	for e := env; e != nil; e = e.parent {
+		for _, k := range e.Keys() {
+			if !seen[k] {
+				seen[k] = true
+				out = append(out, k)
+			}
+		}
+	}
+	return out
+}
+
+// levenshtein is a tiny DP edit-distance — fast enough for ~200 ident
+// candidates per error. We don't bother caching since errors are rare.
+func levenshtein(a, b string) int {
+	if a == b {
+		return 0
+	}
+	if len(a) == 0 {
+		return len(b)
+	}
+	if len(b) == 0 {
+		return len(a)
+	}
+	prev := make([]int, len(b)+1)
+	curr := make([]int, len(b)+1)
+	for j := range prev {
+		prev[j] = j
+	}
+	for i := 1; i <= len(a); i++ {
+		curr[0] = i
+		for j := 1; j <= len(b); j++ {
+			cost := 1
+			if a[i-1] == b[j-1] {
+				cost = 0
+			}
+			curr[j] = prev[j] + 1
+			if curr[j-1]+1 < curr[j] {
+				curr[j] = curr[j-1] + 1
+			}
+			if prev[j-1]+cost < curr[j] {
+				curr[j] = prev[j-1] + cost
+			}
+		}
+		prev, curr = curr, prev
+	}
+	return prev[len(b)]
+}
+
 // pickAllowedOrigin returns the first matching allowed origin (or "*" if
 // the wildcard is configured). Empty result means the request origin is
 // not allowed; the caller omits the Access-Control-Allow-Origin header.
@@ -1152,6 +1221,10 @@ func (i *Interpreter) evalExpr(e parser.Expr, env *Env) (Value, error) {
 	case *parser.Identifier:
 		v, ok := env.Get(n.Name)
 		if !ok {
+			suggestion := suggestIdentifier(env, n.Name)
+			if suggestion != "" {
+				return Value{}, runtimeErrorf(n, "undefined identifier %q (did you mean %q?)", n.Name, suggestion)
+			}
 			return Value{}, runtimeErrorf(n, "undefined identifier %q", n.Name)
 		}
 		return v, nil

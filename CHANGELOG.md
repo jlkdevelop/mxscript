@@ -4,6 +4,30 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.25.0] — 2026-05-02
+
+### Added
+- **`shell(cmd, args?, opts?)`** runs an OS command and returns
+  `{ stdout, stderr, exit_code }`. Useful for build glue, devops
+  scripts, and anything that previously meant dropping to bash:
+
+  ```mx
+  let r = shell("git", ["log", "-1", "--format=%H"])
+  if (r.exit_code != 0) { error(r.stderr) }
+  print("HEAD:", trim(r.stdout))
+  ```
+
+  `opts` may include `dir`, `env`, `stdin`, `timeout_ms`.
+- **CSV**: `csv_parse(text)` returns an array of arrays;
+  `csv_stringify(rows)` is the inverse. Tolerates ragged rows.
+- **`format(fmtStr, ...args)`** — printf-style. `%s`, `%d`, `%f`, `%v`.
+- **"Did you mean ..." suggestions** on undefined-identifier errors.
+  The interpreter walks every name in scope and proposes the closest
+  match within Levenshtein distance 2. Catches the obvious typos like
+  `prnt` → `print`, `jsonn_stringify` → `json_stringify`.
+
+[0.25.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.25.0
+
 ## [0.24.0] — 2026-05-02
 
 ### Added

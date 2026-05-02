@@ -8,6 +8,11 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.25.0** (2026-05-02)
+  - `shell(cmd, args?, opts?)` — subprocess execution
+  - CSV: `csv_parse` / `csv_stringify`
+  - `format(fmt, ...args)` — printf-style
+  - "Did you mean ..." suggestions on undefined-identifier errors
 - **v0.24.0** (2026-05-02)
   - Language Server (`mx lsp`) — diagnostics + format-on-save + hover stub
   - VS Code extension declares LSP integration

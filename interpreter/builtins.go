@@ -9,6 +9,7 @@ import (
 	crand "crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/csv"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -23,6 +24,7 @@ import (
 	"net/smtp"
 	neturl "net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -153,6 +155,14 @@ func registerBuiltins(i *Interpreter) {
 	def("file_exists", builtinFileExists)
 	def("list_files", builtinListFiles)
 	def("delete_file", builtinDeleteFile)
+	def("shell", builtinShell)
+
+	// --- CSV ---
+	def("csv_parse", builtinCSVParse)
+	def("csv_stringify", builtinCSVStringify)
+
+	// --- Printf ---
+	def("format", builtinFormat)
 
 	// --- KV store (single-file JSON) ---
 	def("kv_get", builtinKVGet)
@@ -1668,6 +1678,167 @@ func builtinDeleteFile(i *Interpreter, args []Value) (Value, error) {
 		return Value{}, err
 	}
 	return NullValue(), nil
+}
+
+// ===== Subprocess =====
+//
+// shell(cmd, args?, opts?) runs an OS command and returns
+// { stdout, stderr, exit_code }. Helpful for scripting use cases —
+// devops glue, build tools, anything that previously meant dropping
+// to bash.
+//
+//	let r = shell("git", ["log", "-1", "--format=%H"])
+//	if (r.exit_code != 0) { error("git failed: " + r.stderr) }
+//	print("HEAD:", trim(r.stdout))
+//
+// opts may include `dir` (cwd), `env` (object of overrides), `stdin`
+// (string piped to the process), and `timeout_ms`.
+
+func builtinShell(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 1 || args[0].Kind != KindString {
+		return Value{}, fmt.Errorf("shell(cmd, args?, opts?) requires a string command")
+	}
+	cmdName := args[0].String
+	var argv []string
+	if len(args) > 1 && args[1].Kind == KindArray {
+		argv = stringsFromArray(args[1].Array)
+	}
+
+	var dir string
+	var stdin string
+	envOverrides := map[string]string{}
+	timeout := 30 * time.Second
+	if len(args) > 2 && args[2].Kind == KindObject {
+		o := args[2].Object
+		if v, ok := o.Get("dir"); ok && v.Kind == KindString {
+			dir = v.String
+		}
+		if v, ok := o.Get("stdin"); ok && v.Kind == KindString {
+			stdin = v.String
+		}
+		if v, ok := o.Get("timeout_ms"); ok && v.Kind == KindNumber {
+			timeout = time.Duration(v.Number) * time.Millisecond
+		}
+		if v, ok := o.Get("env"); ok && v.Kind == KindObject {
+			for _, k := range v.Object.Keys {
+				if val, _ := v.Object.Get(k); val.Kind == KindString {
+					envOverrides[k] = val.String
+				}
+			}
+		}
+	}
+
+	ctx, cancel := contextWithTimeout(timeout)
+	defer cancel()
+	c := exec.CommandContext(ctx, cmdName, argv...)
+	if dir != "" {
+		c.Dir = dir
+	}
+	if len(envOverrides) > 0 {
+		base := os.Environ()
+		for k, v := range envOverrides {
+			base = append(base, k+"="+v)
+		}
+		c.Env = base
+	}
+	if stdin != "" {
+		c.Stdin = strings.NewReader(stdin)
+	}
+	var outBuf, errBuf bytes.Buffer
+	c.Stdout = &outBuf
+	c.Stderr = &errBuf
+	err := c.Run()
+	exitCode := 0
+	if err != nil {
+		if ee, ok := err.(*exec.ExitError); ok {
+			exitCode = ee.ExitCode()
+		} else {
+			return Value{}, err
+		}
+	}
+	out := NewOrderedMap()
+	out.Set("stdout", StringValue(outBuf.String()))
+	out.Set("stderr", StringValue(errBuf.String()))
+	out.Set("exit_code", NumberValue(float64(exitCode)))
+	return ObjectValue(out), nil
+}
+
+// ===== CSV =====
+
+func builtinCSVParse(i *Interpreter, args []Value) (Value, error) {
+	s, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	r := csv.NewReader(strings.NewReader(s))
+	r.FieldsPerRecord = -1 // tolerate ragged rows
+	rows, err := r.ReadAll()
+	if err != nil {
+		return Value{}, err
+	}
+	out := make([]Value, len(rows))
+	for i, row := range rows {
+		cells := make([]Value, len(row))
+		for j, c := range row {
+			cells[j] = StringValue(c)
+		}
+		out[i] = ArrayValue(cells)
+	}
+	return ArrayValue(out), nil
+}
+
+func builtinCSVStringify(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 1 || args[0].Kind != KindArray {
+		return Value{}, fmt.Errorf("csv_stringify(rows) requires an array of arrays")
+	}
+	var buf bytes.Buffer
+	w := csv.NewWriter(&buf)
+	for _, row := range args[0].Array {
+		if row.Kind != KindArray {
+			return Value{}, fmt.Errorf("csv_stringify: each row must be an array")
+		}
+		fields := make([]string, len(row.Array))
+		for k, c := range row.Array {
+			fields[k] = c.Display()
+		}
+		if err := w.Write(fields); err != nil {
+			return Value{}, err
+		}
+	}
+	w.Flush()
+	if err := w.Error(); err != nil {
+		return Value{}, err
+	}
+	return StringValue(buf.String()), nil
+}
+
+// ===== Printf-style format =====
+
+// format(fmtStr, ...args) — minimal printf clone. Supports %s, %d, %f,
+// %v (any). MX Script users mostly want string interpolation; format
+// shows up in log lines and CSV rows.
+func builtinFormat(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 1 || args[0].Kind != KindString {
+		return Value{}, fmt.Errorf("format(fmt, ...args) requires a format string")
+	}
+	rest := make([]any, 0, len(args)-1)
+	for _, a := range args[1:] {
+		switch a.Kind {
+		case KindNumber:
+			if a.Number == float64(int64(a.Number)) {
+				rest = append(rest, int64(a.Number))
+			} else {
+				rest = append(rest, a.Number)
+			}
+		case KindString:
+			rest = append(rest, a.String)
+		case KindBool:
+			rest = append(rest, a.Bool)
+		default:
+			rest = append(rest, a.Display())
+		}
+	}
+	return StringValue(fmt.Sprintf(args[0].String, rest...)), nil
 }
 
 // ===== KV store =====
