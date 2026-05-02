@@ -8,6 +8,9 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.45.0** (2026-05-02)
+  - README hero refreshed for the v0.44+ surface
+  - `examples/full_app.mx` — kitchen-sink showcase
 - **v0.44.0** (2026-05-02)
   - Route lookup is now O(segments) via a path-segment trie (was linear)
 - **v0.43.0** (2026-05-02)

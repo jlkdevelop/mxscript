@@ -1,0 +1,150 @@
+// full_app.mx — kitchen-sink showcase. Demonstrates roughly half the
+// language in one file. Use it as a reference, copy fragments, or
+// `mx run examples/full_app.mx` to see everything wired together.
+
+server {
+  port: num(env("PORT", "8080")),
+  log: true,
+  compression: true,
+  rate_limit: { requests: 120, per: "1m" },
+  cors: { origins: ["*"], methods: ["GET", "POST", "PUT", "DELETE"] },
+  max_body: "5MB"
+}
+
+let db = sql.open(env("DATABASE_URL", "./full_app.db"))
+sql.migrate(db, [
+  "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, created_at TEXT NOT NULL)",
+  "CREATE TABLE IF NOT EXISTS posts (id INTEGER PRIMARY KEY, user_id INTEGER, title TEXT, body TEXT, created_at TEXT)"
+])
+
+let SESSION_SECRET = env("SESSION_SECRET", "dev-secret-please-replace")
+let JWT_SECRET     = env("JWT_SECRET",     "dev-secret-please-replace")
+
+// ===== Schemas (validate() inputs) =====
+
+let signup_schema = {
+  type: "object",
+  required: ["name", "email", "password"],
+  properties: {
+    name:     { type: "string", min_length: 2, max_length: 60 },
+    email:    { type: "string", format: "email" },
+    password: { type: "string", min_length: 8 }
+  }
+}
+
+let post_schema = {
+  type: "object",
+  required: ["title", "body"],
+  properties: {
+    title: { type: "string", min_length: 3, max_length: 120 },
+    body:  { type: "string", min_length: 1 }
+  }
+}
+
+// ===== Middlewares =====
+
+middleware require_auth {
+  let claims = jwt.verify(request.bearer_token, JWT_SECRET)
+  if (claims == null) { return status(401, { error: "unauthorized" }) }
+}
+
+// ===== Auth endpoints =====
+
+post /auth/signup {
+  let r = validate(request.body, signup_schema)
+  if (!r.valid) { return status(400, { errors: r.errors }) }
+  let body = request.body
+
+  let existing = sql.query_one(db, "SELECT id FROM users WHERE email = ?", body.email)
+  if (existing != null) { return status(409, { error: "email already taken" }) }
+
+  let res = sql.exec(db,
+    "INSERT INTO users (name, email, password_hash, created_at) VALUES (?, ?, ?, ?)",
+    body.name, body.email, password.hash(body.password), now_iso())
+
+  let token = jwt.sign({ sub: res.last_insert_id, exp: now() / 1000 + 86400 }, JWT_SECRET)
+  return json({ id: res.last_insert_id, token: token })
+}
+
+post /auth/login {
+  let body = request.body
+  if (body?.email == null || body?.password == null) {
+    return status(400, { error: "email and password required" })
+  }
+  let user = sql.query_one(db, "SELECT * FROM users WHERE email = ?", body.email)
+  if (user == null || !password.verify(body.password, user.password_hash)) {
+    return status(401, { error: "bad credentials" })
+  }
+  let token = jwt.sign({ sub: user.id, exp: now() / 1000 + 86400 }, JWT_SECRET)
+  return json({ id: user.id, name: user.name, token: token })
+}
+
+// ===== API v1, all auth-required =====
+
+group /api/v1 {
+  use require_auth
+
+  get /me {
+    let claims = jwt.verify(request.bearer_token, JWT_SECRET)
+    let user = sql.query_one(db, "SELECT id, name, email FROM users WHERE id = ?", claims.sub)
+    return json(user)
+  }
+
+  get /posts {
+    let posts = sql.query(db,
+      "SELECT id, user_id, title, body, created_at FROM posts ORDER BY id DESC LIMIT 50")
+    return json(posts)
+  }
+
+  post /posts {
+    let r = validate(request.body, post_schema)
+    if (!r.valid) { return status(400, { errors: r.errors }) }
+    let claims = jwt.verify(request.bearer_token, JWT_SECRET)
+    let res = sql.exec(db,
+      "INSERT INTO posts (user_id, title, body, created_at) VALUES (?, ?, ?, ?)",
+      claims.sub, request.body.title, request.body.body, now_iso())
+    return status(201, { id: res.last_insert_id })
+  }
+
+  delete /posts/:id {
+    let claims = jwt.verify(request.bearer_token, JWT_SECRET)
+    let id = num(request.params.id)
+    sql.exec(db, "DELETE FROM posts WHERE id = ? AND user_id = ?", id, claims.sub)
+    return json({ deleted: id })
+  }
+}
+
+// ===== AI: summarise the latest posts =====
+
+post /api/v1/ai/summarise {
+  use require_auth
+  let posts = sql.query(db, "SELECT title, body FROM posts ORDER BY id DESC LIMIT 5")
+  if (len(posts) == 0) { return json({ summary: "no posts yet" }) }
+  let prompt = "Summarise these blog posts in two sentences: " + json_stringify(posts)
+  return json({ summary: ai.complete(prompt, { max_tokens: 200 }) })
+}
+
+// ===== Real-time: stream the live post feed via SSE =====
+
+sse /api/v1/feed {
+  use require_auth
+  let last = 0
+  while (true) {
+    let posts = sql.query(db, "SELECT * FROM posts WHERE id > ? ORDER BY id", last)
+    loop posts as p {
+      send(p)
+      last = p.id
+    }
+    sleep(2000)
+  }
+}
+
+// ===== Public docs / status =====
+
+get /openapi.json { return json(openapi({ title: "Full App API", version: "1.0.0" })) }
+get /docs        { return swagger_ui("/openapi.json") }
+get /status      { return status_page({ app: "Full App" }) }
+
+get / {
+  return html("<h1>Full App</h1><p>See <a href='/docs'>/docs</a> · <a href='/status'>/status</a></p>")
+}

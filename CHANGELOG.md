@@ -4,6 +4,24 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.45.0] — 2026-05-02
+
+### Documentation
+- **README hero refresh** — the example up top now uses shorthand
+  routes, route groups, validate, and sql.migrate, ending with an
+  auto-generated Swagger UI. Reflects what the language actually
+  feels like at v0.44+.
+- **README "What ships in the box" matrix** — quick scan of the
+  practical surface across web framework / real-time / database /
+  auth / AI / background jobs / API tooling / stdlib / concurrency
+  / tooling / editor / distribution.
+- **`examples/full_app.mx`** — kitchen-sink showcase. ~150 lines
+  exercising sql.migrate, validate, password.hash + verify, JWT
+  signup / login, route groups + middleware, SSE feed, AI summarise,
+  OpenAPI + Swagger UI + status_page.
+
+[0.45.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.45.0
+
 ## [0.44.0] — 2026-05-02
 
 ### Performance

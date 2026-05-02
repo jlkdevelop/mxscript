@@ -20,43 +20,76 @@
 </p>
 
 ```mx
-server {
-  port: 8080
-}
+server { port: 8080 }
 
-let users = [
-  { id: 1, name: "Jassim Alkharafi", role: "Founder" }
-]
+let db = sql.open("./users.db")
+sql.migrate(db, [
+  "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT, email TEXT)"
+])
 
-route GET /users {
-  return json(users)
-}
-
-route GET /users/:id {
-  let id = num(request.params.id)
-  let user = find(users, fn(u) { return u.id == id })
-  if (user == null) {
-    return status(404, { error: "not found" })
+group /api/v1 {
+  get /users {
+    return json(sql.query(db, "SELECT * FROM users"))
   }
-  return json(user)
+
+  post /users {
+    let r = validate(request.body, {
+      type: "object",
+      required: ["name", "email"],
+      properties: {
+        name:  { type: "string", min_length: 2 },
+        email: { type: "string", format: "email" }
+      }
+    })
+    if (!r.valid) { return status(400, { errors: r.errors }) }
+    let res = sql.exec(db, "INSERT INTO users (name, email) VALUES (?, ?)",
+                       request.body.name, request.body.email)
+    return status(201, { id: res.last_insert_id })
+  }
 }
+
+get /openapi.json { return json(openapi({ title: "Users API" })) }
+get /docs        { return swagger_ui("/openapi.json") }
 ```
 
-That's it. No framework imports. No middleware setup. `mx run app.mx` and you have a JSON API on `localhost:8080`.
+That's a real validated REST API with persistence and auto-generated docs. `mx run app.mx` and you're done.
 
 ---
 
 ## Why MX Script?
 
-Most languages make you choose: ergonomics or speed. JavaScript is fast to write but you assemble a framework, a runtime, a build tool, and a deploy story before you ship anything. Go is fast and simple but the syntax for a JSON API is still a hundred lines.
+Most languages make you choose: ergonomics or speed. JavaScript is fast to write but you assemble a framework, a runtime, a build tool, and a deploy story before you ship anything. Go is fast and simple but the syntax for a JSON API is a hundred lines.
 
-MX Script is opinionated: **the language is the framework**. Routes, JSON, middleware, env vars, and AI calls are all first-class. The interpreter is a single Go binary with zero runtime dependencies.
+MX Script is opinionated: **the language is the framework**. Routes, JSON, SQL, JWT, OAuth, WebSockets, AI, and background jobs are all first-class. The interpreter is a single Go binary.
 
-- Single-file apps. No `package.json`, no `Cargo.toml`, no `go.mod` from your perspective.
-- HTTP server, JSON parsing, env vars, fetch, and AI built into the language.
-- Clean syntax. `route GET /users { ... }` reads like English.
-- One binary. No virtual machine, no GC tuning, no `node_modules`.
-- MIT licensed. Built in the open. Pull requests welcome.
+### What ships in the box
+
+| Layer | What you get |
+|---|---|
+| **Web framework** | Routes (`get /users { ... }`), middleware, route groups, static files, cookies, CORS, gzip, rate limiting, body limits, timeouts, graceful shutdown, TLS |
+| **Real-time** | Server-sent events (`sse /events`) and WebSockets (`ws /chat`) — both pure stdlib, no external dependencies |
+| **Database** | SQLite + Postgres through one `sql` namespace. Transactions, hash-tracked migrations, parameterized queries |
+| **Auth** | JWT, signed-cookie sessions, OAuth2 helpers (Google / GitHub / Discord / LinkedIn / Microsoft), `password.hash` (PBKDF2-SHA256), AES-256-GCM, webhook signature verification |
+| **AI** | OpenAI / Anthropic Claude / Google Gemini through `ai.complete`. Streaming, tool calling, embeddings |
+| **Background jobs** | Durable, SQLite-backed queue with retries and exponential backoff |
+| **API tooling** | `openapi()` auto-generates a 3.1 spec from your routes. `swagger_ui()` and `redoc_ui()` mount interactive docs in one line |
+| **Stdlib (~200 fns)** | Strings, arrays (`map / filter / reduce / sort / group_by / zip`), math, JSON, URL parsing, regex, file I/O, image manipulation, markdown rendering, CSV, email (SMTP), templates, schedulers, validation, subprocess, fs.watch |
+| **Concurrency** | `spawn { ... }` goroutines, channels, `wait_group`, thread-safe environments |
+| **Tooling** | `mx run / init / new / build / repl / test [--cover] / bench / fmt / lsp / upgrade / doctor` |
+| **Editor support** | TextMate grammar, VS Code extension, full LSP (diagnostics, format-on-save, hover, completion for all builtins) |
+| **Distribution** | GoReleaser binaries on every tag, Homebrew tap, `mx build --vercel` adapter |
+
+### Five starter projects, one command
+
+```bash
+mx new api my-api         # REST API + OpenAPI + Swagger UI + status page
+mx new todo my-todos      # JWT auth + SQLite + groups + validate
+mx new chat realtime      # WebSockets + sessions + broadcast
+mx new ai my-bot          # Tool-calling agent (5-turn loop)
+mx new blog my-blog       # SSR markdown blog with admin
+```
+
+Each scaffolds a complete, runnable app. Read the source, change the bits you don't like, ship.
 
 ---
 
