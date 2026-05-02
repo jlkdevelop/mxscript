@@ -12,6 +12,7 @@ package main
 
 import (
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -140,9 +141,48 @@ func cmdRun(args []string) {
 	}
 
 	if err := runOnce(file, port, debug); err != nil {
-		fmt.Fprintf(os.Stderr, "%serror:%s %s\n", cRed, cReset, err)
+		printError(file, err)
 		os.Exit(1)
 	}
+}
+
+// printError formats an MX Script error with source context: the offending
+// line is shown in red with a caret pointing at the column.
+func printError(file string, err error) {
+	line, col, msg := errorLocation(err)
+
+	fmt.Fprintf(os.Stderr, "\n%serror:%s %s\n", cRed, cReset, msg)
+	if line > 0 {
+		fmt.Fprintf(os.Stderr, "  %s-->%s %s:%d:%d\n", cGray, cReset, file, line, col)
+		src, readErr := os.ReadFile(file)
+		if readErr == nil {
+			lines := strings.Split(string(src), "\n")
+			if line-1 < len(lines) {
+				lineStr := strconv.Itoa(line)
+				pad := strings.Repeat(" ", len(lineStr))
+				fmt.Fprintf(os.Stderr, "   %s%s |%s\n", cGray, pad, cReset)
+				fmt.Fprintf(os.Stderr, "   %s%s |%s %s\n", cYellow, lineStr, cReset, lines[line-1])
+				caretPad := strings.Repeat(" ", col-1)
+				if col < 1 {
+					caretPad = ""
+				}
+				fmt.Fprintf(os.Stderr, "   %s%s |%s %s%s^%s\n", cGray, pad, cReset, caretPad, cRed, cReset)
+			}
+		}
+	}
+	fmt.Fprintln(os.Stderr)
+}
+
+func errorLocation(err error) (line, col int, msg string) {
+	var pe *parser.ParseError
+	if errors.As(err, &pe) {
+		return pe.Line, pe.Col, pe.Message
+	}
+	var rt *interpreter.MXError
+	if errors.As(err, &rt) {
+		return rt.Line, rt.Col, rt.Message
+	}
+	return 0, 0, err.Error()
 }
 
 func runOnce(file string, port int, debug bool) error {
@@ -329,10 +369,12 @@ func cmdBuild(args []string) {
 	}
 	tokens, err := lexer.New(string(src)).Tokenize()
 	if err != nil {
-		fatal("%s: %v", file, err)
+		printError(file, err)
+		os.Exit(1)
 	}
 	if _, err := parser.New(tokens).Parse(); err != nil {
-		fatal("%s: %v", file, err)
+		printError(file, err)
+		os.Exit(1)
 	}
 	fmt.Printf("%s✓%s %s parses cleanly\n", cGreen, cReset, file)
 }

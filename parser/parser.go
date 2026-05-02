@@ -75,9 +75,21 @@ func (p *Parser) expect(tt lexer.TokenType, ctx string) (lexer.Token, error) {
 	return lexer.Token{}, p.errorf("expected %s %s, got %s (%q)", tt, ctx, p.cur().Type, p.cur().Lexeme)
 }
 
+// ParseError carries a structured location so the CLI can render
+// source-context errors with a caret pointer.
+type ParseError struct {
+	Line    int
+	Col     int
+	Message string
+}
+
+func (e *ParseError) Error() string {
+	return fmt.Sprintf("parse error at line %d col %d: %s", e.Line, e.Col, e.Message)
+}
+
 func (p *Parser) errorf(format string, args ...any) error {
 	t := p.cur()
-	return fmt.Errorf("parse error at line %d col %d: %s", t.Line, t.Col, fmt.Sprintf(format, args...))
+	return &ParseError{Line: t.Line, Col: t.Col, Message: fmt.Sprintf(format, args...)}
 }
 
 func mkPos(t lexer.Token) pos { return pos{Line: t.Line, Col: t.Col} }
