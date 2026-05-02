@@ -114,6 +114,7 @@ func printHelp() {
 
 func cmdRun(args []string) {
 	var file string
+	var eval string
 	port := 0
 	watch := false
 	debug := false
@@ -139,6 +140,15 @@ func cmdRun(args []string) {
 			}
 			port = n
 			i++
+		case a == "--eval", a == "-e":
+			if i+1 >= len(args) {
+				fatal("--eval requires a snippet string")
+			}
+			eval = args[i+1]
+			i += 2
+		case strings.HasPrefix(a, "--eval="):
+			eval = strings.TrimPrefix(a, "--eval=")
+			i++
 		case a == "--watch":
 			watch = true
 			i++
@@ -153,8 +163,16 @@ func cmdRun(args []string) {
 		}
 	}
 
+	if eval != "" {
+		if err := runSource("<eval>", []byte(eval), port, debug); err != nil {
+			printError("<eval>", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	if file == "" {
-		fatal("usage: mx run <file.mx>")
+		fatal("usage: mx run <file.mx> | mx run --eval '<snippet>'")
 	}
 
 	if watch {
@@ -212,7 +230,10 @@ func runOnce(file string, port int, debug bool) error {
 	if err != nil {
 		return fmt.Errorf("cannot read %s: %w", file, err)
 	}
+	return runSource(file, src, port, debug)
+}
 
+func runSource(file string, src []byte, port int, debug bool) error {
 	tokens, err := lexer.New(string(src)).Tokenize()
 	if err != nil {
 		return fmt.Errorf("%s: %w", file, err)

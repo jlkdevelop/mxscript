@@ -42,8 +42,10 @@ func registerBuiltins(i *Interpreter) {
 	}
 
 	// --- Output ---
-	def("print", builtinPrint)
-	def("println", builtinPrint)
+	def("print", builtinPrint)     // space-separated, with trailing newline
+	def("println", builtinPrintln) // alias for print
+	def("write", builtinWrite)     // space-separated, NO trailing newline
+	def("eprint", builtinEprint)   // print to stderr (with newline)
 
 	// --- HTTP response helpers ---
 	def("json", builtinJSON)
@@ -54,6 +56,7 @@ func registerBuiltins(i *Interpreter) {
 
 	// --- Environment / I/O ---
 	def("env", builtinEnv)
+	def("env_required", builtinEnvRequired)
 	def("fetch", builtinFetch)
 	def("error", builtinError)
 	def("typeof", builtinTypeof)
@@ -166,7 +169,32 @@ func builtinPrint(i *Interpreter, args []Value) (Value, error) {
 	for k, a := range args {
 		parts[k] = a.Display()
 	}
+	// print() historically added a trailing newline; we keep that behavior
+	// because the bulk of MX programs in the wild rely on it. println() is
+	// just a more explicit synonym.
 	fmt.Println(strings.Join(parts, " "))
+	return NullValue(), nil
+}
+
+func builtinPrintln(i *Interpreter, args []Value) (Value, error) {
+	return builtinPrint(i, args)
+}
+
+func builtinWrite(i *Interpreter, args []Value) (Value, error) {
+	parts := make([]string, len(args))
+	for k, a := range args {
+		parts[k] = a.Display()
+	}
+	fmt.Print(strings.Join(parts, " "))
+	return NullValue(), nil
+}
+
+func builtinEprint(i *Interpreter, args []Value) (Value, error) {
+	parts := make([]string, len(args))
+	for k, a := range args {
+		parts[k] = a.Display()
+	}
+	fmt.Fprintln(os.Stderr, strings.Join(parts, " "))
 	return NullValue(), nil
 }
 
@@ -344,6 +372,20 @@ func builtinEnv(i *Interpreter, args []Value) (Value, error) {
 	v := os.Getenv(args[0].String)
 	if v == "" && len(args) > 1 {
 		return args[1], nil
+	}
+	return StringValue(v), nil
+}
+
+// env_required(name) returns the env var, or throws a descriptive error
+// if it's unset / empty. Useful at startup to fail-fast on misconfiguration.
+func builtinEnvRequired(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 1 || args[0].Kind != KindString {
+		return Value{}, fmt.Errorf("env_required(name) requires a string name")
+	}
+	name := args[0].String
+	v := os.Getenv(name)
+	if v == "" {
+		return Value{}, fmt.Errorf("required env var %q is not set", name)
 	}
 	return StringValue(v), nil
 }
