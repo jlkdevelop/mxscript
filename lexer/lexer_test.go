@@ -93,6 +93,41 @@ func TestLineColTracking(t *testing.T) {
 	}
 }
 
+func TestStringInterpolation(t *testing.T) {
+	tokens := tokenize(t, `"hi ${name}"`)
+	// Expanded form: ( "hi " + ( name ) + "" )
+	got := types(tokens)
+	want := []TokenType{
+		TokenLParen,
+		TokenString, // "hi "
+		TokenPlus,
+		TokenLParen,
+		TokenIdent, // name
+		TokenRParen,
+		TokenPlus,
+		TokenString, // ""
+		TokenRParen,
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %d tokens, want %d (%v)", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("token %d: got %s, want %s", i, got[i], want[i])
+		}
+	}
+}
+
+func TestStringInterpolationEscape(t *testing.T) {
+	tokens := tokenize(t, `"a \${not interp} b"`)
+	if tokens[0].Type != TokenString {
+		t.Fatalf("expected plain STRING, got %s (interpolation chain unexpected)", tokens[0].Type)
+	}
+	if tokens[0].Lexeme != "a ${not interp} b" {
+		t.Errorf("got %q", tokens[0].Lexeme)
+	}
+}
+
 func TestComments(t *testing.T) {
 	src := `// line comment
 let x = 1 // trailing

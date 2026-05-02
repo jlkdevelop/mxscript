@@ -295,41 +295,128 @@ func (l *Lexer) readNumber(line, col int) {
 	l.tokens = append(l.tokens, Token{Type: TokenNumber, Lexeme: string(l.src[start:l.pos]), Line: line, Col: col})
 }
 
+// readString handles plain strings and template strings with `${expr}`
+// interpolation. A template string is emitted as a parenthesised chain of
+// concatenations: `"x ${y} z"` becomes `( "x " + ( y ) + " z" )`. This lets
+// the existing parser handle interpolation with no special-case logic.
 func (l *Lexer) readString(quote rune, line, col int) error {
-	l.advance()
-	var b strings.Builder
+	l.advance() // consume opening quote
+
+	type segment struct {
+		isExpr            bool
+		literal           string
+		exprSrc           string
+		exprLine, exprCol int
+	}
+	var segs []segment
+	var lit strings.Builder
+
+	flushLit := func() {
+		segs = append(segs, segment{literal: lit.String()})
+		lit.Reset()
+	}
+
 	for l.pos < len(l.src) && l.src[l.pos] != quote {
 		c := l.src[l.pos]
+
 		if c == '\\' && l.pos+1 < len(l.src) {
 			next := l.src[l.pos+1]
 			switch next {
 			case 'n':
-				b.WriteRune('\n')
+				lit.WriteRune('\n')
 			case 't':
-				b.WriteRune('\t')
+				lit.WriteRune('\t')
 			case 'r':
-				b.WriteRune('\r')
+				lit.WriteRune('\r')
 			case '\\':
-				b.WriteRune('\\')
+				lit.WriteRune('\\')
 			case '"':
-				b.WriteRune('"')
+				lit.WriteRune('"')
 			case '\'':
-				b.WriteRune('\'')
+				lit.WriteRune('\'')
+			case '$':
+				lit.WriteRune('$')
 			default:
-				b.WriteRune(next)
+				lit.WriteRune(next)
 			}
 			l.advance()
 			l.advance()
 			continue
 		}
-		b.WriteRune(c)
+
+		if c == '$' && l.peek(1) == '{' {
+			flushLit()
+			l.advance() // $
+			l.advance() // {
+			startLine, startCol := l.line, l.col
+			var src strings.Builder
+			depth := 1
+			for l.pos < len(l.src) && depth > 0 {
+				ch := l.src[l.pos]
+				if ch == '{' {
+					depth++
+				} else if ch == '}' {
+					depth--
+					if depth == 0 {
+						break
+					}
+				}
+				src.WriteRune(ch)
+				l.advance()
+			}
+			if l.pos >= len(l.src) {
+				return fmt.Errorf("unterminated string interpolation at line %d", line)
+			}
+			l.advance() // consume }
+			segs = append(segs, segment{
+				isExpr:   true,
+				exprSrc:  src.String(),
+				exprLine: startLine,
+				exprCol:  startCol,
+			})
+			continue
+		}
+
+		lit.WriteRune(c)
 		l.advance()
 	}
+
 	if l.pos >= len(l.src) {
 		return fmt.Errorf("unterminated string at line %d", line)
 	}
-	l.advance()
-	l.tokens = append(l.tokens, Token{Type: TokenString, Lexeme: b.String(), Line: line, Col: col})
+	l.advance() // consume closing quote
+	flushLit()
+
+	// Plain string fast-path.
+	if len(segs) == 1 && !segs[0].isExpr {
+		l.tokens = append(l.tokens, Token{Type: TokenString, Lexeme: segs[0].literal, Line: line, Col: col})
+		return nil
+	}
+
+	// Emit (s1 + (e1) + s2 + (e2) + ... + sn) as a token chain.
+	l.tokens = append(l.tokens, Token{Type: TokenLParen, Lexeme: "(", Line: line, Col: col})
+	for idx, s := range segs {
+		if idx > 0 {
+			l.tokens = append(l.tokens, Token{Type: TokenPlus, Lexeme: "+", Line: line, Col: col})
+		}
+		if s.isExpr {
+			sub := &Lexer{src: []rune(s.exprSrc), line: s.exprLine, col: s.exprCol}
+			subTokens, err := sub.Tokenize()
+			if err != nil {
+				return err
+			}
+			l.tokens = append(l.tokens, Token{Type: TokenLParen, Lexeme: "(", Line: s.exprLine, Col: s.exprCol})
+			for _, t := range subTokens {
+				if t.Type != TokenEOF {
+					l.tokens = append(l.tokens, t)
+				}
+			}
+			l.tokens = append(l.tokens, Token{Type: TokenRParen, Lexeme: ")", Line: s.exprLine, Col: s.exprCol})
+		} else {
+			l.tokens = append(l.tokens, Token{Type: TokenString, Lexeme: s.literal, Line: line, Col: col})
+		}
+	}
+	l.tokens = append(l.tokens, Token{Type: TokenRParen, Lexeme: ")", Line: line, Col: col})
 	return nil
 }
 
