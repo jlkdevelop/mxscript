@@ -4,6 +4,50 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.15.0] — 2026-05-02
+
+### Added
+- **Email** via stdlib `net/smtp`:
+
+  ```mx
+  email.send({
+    host: env_required("SMTP_HOST"),
+    port: 587,
+    username: env("SMTP_USER"),
+    password: env("SMTP_PASS"),
+    from: "noreply@mxscript.com",
+    to: "user@example.com",
+    subject: "Welcome",
+    body: "<p>Thanks for signing up!</p>",
+    html: true
+  })
+  ```
+- **Rate limiting** as a server config option. Per-IP token bucket
+  refills linearly:
+
+  ```mx
+  server {
+    rate_limit: { requests: 60, per: "1m" }
+  }
+  ```
+
+  Excess requests get a 429 with a `Retry-After` header.
+- **Webhook signature verification** — `verify_webhook(secret, body,
+  signature, scheme?)` supports `"hex"` (default), `"base64"`,
+  `"github"` (`sha256=<hex>`), and `"stripe"` (`t=<ts>,v1=<hex>`).
+
+  ```mx
+  post /webhook {
+    let sig = request.headers["x-hub-signature-256"]
+    if (!verify_webhook(env("WH_SECRET"), request.body, sig, "github")) {
+      return status(401, { error: "bad signature" })
+    }
+    // ...handle event
+  }
+  ```
+
+[0.15.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.15.0
+
 ## [0.14.0] — 2026-05-02
 
 ### Added

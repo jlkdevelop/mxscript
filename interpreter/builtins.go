@@ -16,6 +16,7 @@ import (
 	"math"
 	"math/rand"
 	"net/http"
+	"net/smtp"
 	neturl "net/url"
 	"os"
 	"path/filepath"
@@ -202,6 +203,15 @@ func registerBuiltins(i *Interpreter) {
 	logNS.Set("debug", FunctionValue(&Function{Name: "log.debug", Native: builtinLogDebug}))
 	g.Set("log", ObjectValue(logNS))
 	builtinNames["log"] = true
+
+	// --- Email namespace ---
+	emailNS := NewOrderedMap()
+	emailNS.Set("send", FunctionValue(&Function{Name: "email.send", Native: builtinEmailSend}))
+	g.Set("email", ObjectValue(emailNS))
+	builtinNames["email"] = true
+
+	// --- Webhook helpers ---
+	def("verify_webhook", builtinVerifyWebhook)
 
 	// --- AI namespace ---
 	ai := NewOrderedMap()
@@ -2046,6 +2056,150 @@ func lookupTemplateVar(vars *OrderedMap, expr string) Value {
 func htmlEscapeString(s string) string {
 	r := strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;", "'", "&#39;")
 	return r.Replace(s)
+}
+
+// ===== Email (SMTP) =====
+//
+// email.send(opts) sends a plaintext (or HTML) email through an SMTP relay.
+// Required keys: host, from, to, subject, body. Optional: port (default
+// 587), username, password, use_tls (default true), html (bool).
+//
+//	email.send({
+//	  host: env_required("SMTP_HOST"),
+//	  port: 587,
+//	  username: env("SMTP_USER"),
+//	  password: env("SMTP_PASS"),
+//	  from: "noreply@mxscript.com",
+//	  to: "user@example.com",
+//	  subject: "Welcome",
+//	  body: "Thanks for signing up!"
+//	})
+
+func builtinEmailSend(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 1 || args[0].Kind != KindObject {
+		return Value{}, fmt.Errorf("email.send(opts) requires an object")
+	}
+	o := args[0].Object
+	getStr := func(k string) string {
+		if v, ok := o.Get(k); ok && v.Kind == KindString {
+			return v.String
+		}
+		return ""
+	}
+	getInt := func(k string, dflt int) int {
+		if v, ok := o.Get(k); ok && v.Kind == KindNumber {
+			return int(v.Number)
+		}
+		return dflt
+	}
+	getBool := func(k string, dflt bool) bool {
+		if v, ok := o.Get(k); ok && v.Kind == KindBool {
+			return v.Bool
+		}
+		return dflt
+	}
+	host := getStr("host")
+	port := getInt("port", 587)
+	from := getStr("from")
+	to := getStr("to")
+	subject := getStr("subject")
+	body := getStr("body")
+	username := getStr("username")
+	password := getStr("password")
+	isHTML := getBool("html", false)
+
+	if host == "" || from == "" || to == "" {
+		return Value{}, fmt.Errorf("email.send requires host, from, to")
+	}
+
+	contentType := "text/plain; charset=\"UTF-8\""
+	if isHTML {
+		contentType = "text/html; charset=\"UTF-8\""
+	}
+	msg := []byte(fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: %s\r\n\r\n%s",
+		from, to, subject, contentType, body))
+
+	addr := fmt.Sprintf("%s:%d", host, port)
+	var auth smtp.Auth
+	if username != "" && password != "" {
+		auth = smtp.PlainAuth("", username, password, host)
+	}
+	if err := smtp.SendMail(addr, auth, from, []string{to}, msg); err != nil {
+		return Value{}, err
+	}
+	return NullValue(), nil
+}
+
+// verify_webhook(secret, body, signature, [scheme]) returns true if the
+// signature matches an HMAC-SHA256 of the body. `scheme` controls the
+// signature format:
+//
+//	"hex"          — raw hex digest (default)
+//	"base64"       — base64-encoded digest
+//	"github"       — "sha256=<hex>" (GitHub style)
+//	"stripe"       — "t=<ts>,v1=<hex>" (signature must include the timestamp)
+func builtinVerifyWebhook(i *Interpreter, args []Value) (Value, error) {
+	secret, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	body, err := stringArg(args, 1)
+	if err != nil {
+		return Value{}, err
+	}
+	sig, err := stringArg(args, 2)
+	if err != nil {
+		return Value{}, err
+	}
+	scheme := "hex"
+	if len(args) > 3 && args[3].Kind == KindString {
+		scheme = args[3].String
+	}
+
+	switch scheme {
+	case "github":
+		// "sha256=<hex>"
+		const prefix = "sha256="
+		if !strings.HasPrefix(sig, prefix) {
+			return BoolValue(false), nil
+		}
+		expected := computeHMACHex(secret, body)
+		return BoolValue(hmac.Equal([]byte(expected), []byte(sig[len(prefix):]))), nil
+	case "stripe":
+		// "t=<ts>,v1=<hex>" — Stripe signs "<timestamp>.<body>"
+		var ts, hex string
+		for _, part := range strings.Split(sig, ",") {
+			kv := strings.SplitN(part, "=", 2)
+			if len(kv) != 2 {
+				continue
+			}
+			switch kv[0] {
+			case "t":
+				ts = kv[1]
+			case "v1":
+				hex = kv[1]
+			}
+		}
+		if ts == "" || hex == "" {
+			return BoolValue(false), nil
+		}
+		expected := computeHMACHex(secret, ts+"."+body)
+		return BoolValue(hmac.Equal([]byte(expected), []byte(hex))), nil
+	case "base64":
+		mac := hmac.New(sha256.New, []byte(secret))
+		mac.Write([]byte(body))
+		expected := base64.StdEncoding.EncodeToString(mac.Sum(nil))
+		return BoolValue(hmac.Equal([]byte(expected), []byte(sig))), nil
+	default: // hex
+		expected := computeHMACHex(secret, body)
+		return BoolValue(hmac.Equal([]byte(expected), []byte(sig))), nil
+	}
+}
+
+func computeHMACHex(secret, body string) string {
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(body))
+	return hex.EncodeToString(mac.Sum(nil))
 }
 
 // ===== Logger =====

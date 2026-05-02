@@ -21,6 +21,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -414,6 +415,41 @@ type corsConfig struct {
 	MaxAge      int
 }
 
+// rateLimitConfig is a per-IP token bucket. `Capacity` requests are
+// allowed in any rolling `Window`, refilled linearly.
+type rateLimitConfig struct {
+	Capacity int
+	Window   time.Duration
+	mu       sync.Mutex
+	buckets  map[string]*tokenBucket
+}
+
+type tokenBucket struct {
+	tokens float64
+	last   time.Time
+}
+
+func (rl *rateLimitConfig) allow(ip string) bool {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	now := time.Now()
+	b, ok := rl.buckets[ip]
+	if !ok {
+		b = &tokenBucket{tokens: float64(rl.Capacity), last: now}
+		rl.buckets[ip] = b
+	}
+	// Refill linearly based on elapsed time.
+	elapsed := now.Sub(b.last).Seconds()
+	refillRate := float64(rl.Capacity) / rl.Window.Seconds()
+	b.tokens = math.Min(float64(rl.Capacity), b.tokens+elapsed*refillRate)
+	b.last = now
+	if b.tokens >= 1 {
+		b.tokens--
+		return true
+	}
+	return false
+}
+
 type Interpreter struct {
 	globals     *Env
 	routes      []registeredRoute
@@ -430,6 +466,7 @@ type Interpreter struct {
 	serverMaxBody      int64
 	serverLog          bool
 	serverCORS         *corsConfig
+	serverRateLimit    *rateLimitConfig
 
 	cliPort int // when > 0, overrides anything the program sets in its `server` block.
 	file    string
@@ -727,6 +764,22 @@ func (i *Interpreter) execServer(n *parser.ServerBlock, env *Env) error {
 				return runtimeErrorf(n, "server.log must be true or false")
 			}
 			i.serverLog = v.Bool
+		case "rate_limit":
+			if v.Kind != KindObject {
+				return runtimeErrorf(n, "server.rate_limit must be an object")
+			}
+			cfg := &rateLimitConfig{Capacity: 60, Window: time.Minute, buckets: map[string]*tokenBucket{}}
+			if v2, ok := v.Object.Get("requests"); ok && v2.Kind == KindNumber {
+				cfg.Capacity = int(v2.Number)
+			}
+			if v2, ok := v.Object.Get("per"); ok {
+				d, err := durationFromValue(v2)
+				if err != nil {
+					return runtimeErrorf(n, "rate_limit.per: %v", err)
+				}
+				cfg.Window = d
+			}
+			i.serverRateLimit = cfg
 		case "cors":
 			if v.Kind != KindObject {
 				return runtimeErrorf(n, "server.cors must be an object")
@@ -1488,6 +1541,19 @@ func (i *Interpreter) Handler() http.Handler {
 			inner.ServeHTTP(rec, r)
 			fmt.Printf("\033[0;90m[%s]\033[0m %s %s \033[1;36m%d\033[0m \033[0;90m(%s)\033[0m\n",
 				start.Format("15:04:05"), r.Method, r.URL.Path, rec.code, time.Since(start).Round(time.Microsecond))
+		})
+	}
+	if i.serverRateLimit != nil {
+		rl := i.serverRateLimit
+		inner := handler
+		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ip := clientIP(r)
+			if !rl.allow(ip) {
+				w.Header().Set("Retry-After", strconv.Itoa(int(rl.Window.Seconds())))
+				http.Error(w, "rate limit exceeded", http.StatusTooManyRequests)
+				return
+			}
+			inner.ServeHTTP(w, r)
 		})
 	}
 	if i.serverCORS != nil {

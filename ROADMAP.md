@@ -8,6 +8,10 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.15.0** (2026-05-02)
+  - Email via SMTP: `email.send({ host, from, to, subject, body, html?, ... })`
+  - Rate limiting: `server.rate_limit: { requests: N, per: "1m" }` (per-IP token bucket)
+  - Webhook verification: `verify_webhook(secret, body, sig, scheme)` — hex / base64 / github / stripe
 - **v0.14.0** (2026-05-02)
   - Templates: `render(path, vars)` / `render_string(tmpl, vars)` with `{{ }}` and `{{{ }}}` placeholders
   - Structured logger: `log.info` / `log.warn` / `log.error` / `log.debug`
