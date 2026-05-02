@@ -603,7 +603,55 @@ type Interpreter struct {
 	// callStack tracks active user-defined function calls so runtime
 	// errors can include a traceback.
 	callStack []StackFrame
+
+	// coverage records executed source lines. nil = tracking disabled.
+	coverage *Coverage
 }
+
+// Coverage tracks which source lines were executed during a run. Filled
+// in by the interpreter when EnableCoverage is called and queried by the
+// CLI's `mx test --cover` reporter.
+type Coverage struct {
+	mu       sync.Mutex
+	executed map[int]bool // line numbers that ran
+}
+
+func newCoverage() *Coverage { return &Coverage{executed: map[int]bool{}} }
+
+func (c *Coverage) hit(line int) {
+	if c == nil || line <= 0 {
+		return
+	}
+	c.mu.Lock()
+	c.executed[line] = true
+	c.mu.Unlock()
+}
+
+// ExecutedLines returns a sorted snapshot of the line numbers that ran.
+func (c *Coverage) ExecutedLines() []int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([]int, 0, len(c.executed))
+	for k := range c.executed {
+		out = append(out, k)
+	}
+	sort.Ints(out)
+	return out
+}
+
+// EnableCoverage turns on per-statement line tracking. Called by
+// `mx test --cover`; off by default for normal runs (zero overhead).
+func (i *Interpreter) EnableCoverage() *Coverage {
+	i.coverage = newCoverage()
+	return i.coverage
+}
+
+// Coverage returns the active coverage tracker (nil if disabled).
+func (i *Interpreter) Coverage() *Coverage { return i.coverage }
+
+// Hit publicly records that `line` ran. Used by the test runner to
+// merge per-test coverage into a file-level aggregate.
+func (c *Coverage) Hit(line int) { c.hit(line) }
 
 // New constructs an interpreter pre-populated with all built-ins.
 func New() *Interpreter {
@@ -737,6 +785,10 @@ func (i *Interpreter) wrapErr(err error) error {
 // ===== Statement execution =====
 
 func (i *Interpreter) execStmt(s parser.Stmt, env *Env) error {
+	if i.coverage != nil {
+		line, _ := s.Pos()
+		i.coverage.hit(line)
+	}
 	switch n := s.(type) {
 	case *parser.LetStmt:
 		v, err := i.evalExpr(n.Value, env)

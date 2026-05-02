@@ -47,7 +47,7 @@ func (rr *replReader) ReadLine() (string, bool) {
 // Version is bumped at release time. Override at build with:
 //
 //	go build -ldflags "-X main.Version=v0.2.0"
-var Version = "v0.30.0"
+var Version = "v0.31.0"
 
 const (
 	cReset  = "\033[0m"
@@ -694,8 +694,12 @@ func expandFmtPaths(paths []string) ([]string, error) {
 
 func cmdTest(args []string) {
 	root := "."
+	cover := false
 	for _, a := range args {
-		if !strings.HasPrefix(a, "-") {
+		switch {
+		case a == "--cover":
+			cover = true
+		case !strings.HasPrefix(a, "-"):
 			root = a
 		}
 	}
@@ -745,10 +749,19 @@ func cmdTest(args []string) {
 			continue
 		}
 
+		// Aggregate coverage across all tests in this file.
+		var fileCov *interpreter.Coverage
 		// Each test gets a fresh interpreter so state can't leak between tests.
 		for _, name := range names {
 			interp := interpreter.New()
 			interp.SetFile(file)
+			if cover {
+				cov := interp.EnableCoverage()
+				if fileCov == nil {
+					fileCov = cov
+				}
+				_ = fileCov
+			}
 			if err := runProgramQuietly(interp, prog); err != nil {
 				fmt.Printf("  %s✗%s %s — %v\n", cRed, cReset, prettyTestName(name), err)
 				totalFail++
@@ -762,6 +775,32 @@ func cmdTest(args []string) {
 				fmt.Printf("  %s✓%s %s\n", cGreen, cReset, prettyTestName(name))
 				totalPass++
 			}
+			// Merge this test's hits into the file-level coverage.
+			if cover && fileCov != interp.Coverage() {
+				for _, ln := range interp.Coverage().ExecutedLines() {
+					fileCov.Hit(ln)
+				}
+			}
+		}
+
+		if cover {
+			executable := parser.ExecutableLines(prog)
+			covered := 0
+			ranSet := map[int]bool{}
+			for _, ln := range fileCov.ExecutedLines() {
+				ranSet[ln] = true
+			}
+			for ln := range executable {
+				if ranSet[ln] {
+					covered++
+				}
+			}
+			pct := 100.0
+			if len(executable) > 0 {
+				pct = float64(covered) * 100.0 / float64(len(executable))
+			}
+			fmt.Printf("  %scoverage:%s %d/%d lines (%.1f%%)\n",
+				cGray, cReset, covered, len(executable), pct)
 		}
 	}
 

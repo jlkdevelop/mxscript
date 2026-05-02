@@ -8,6 +8,8 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.31.0** (2026-05-02)
+  - `mx test --cover` — line coverage report
 - **v0.30.0** (2026-05-02)
   - `session.create / read / clear` — high-level session API
   - `examples/chat.mx` — 80-line real-time chat showcase (WS + sessions + HTML client)

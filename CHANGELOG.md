@@ -4,6 +4,30 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.31.0] — 2026-05-02
+
+### Added
+- **`mx test --cover`** — line coverage report. Runs your `*_test.mx`
+  suite as usual, then prints `covered / total lines (%)` per file:
+
+  ```
+  examples/stdlib_test.mx
+    ✓ strings
+    ✓ arrays
+    ...
+    coverage: 67/67 lines (100.0%)
+  ```
+
+  Implementation:
+  - `Interpreter.EnableCoverage()` flips on a per-statement line-hit
+    recorder. Off by default — non-test runs pay zero overhead.
+  - `parser.ExecutableLines(prog)` walks the AST to compute the set
+    of lines that *could* run (statements only — comments, blank
+    lines, and pure expressions don't count).
+  - The reporter diffs the two and renders the percentage.
+
+[0.31.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.31.0
+
 ## [0.30.0] — 2026-05-02
 
 ### Added — sessions
