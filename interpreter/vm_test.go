@@ -396,6 +396,66 @@ loop ["a", "b", "c"] as i, x {
 	}
 }
 
+func TestVMBreakInsideWhile(t *testing.T) {
+	src := `let total = 0
+let i = 0
+while i < 100 {
+  if i == 5 { break }
+  total = total + i
+  i = i + 1
+}`
+	tokens, _ := lexer.New(src).Tokenize()
+	prog, _ := parser.New(tokens).Parse()
+	c, ok := CompileBlock(prog.Stmts)
+	if !ok {
+		t.Fatal("compile refused")
+	}
+	env := NewEnv(nil)
+	if _, err := c.Run(nil, env); err != nil {
+		t.Fatal(err)
+	}
+	v, _ := env.Get("total")
+	if v.Number != 10 { // 0+1+2+3+4
+		t.Errorf("total: want 10, got %v", v.Number)
+	}
+	i, _ := env.Get("i")
+	if i.Number != 5 {
+		t.Errorf("i: want 5 (where break fired), got %v", i.Number)
+	}
+}
+
+func TestVMContinueInsideLoop(t *testing.T) {
+	src := `let total = 0
+loop [1, 2, 3, 4, 5] as n {
+  if n % 2 == 0 { continue }
+  total = total + n
+}`
+	tokens, _ := lexer.New(src).Tokenize()
+	prog, _ := parser.New(tokens).Parse()
+	c, ok := CompileBlock(prog.Stmts)
+	if !ok {
+		t.Fatal("compile refused")
+	}
+	env := NewEnv(nil)
+	if _, err := c.Run(nil, env); err != nil {
+		t.Fatal(err)
+	}
+	v, _ := env.Get("total")
+	if v.Number != 9 { // 1+3+5
+		t.Errorf("total: want 9, got %v", v.Number)
+	}
+}
+
+func TestVMBreakOutsideLoopFallsBack(t *testing.T) {
+	// `break` without an enclosing loop frame should refuse the
+	// whole compilation so the tree-walker's runtime error fires.
+	tokens, _ := lexer.New(`break`).Tokenize()
+	prog, _ := parser.New(tokens).Parse()
+	if _, ok := CompileBlock(prog.Stmts); ok {
+		t.Errorf("expected compile to refuse top-level break")
+	}
+}
+
 func TestVMNestedLoops(t *testing.T) {
 	src := `let total = 0
 loop [1, 2, 3] as a {

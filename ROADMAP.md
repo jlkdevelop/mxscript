@@ -8,6 +8,9 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.82.0** (2026-05-03)
+  - VM lowers `break` / `continue` via per-Compiled loop-frame stack with patched jumps
+  - VM coverage push from v0.52 → v0.82 now complete: virtually every common shape compiles
 - **v0.81.0** (2026-05-03)
   - VM lowers `?.` optional chaining via new `OpJumpIfNullKeep` opcode
 - **v0.80.0** (2026-05-03)

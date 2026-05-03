@@ -78,6 +78,21 @@ type Compiled struct {
 	// loopGen counts loop-temporary variables so two nested `loop`
 	// statements don't share the same hidden name.
 	loopGen int
+
+	// loopFrames stacks the active loops so `break` / `continue`
+	// can patch their jumps to the right targets. Each frame holds
+	// the indexes of every emitted break + continue jump; we patch
+	// them when the loop body finishes.
+	loopFrames []*loopFrame
+}
+
+// loopFrame is one entry in the per-Compiled loop stack. Continue
+// jumps target `continueTo` (set when the loop builder knows the
+// post-body increment block); break jumps target the loop end.
+type loopFrame struct {
+	continueTo  int32 // patch target for `continue`
+	breakJumps  []int // indices of OpJump instructions emitted by `break`
+	contJumps   []int // indices of OpJump instructions emitted by `continue`
 }
 
 // CompileExpr lowers a single expression node into a self-contained
@@ -361,11 +376,25 @@ func (c *Compiled) compileStmt(s parser.Stmt) bool {
 			return false
 		}
 		jumpOut := c.emit(OpJumpIfFalse, 0)
+		// Push a loop frame so `break` / `continue` inside the body
+		// know where to jump.
+		frame := &loopFrame{continueTo: loopStart}
+		c.loopFrames = append(c.loopFrames, frame)
 		if !c.compileStmts(n.Body) {
+			c.loopFrames = c.loopFrames[:len(c.loopFrames)-1]
 			return false
+		}
+		c.loopFrames = c.loopFrames[:len(c.loopFrames)-1]
+		// continue → top of loop (re-test condition)
+		for _, idx := range frame.contJumps {
+			c.patch(idx, loopStart)
 		}
 		c.emit(OpJump, loopStart)
 		c.patch(jumpOut, c.here())
+		// break → after the loop
+		for _, idx := range frame.breakJumps {
+			c.patch(idx, c.here())
+		}
 		return true
 
 	case *parser.LoopStmt:
@@ -421,8 +450,21 @@ func (c *Compiled) compileStmt(s parser.Stmt) bool {
 			c.emit(OpStoreVar, c.addVar(n.IndexVar))
 		}
 
+		// Push a loop frame; continue jumps to the increment block,
+		// break jumps to the post-loop position.
+		frame := &loopFrame{}
+		c.loopFrames = append(c.loopFrames, frame)
 		if !c.compileStmts(n.Body) {
+			c.loopFrames = c.loopFrames[:len(c.loopFrames)-1]
 			return false
+		}
+		c.loopFrames = c.loopFrames[:len(c.loopFrames)-1]
+
+		// continue lands here → at the increment (so the loop var
+		// advances before the next iteration).
+		incStart := c.here()
+		for _, idx := range frame.contJumps {
+			c.patch(idx, incStart)
 		}
 
 		// __i = __i + 1
@@ -433,6 +475,29 @@ func (c *Compiled) compileStmt(s parser.Stmt) bool {
 
 		c.emit(OpJump, loopStart)
 		c.patch(jumpOut, c.here())
+		for _, idx := range frame.breakJumps {
+			c.patch(idx, c.here())
+		}
+		return true
+
+	case *parser.BreakStmt:
+		// `break` outside a loop is invalid at runtime in the tree-
+		// walker; we mirror that by refusing to compile when there's
+		// no enclosing loop frame.
+		if len(c.loopFrames) == 0 {
+			return false
+		}
+		frame := c.loopFrames[len(c.loopFrames)-1]
+		jump := c.emit(OpJump, 0)
+		frame.breakJumps = append(frame.breakJumps, jump)
+		return true
+	case *parser.ContinueStmt:
+		if len(c.loopFrames) == 0 {
+			return false
+		}
+		frame := c.loopFrames[len(c.loopFrames)-1]
+		jump := c.emit(OpJump, 0)
+		frame.contJumps = append(frame.contJumps, jump)
 		return true
 
 	case *parser.ReturnStmt:

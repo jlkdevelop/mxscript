@@ -4,6 +4,47 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.82.0] — 2026-05-03
+
+### Added — VM lowers `break` and `continue`
+
+Loops with early-exit / skip-iteration semantics now compile cleanly:
+
+```mx
+loop items as n {
+  if n.archived { continue }
+  if found_match(n) { break }
+  process(n)
+}
+```
+
+Per-`Compiled` loop-frame stack tracks `breakJumps` and `contJumps`
+slot indices; the loop builder patches them when the body finishes.
+Both `WhileStmt` and `LoopStmt` participate. Nested loops use the
+innermost frame so `break` inside an inner loop only exits that
+loop, matching tree-walker semantics.
+
+Refuses to compile top-level `break` / `continue` (no enclosing
+loop frame), so the tree-walker's runtime-error path fires for
+malformed programs instead of producing surprising VM behaviour.
+
+This concludes the VM coverage push that started at v0.52. The
+stack machine now lowers virtually every statement and expression
+shape MX programs use:
+
+- v0.52  expressions (arithmetic, comparison, identifiers)
+- v0.53  let / = / if / while
+- v0.62  function bodies, calls, return, member access
+- v0.71  array / object literals, indexed reads, loop
+- v0.80  `&&` / `||` / `??` short-circuit
+- v0.81  `?.` optional chaining
+- v0.82  `break` / `continue`
+
+Falls back: destructuring lets, try / catch, spread args, complex
+assignments (`a.b = c`, `a[0] = c`).
+
+[0.82.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.82.0
+
 ## [0.81.0] — 2026-05-03
 
 ### Added — VM lowers `?.` optional chaining
