@@ -4,6 +4,28 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.1] — 2026-05-03
+
+### Added — `crypto.*` namespace
+
+Namespaced aliases for the existing crypto + encoding helpers, so
+related primitives stay discoverable via tab-completion:
+
+```mx
+crypto.sha256("hello")                       // 2cf24dba5fb0a30e...
+crypto.hmac_sha256(secret, payload)
+crypto.aes_encrypt(plain, key)
+crypto.uuid()
+crypto.base64_encode(s) / crypto.base32_encode(s)
+crypto.random_bytes(16) / crypto.random_string(32)
+crypto.sign_cookie(secret, value) / crypto.verify_cookie(secret, signed)
+```
+
+Top-level forms (`sha256`, `hmac_sha256`, `aes_encrypt`, etc.) keep
+working unchanged — pick whichever reads better.
+
+[1.0.1]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.0.1
+
 ## [1.0.0] — 2026-05-03
 
 🎉 **MX Script 1.0** — production-ready stable release.

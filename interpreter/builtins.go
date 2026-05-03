@@ -176,6 +176,25 @@ func registerBuiltins(i *Interpreter) {
 	vaultNS.Set("delete", FunctionValue(&Function{Name: "vault.delete", Native: builtinVaultDelete}))
 	g.Set("vault", ObjectValue(vaultNS))
 	builtinNames["vault"] = true
+
+	// crypto.* — namespaced aliases for hashing / HMAC / AES / encoding
+	// helpers. Keeps related primitives discoverable via tab-completion.
+	cryptoNS := NewOrderedMap()
+	cryptoNS.Set("sha256", FunctionValue(&Function{Name: "crypto.sha256", Native: builtinHashSHA256}))
+	cryptoNS.Set("hmac_sha256", FunctionValue(&Function{Name: "crypto.hmac_sha256", Native: builtinHmacSHA256}))
+	cryptoNS.Set("aes_encrypt", FunctionValue(&Function{Name: "crypto.aes_encrypt", Native: builtinAESEncrypt}))
+	cryptoNS.Set("aes_decrypt", FunctionValue(&Function{Name: "crypto.aes_decrypt", Native: builtinAESDecrypt}))
+	cryptoNS.Set("base64_encode", FunctionValue(&Function{Name: "crypto.base64_encode", Native: builtinBase64Encode}))
+	cryptoNS.Set("base64_decode", FunctionValue(&Function{Name: "crypto.base64_decode", Native: builtinBase64Decode}))
+	cryptoNS.Set("base32_encode", FunctionValue(&Function{Name: "crypto.base32_encode", Native: builtinBase32Encode}))
+	cryptoNS.Set("base32_decode", FunctionValue(&Function{Name: "crypto.base32_decode", Native: builtinBase32Decode}))
+	cryptoNS.Set("random_bytes", FunctionValue(&Function{Name: "crypto.random_bytes", Native: builtinRandomBytes}))
+	cryptoNS.Set("random_string", FunctionValue(&Function{Name: "crypto.random_string", Native: builtinRandomString}))
+	cryptoNS.Set("uuid", FunctionValue(&Function{Name: "crypto.uuid", Native: builtinUUID}))
+	cryptoNS.Set("sign_cookie", FunctionValue(&Function{Name: "crypto.sign_cookie", Native: builtinSignCookie}))
+	cryptoNS.Set("verify_cookie", FunctionValue(&Function{Name: "crypto.verify_cookie", Native: builtinVerifyCookie}))
+	g.Set("crypto", ObjectValue(cryptoNS))
+	builtinNames["crypto"] = true
 	def("slug", builtinSlug)
 	def("markdown", builtinMarkdown)
 
