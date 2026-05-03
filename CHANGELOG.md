@@ -4,6 +4,35 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.43.0] — 2026-05-03
+
+### Added — `api_key_auth()` for service-to-service auth
+
+```mx
+middleware require_api_key {
+  if (!api_key_auth(request, env("API_KEYS"))) {
+    return status(401, { error: "invalid api key" })
+  }
+}
+
+group /api {
+  use require_api_key
+  get /health { return json({ ok: true }) }
+}
+```
+
+- Reads `X-API-Key` header first; falls back to `Authorization: Bearer <key>`.
+- `allowed_keys` is a comma-separated string — typically `env("API_KEYS")`.
+- Constant-time compare so timing leaks can't enumerate keys byte-by-byte.
+- **Fail-closed:** empty allow-list always returns false, so a misconfigured
+  deploy doesn't accidentally accept anything.
+
+JWT was already covered for end-user auth. This is the missing piece for
+the *service-to-service* case (CI tokens, partner integrations, internal
+microservices) — much lighter than provisioning OAuth or JWT issuers.
+
+[1.43.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.43.0
+
 ## [1.42.0] — 2026-05-03
 
 ### Added — `etag()` + `not_modified()` + `cache_control()` for read-heavy APIs

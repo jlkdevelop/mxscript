@@ -657,6 +657,7 @@ var builtinDocs = map[string]builtinDoc{
 	"etag":                     {"etag(value) -> string", "Stable SHA-256 etag for any value. Strings hash their own bytes; arrays/objects encode as JSON first. Pair with not_modified() and an If-None-Match check."},
 	"not_modified":             {"not_modified() -> response", "304 Not Modified, empty body. Use after an etag() / If-None-Match comparison succeeds."},
 	"cache_control":            {"cache_control(opts) -> string", "Build a Cache-Control header value. Bool keys: public/private/no_cache/no_store/must_revalidate/immutable. Number keys (seconds): max_age/s_max_age/stale_while_revalidate/stale_if_error."},
+	"api_key_auth":             {"api_key_auth(request, allowed_keys) -> bool", "Validate X-API-Key header (or Authorization: Bearer) against a comma-separated allow-list. Constant-time compare. Empty allow-list always returns false (fail-closed)."},
 	"form.parse":               {"form.parse(s) -> object|null", "Parse application/x-www-form-urlencoded; multi-value keys collapse to arrays. null on malformed input."},
 	"form.encode":              {"form.encode(obj) -> string", "Encode an object as urlencoded form body with sorted keys. Arrays expand to repeated keys; null values skip."},
 	"xml.parse":                {"xml.parse(s) -> object|null", "Parse XML into { tag, attrs, text, children } nodes. null on empty input; throws on malformed."},
