@@ -284,6 +284,13 @@ func registerBuiltins(i *Interpreter) {
 	g.Set("xml", ObjectValue(xmlNS))
 	builtinNames["xml"] = true
 
+	// config.* — env-var interpolation + format-by-extension config.
+	configNS := NewOrderedMap()
+	configNS.Set("load", FunctionValue(&Function{Name: "config.load", Native: builtinConfigLoad}))
+	configNS.Set("expand", FunctionValue(&Function{Name: "config.expand", Native: builtinConfigExpand}))
+	g.Set("config", ObjectValue(configNS))
+	builtinNames["config"] = true
+
 	// health.* — k8s-style liveness / readiness probes.
 	healthNS := NewOrderedMap()
 	healthNS.Set("live", FunctionValue(&Function{Name: "health.live", Native: builtinHealthLive}))

@@ -4,6 +4,36 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.25.0] — 2026-05-03
+
+### Added — `config.load` + `config.expand` (env-aware config)
+
+```yaml
+# config.yaml — committed; secrets stay in env
+db:
+  dsn:  ${DATABASE_URL:-sqlite:./local.db}
+  pool: 10
+stripe:
+  secret: ${STRIPE_SECRET_KEY}
+  price:  ${STRIPE_PRICE_ID}
+```
+
+```mx
+let cfg = config.load("./config.yaml")
+let db  = sql.open(cfg.db.dsn)
+```
+
+- **Format-by-extension** — `.yaml` / `.yml` / `.json` / `.toml`
+  pick the right parser automatically.
+- **`${NAME}` and `${NAME:-default}` interpolation** runs against
+  `os.LookupEnv` before parsing, so committed config files can
+  carry secret references without the secrets themselves.
+- **`config.expand(s)`** is the same substitution applied to any
+  string — useful for templating connection strings or filenames at
+  runtime.
+
+[1.25.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.25.0
+
 ## [1.24.0] — 2026-05-03
 
 ### Added — `mx parse <file.mx>` (AST as JSON)

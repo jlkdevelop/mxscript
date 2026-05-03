@@ -644,6 +644,8 @@ var builtinDocs = map[string]builtinDoc{
 	"form.encode":              {"form.encode(obj) -> string", "Encode an object as urlencoded form body with sorted keys. Arrays expand to repeated keys; null values skip."},
 	"xml.parse":                {"xml.parse(s) -> object|null", "Parse XML into { tag, attrs, text, children } nodes. null on empty input; throws on malformed."},
 	"xml.stringify":            {"xml.stringify(node) -> string", "Inverse of xml.parse — render a node tree back to XML text."},
+	"config.load":              {"config.load(path) -> object", "Load YAML/JSON/TOML by extension; expand ${VAR} and ${VAR:-default} from env first."},
+	"config.expand":            {"config.expand(s) -> string", "Expand ${VAR} placeholders in any string from env."},
 	"time.in_zone":             {"time.in_zone(unix, zone) -> object", "Components for the timestamp in an IANA timezone (e.g. America/New_York)."},
 	"time.relative":            {"time.relative(unix) -> string", "Human-friendly elapsed: 'just now', '5m ago', '2h ago', '3 days ago', 'in 1h'."},
 	"cron":                     {"cron(spec, fn) -> stop_fn", "Vixie cron schedule. 5 fields: minute hour dom month dow. Returns a function that cancels the schedule."},
