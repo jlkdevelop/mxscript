@@ -24,6 +24,7 @@ import (
 	"io"
 	"math"
 	"math/rand"
+	"mime/multipart"
 	"net/http"
 	"net/smtp"
 	neturl "net/url"
@@ -479,6 +480,8 @@ func registerBuiltins(i *Interpreter) {
 	ai.Set("stream", FunctionValue(&Function{Name: "ai.stream", Native: builtinAIStream}))
 	ai.Set("vision", FunctionValue(&Function{Name: "ai.vision", Native: builtinAIVision}))
 	ai.Set("similarity", FunctionValue(&Function{Name: "ai.similarity", Native: builtinAISimilarity}))
+	ai.Set("image", FunctionValue(&Function{Name: "ai.image", Native: builtinAIImage}))
+	ai.Set("transcribe", FunctionValue(&Function{Name: "ai.transcribe", Native: builtinAITranscribe}))
 	g.Set("ai", ObjectValue(ai))
 	builtinNames["ai"] = true
 
@@ -5769,6 +5772,156 @@ func builtinAIEmbed(i *Interpreter, args []Value) (Value, error) {
 		out[k] = NumberValue(f)
 	}
 	return ArrayValue(out), nil
+}
+
+// ai.image(prompt, opts?) — OpenAI DALL-E image generation. Returns
+// `{ url }` by default, or `{ b64 }` if opts.format == "b64_json".
+//
+//	let img = ai.image("a cat skydiving in 1920s style", {
+//	  size: "1024x1024",     // also 256x256, 512x512, 1792x1024, 1024x1792
+//	  model: "dall-e-3",     // or "dall-e-2"
+//	  quality: "hd"          // standard | hd
+//	})
+//	return redirect(img.url)
+func builtinAIImage(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 1 || args[0].Kind != KindString {
+		return Value{}, fmt.Errorf("ai.image(prompt, opts?) requires a prompt string")
+	}
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	if apiKey == "" {
+		return Value{}, fmt.Errorf("ai.image requires OPENAI_API_KEY")
+	}
+	model := "dall-e-3"
+	size := "1024x1024"
+	quality := "standard"
+	format := "url"
+	if len(args) > 1 && args[1].Kind == KindObject {
+		opts := args[1].Object
+		if v, ok := opts.Get("model"); ok && v.Kind == KindString {
+			model = v.String
+		}
+		if v, ok := opts.Get("size"); ok && v.Kind == KindString {
+			size = v.String
+		}
+		if v, ok := opts.Get("quality"); ok && v.Kind == KindString {
+			quality = v.String
+		}
+		if v, ok := opts.Get("format"); ok && v.Kind == KindString {
+			format = v.String
+		}
+	}
+	body, _ := json.Marshal(map[string]any{
+		"model":           model,
+		"prompt":          args[0].String,
+		"n":               1,
+		"size":            size,
+		"quality":         quality,
+		"response_format": format,
+	})
+	req, err := http.NewRequest("POST", "https://api.openai.com/v1/images/generations", bytes.NewReader(body))
+	if err != nil {
+		return Value{}, err
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{Timeout: 120 * time.Second} // image gen is slow
+	resp, err := client.Do(req)
+	if err != nil {
+		return Value{}, err
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 400 {
+		return Value{}, fmt.Errorf("ai.image failed (%d): %s", resp.StatusCode, string(raw))
+	}
+	var parsed struct {
+		Data []struct {
+			URL     string `json:"url"`
+			B64JSON string `json:"b64_json"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return Value{}, err
+	}
+	out := NewOrderedMap()
+	if len(parsed.Data) > 0 {
+		if parsed.Data[0].URL != "" {
+			out.Set("url", StringValue(parsed.Data[0].URL))
+		}
+		if parsed.Data[0].B64JSON != "" {
+			out.Set("b64", StringValue(parsed.Data[0].B64JSON))
+		}
+	}
+	return ObjectValue(out), nil
+}
+
+// ai.transcribe(audio_path, opts?) — speech-to-text via OpenAI Whisper.
+// Returns the transcription as a string. Supports mp3, mp4, wav, webm,
+// m4a, ogg, flac up to 25 MB.
+//
+//	let text = ai.transcribe("./meeting.mp3", { language: "en" })
+func builtinAITranscribe(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 1 || args[0].Kind != KindString {
+		return Value{}, fmt.Errorf("ai.transcribe(audio_path, opts?) requires a path")
+	}
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	if apiKey == "" {
+		return Value{}, fmt.Errorf("ai.transcribe requires OPENAI_API_KEY")
+	}
+	audioBytes, err := os.ReadFile(args[0].String)
+	if err != nil {
+		return Value{}, err
+	}
+	model := "whisper-1"
+	language := ""
+	if len(args) > 1 && args[1].Kind == KindObject {
+		opts := args[1].Object
+		if v, ok := opts.Get("model"); ok && v.Kind == KindString {
+			model = v.String
+		}
+		if v, ok := opts.Get("language"); ok && v.Kind == KindString {
+			language = v.String
+		}
+	}
+
+	// multipart/form-data body. We hand-build it because the helpers
+	// in mime/multipart pull in extra plumbing we don't need elsewhere.
+	var body bytes.Buffer
+	w := multipart.NewWriter(&body)
+	_ = w.WriteField("model", model)
+	if language != "" {
+		_ = w.WriteField("language", language)
+	}
+	fp, err := w.CreateFormFile("file", filepath.Base(args[0].String))
+	if err != nil {
+		return Value{}, err
+	}
+	fp.Write(audioBytes)
+	w.Close()
+
+	req, err := http.NewRequest("POST", "https://api.openai.com/v1/audio/transcriptions", &body)
+	if err != nil {
+		return Value{}, err
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	client := &http.Client{Timeout: 120 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return Value{}, err
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 400 {
+		return Value{}, fmt.Errorf("ai.transcribe failed (%d): %s", resp.StatusCode, string(raw))
+	}
+	var parsed struct {
+		Text string `json:"text"`
+	}
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return Value{}, err
+	}
+	return StringValue(parsed.Text), nil
 }
 
 // builtinEval — `eval(source, opts?)` parses and runs a string of MX Script

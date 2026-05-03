@@ -8,6 +8,8 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.70.0** (2026-05-03)
+  - `ai.image(prompt, opts?)` — DALL-E 3 image generation; `ai.transcribe(audio_path)` — Whisper speech-to-text
 - **v0.69.0** (2026-05-03)
   - `rate_limit(key, max, window_seconds)` token-bucket builtin — per-user / per-tenant / per-IP rate limits in route handlers
 - **v0.68.0** (2026-05-03)

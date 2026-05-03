@@ -516,6 +516,8 @@ var builtinDocs = map[string]builtinDoc{
 	"metrics.handler":            {"metrics.handler() -> response", "Returns a Response for /metrics in Prometheus exposition format."},
 	"metrics.text":               {"metrics.text() -> string", "Render the registry as Prometheus exposition text."},
 	"metrics.reset":              {"metrics.reset()", "Clear every metric. Test-only."},
+	"ai.image":                   {"ai.image(prompt, opts?) -> { url, b64 }", "DALL-E image generation. opts: model, size, quality, format."},
+	"ai.transcribe":              {"ai.transcribe(audio_path, opts?) -> string", "OpenAI Whisper speech-to-text. opts: model, language."},
 	"magic_link.create":        {"magic_link.create(email, secret, opts?) -> string", "Signed time-limited token for passwordless email login. opts.expires_minutes (default 15)."},
 	"magic_link.verify":        {"magic_link.verify(token, secret) -> string|null", "Returns the email if the token is valid and unexpired, otherwise null."},
 	"totp.generate":            {"totp.generate(secret) -> string", "Current 6-digit RFC 6238 code. Secret is base32 (case- and padding-tolerant)."},

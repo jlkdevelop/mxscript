@@ -4,6 +4,41 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.70.0] — 2026-05-03
+
+### Added — `ai.image()` (DALL-E) + `ai.transcribe()` (Whisper)
+
+```mx
+let img = ai.image("a cat skydiving in 1920s style", {
+  size: "1024x1024",
+  model: "dall-e-3",
+  quality: "hd"
+})
+return redirect(img.url)
+
+let text = ai.transcribe("./meeting.mp3", { language: "en" })
+println("transcript:", text)
+```
+
+- **`ai.image(prompt, opts?)`** — DALL-E 3 by default, configurable
+  via `model` (`dall-e-2` / `dall-e-3`), `size`
+  (`256x256` / `512x512` / `1024x1024` / `1792x1024` / `1024x1792`),
+  `quality` (`standard` / `hd`), `format` (`url` / `b64_json`).
+  Returns `{ url }` by default or `{ b64 }` if format is `b64_json`.
+  120-second timeout (image gen is slow).
+
+- **`ai.transcribe(audio_path, opts?)`** — Whisper speech-to-text.
+  Reads the audio file from disk and posts as multipart/form-data.
+  Supports mp3, mp4, wav, webm, m4a, ogg, flac up to 25 MB. Returns
+  the transcript as a string. Optional `language` hint speeds up
+  detection.
+
+- Both round out the AI namespace alongside the existing
+  `ai.complete` (10 providers), `ai.stream`, `ai.vision`, `ai.embed`,
+  `ai.similarity`. Eight AI primitives total.
+
+[0.70.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.70.0
+
 ## [0.69.0] — 2026-05-03
 
 ### Added — `rate_limit()` builtin (token-bucket, per-key)
