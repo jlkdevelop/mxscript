@@ -4,6 +4,42 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.29.0] — 2026-05-03
+
+### Added — inline `test "name" { ... }` blocks
+
+```mx
+fn add(a, b) { return a + b }
+
+test "addition is commutative" {
+  assert(add(2, 3) == 5)
+  assert(add(3, 2) == 5)
+}
+
+test "negative numbers" {
+  assert(add(-1, 1) == 0)
+}
+```
+
+```bash
+$ mx test app_test.mx
+app_test.mx
+  ✓ addition is commutative
+  ✓ negative numbers
+✓ 2 passed in 0s
+```
+
+The legacy `fn test_*() { ... }` form keeps working — both styles are
+discovered by `mx test` in the same pass and run in fresh interpreter
+state per test. The inline form lets the test name be a sentence
+(`test "rejects malformed JWTs"`) instead of a snake_cased function
+name, which reads better in failure output and CI logs.
+
+The body is inert under `mx run` and `mx serve` so test files can sit
+next to production code without affecting runtime behaviour.
+
+[1.29.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.29.0
+
 ## [1.28.0] — 2026-05-03
 
 ### Added — `mx new react` template + `static_file()` helper

@@ -162,10 +162,34 @@ func (p *Parser) parseStmt() (Stmt, error) {
 		if isHTTPMethod(p.cur().Lexeme) && p.peek(1).Type == lexer.TokenSlash {
 			return p.parseShorthandRoute()
 		}
+		// Inline test block: `test "name" { ... }`. Disambiguated from
+		// `test(...)` calls and `test.foo` member access by requiring a
+		// string literal next.
+		if p.cur().Lexeme == "test" && p.peek(1).Type == lexer.TokenString {
+			return p.parseTest()
+		}
 		return p.parseExprStmt()
 	default:
 		return p.parseExprStmt()
 	}
+}
+
+// parseTest is `test "name" { ... }`. The string is the test's
+// display name, the block its body. We don't allow expressions for
+// the name — keeping it a literal lets `mx test --filter foo` match
+// without ever evaluating user code, which matters when a test file
+// is full of half-broken work in progress.
+func (p *Parser) parseTest() (Stmt, error) {
+	tok := p.advance() // `test`
+	nameTok, err := p.expect(lexer.TokenString, "as test name (expected a string literal after `test`)")
+	if err != nil {
+		return nil, err
+	}
+	body, err := p.parseBlock()
+	if err != nil {
+		return nil, err
+	}
+	return &TestDecl{pos: mkPos(tok), Name: nameTok.Lexeme, Body: body}, nil
 }
 
 // isHTTPMethod reports whether `name` is one of the HTTP verbs we accept

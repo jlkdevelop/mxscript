@@ -113,3 +113,26 @@ func TestParseError(t *testing.T) {
 		t.Error("expected parse error for `let = 5`, got nil")
 	}
 }
+
+func TestParseTestDecl(t *testing.T) {
+	prog := mustParse(t, `test "addition works" { assert(1 + 1 == 2) }`)
+	td, ok := prog.Stmts[0].(*TestDecl)
+	if !ok {
+		t.Fatalf("expected *TestDecl, got %T", prog.Stmts[0])
+	}
+	if td.Name != "addition works" {
+		t.Errorf("name: got %q", td.Name)
+	}
+	if len(td.Body) != 1 {
+		t.Errorf("body: got %d stmts", len(td.Body))
+	}
+}
+
+func TestTestIdentifierStillCallable(t *testing.T) {
+	// `test(...)` and `test.foo` must still parse as expressions —
+	// only `test "literal"` triggers the inline-test form.
+	prog := mustParse(t, `let x = test(1, 2)`)
+	if _, ok := prog.Stmts[0].(*LetStmt); !ok {
+		t.Fatalf("expected *LetStmt, got %T", prog.Stmts[0])
+	}
+}

@@ -20,6 +20,10 @@ func ExecutableLines(prog *Program) map[int]bool {
 			for _, b := range n.Body {
 				walk(b)
 			}
+		case *TestDecl:
+			for _, b := range n.Body {
+				walk(b)
+			}
 		case *MiddlewareDecl:
 			for _, b := range n.Body {
 				walk(b)

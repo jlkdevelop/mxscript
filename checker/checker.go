@@ -210,6 +210,10 @@ func (c *checker) checkStmt(s parser.Stmt) {
 		}
 	case *parser.MiddlewareDecl:
 		c.checkRouteBody("", n.Body)
+	case *parser.TestDecl:
+		// A test body is just a fresh scope with the file's globals
+		// in scope — same shape as a function body with no params.
+		c.checkFnBody(nil, n.Body)
 	case *parser.UseStmt:
 		// Verify the middleware exists.
 		if !c.markUsed(n.Name) && !interpreter.IsBuiltin(n.Name) {

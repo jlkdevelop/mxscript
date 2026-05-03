@@ -86,6 +86,18 @@ type FnDecl struct {
 
 func (*FnDecl) stmtNode() {}
 
+// TestDecl is `test "name" { ... }` — an inline test block discovered
+// by `mx test`. The body is evaluated in a fresh scope per test; failures
+// are reported via assert() / panic. Position is the location of the
+// `test` keyword for nice error messages.
+type TestDecl struct {
+	pos
+	Name string
+	Body []Stmt
+}
+
+func (*TestDecl) stmtNode() {}
+
 type ServerBlock struct {
 	pos
 	Settings []ObjectPair

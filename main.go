@@ -58,7 +58,7 @@ func (rr *replReader) ReadLine() (string, bool) {
 // Version is bumped at release time. Override at build with:
 //
 //	go build -ldflags "-X main.Version=v0.2.0"
-var Version = "v1.28.0"
+var Version = "v1.29.0"
 
 const (
 	cReset  = "\033[0m"
@@ -1051,22 +1051,30 @@ func cmdTest(args []string) {
 			continue
 		}
 
-		// Discover test_* functions by walking top-level FnDecls.
-		var names []string
+		// Discover both top-level `test_*` functions and inline
+		// `test "name" { ... }` blocks. The two styles coexist; the
+		// inline form is preferred for new code (lets you express
+		// "what is being tested" in prose) but the function form
+		// stays supported for older test files.
+		var fnNames []string
+		var inlineNames []string
 		for _, s := range prog.Stmts {
 			if fn, ok := s.(*parser.FnDecl); ok && strings.HasPrefix(fn.Name, "test_") {
-				names = append(names, fn.Name)
+				fnNames = append(fnNames, fn.Name)
+			}
+			if td, ok := s.(*parser.TestDecl); ok {
+				inlineNames = append(inlineNames, td.Name)
 			}
 		}
-		if len(names) == 0 {
-			fmt.Printf("  %s(no test_* functions in this file)%s\n", cGray, cReset)
+		if len(fnNames)+len(inlineNames) == 0 {
+			fmt.Printf("  %s(no test_* functions or `test \"...\"` blocks)%s\n", cGray, cReset)
 			continue
 		}
 
 		// Aggregate coverage across all tests in this file.
 		var fileCov *interpreter.Coverage
 		// Each test gets a fresh interpreter so state can't leak between tests.
-		for _, name := range names {
+		for _, name := range fnNames {
 			interp := interpreter.New()
 			interp.SetFile(file)
 			if cover {
@@ -1089,7 +1097,34 @@ func cmdTest(args []string) {
 				fmt.Printf("  %s✓%s %s\n", cGreen, cReset, prettyTestName(name))
 				totalPass++
 			}
-			// Merge this test's hits into the file-level coverage.
+			if cover && fileCov != interp.Coverage() {
+				for _, ln := range interp.Coverage().ExecutedLines() {
+					fileCov.Hit(ln)
+				}
+			}
+		}
+		for idx, name := range inlineNames {
+			interp := interpreter.New()
+			interp.SetFile(file)
+			if cover {
+				cov := interp.EnableCoverage()
+				if fileCov == nil {
+					fileCov = cov
+				}
+				_ = fileCov
+			}
+			if err := runProgramQuietly(interp, prog); err != nil {
+				fmt.Printf("  %s✗%s %s — %v\n", cRed, cReset, name, err)
+				totalFail++
+				continue
+			}
+			if err := interp.RunTest(idx); err != nil {
+				fmt.Printf("  %s✗%s %s — %v\n", cRed, cReset, name, err)
+				totalFail++
+			} else {
+				fmt.Printf("  %s✓%s %s\n", cGreen, cReset, name)
+				totalPass++
+			}
 			if cover && fileCov != interp.Coverage() {
 				for _, ln := range interp.Coverage().ExecutedLines() {
 					fileCov.Hit(ln)

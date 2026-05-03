@@ -560,6 +560,57 @@ type registeredRoute struct {
 	Middlewares []string
 }
 
+// registeredTest is an inline `test "name" { ... }` block. Body runs
+// in a child scope of Env when RunTest fires, so top-level helpers
+// declared in the file are visible but the test can't poison globals
+// for the next test.
+type registeredTest struct {
+	Name string
+	Body []parser.Stmt
+	Env  *Env
+	Line int
+}
+
+// TestInfo is the public summary returned by Tests() — name + source
+// line so cmdTest can print nice headers without poking at internals.
+type TestInfo struct {
+	Name string
+	Line int
+}
+
+// Tests returns the inline `test "name" { ... }` declarations the
+// loaded program registered, in source order. `mx test` calls this
+// after Load to discover what to run.
+func (i *Interpreter) Tests() []TestInfo {
+	out := make([]TestInfo, 0, len(i.tests))
+	for _, t := range i.tests {
+		out = append(out, TestInfo{Name: t.Name, Line: t.Line})
+	}
+	return out
+}
+
+// RunTest evaluates the body of the inline test at the given index.
+// Index matches the order returned by Tests(). The body runs in a
+// fresh child scope so `let` bindings inside the test don't leak.
+// Any error (assertion failure, runtime error) propagates back so
+// the caller can format it with file/line context.
+func (i *Interpreter) RunTest(idx int) error {
+	if idx < 0 || idx >= len(i.tests) {
+		return fmt.Errorf("test index %d out of range", idx)
+	}
+	t := i.tests[idx]
+	scope := NewEnv(t.Env)
+	for _, s := range t.Body {
+		if err := i.execStmt(s, scope); err != nil {
+			if _, ok := err.(*returnSignal); ok {
+				return nil
+			}
+			return i.wrapErr(err)
+		}
+	}
+	return nil
+}
+
 type staticMount struct {
 	Mount string // URL prefix, e.g. "/" or "/assets"
 	Dir   string // local filesystem directory
@@ -653,6 +704,11 @@ type Interpreter struct {
 
 	// coverage records executed source lines. nil = tracking disabled.
 	coverage *Coverage
+
+	// tests holds inline `test "name" { ... }` declarations registered
+	// during Load. `mx test` discovers them via Tests() and runs them
+	// one by one; everything else (mx run / mx serve) ignores them.
+	tests []*registeredTest
 
 	// Out / Err are the destinations for print/println/write and eprint
 	// respectively. Default to os.Stdout / os.Stderr; embedders (notably
@@ -960,6 +1016,16 @@ func (i *Interpreter) execStmt(s parser.Stmt, env *Env) error {
 	case *parser.FnDecl:
 		fn := &Function{Name: n.Name, Params: n.Params, Body: n.Body, Closure: env}
 		env.Set(n.Name, FunctionValue(fn))
+	case *parser.TestDecl:
+		// Register the test for `mx test` to discover. The body itself
+		// runs only when RunTest is called — `mx run app.mx` skips them.
+		line, _ := n.Pos()
+		i.tests = append(i.tests, &registeredTest{
+			Name: n.Name,
+			Body: n.Body,
+			Env:  env,
+			Line: line,
+		})
 	case *parser.ServerBlock:
 		return i.execServer(n, env)
 	case *parser.RouteDecl:
