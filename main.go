@@ -58,7 +58,7 @@ func (rr *replReader) ReadLine() (string, bool) {
 // Version is bumped at release time. Override at build with:
 //
 //	go build -ldflags "-X main.Version=v0.2.0"
-var Version = "v1.25.0"
+var Version = "v1.26.0"
 
 const (
 	cReset  = "\033[0m"
@@ -138,6 +138,8 @@ func main() {
 		cmdLogs(args)
 	case "parse":
 		cmdParse(args)
+	case "watch":
+		cmdWatch(args)
 	case "version", "-v", "--version":
 		check := false
 		for _, a := range args {
@@ -208,6 +210,7 @@ func printHelp() {
 	fmt.Println("  open <url-or-port>           Open a URL (or http://localhost:PORT) in the default browser")
 	fmt.Println("  logs [path] [--level=info]   Pretty-print JSON log lines (stdin if no path)")
 	fmt.Println("  parse <file.mx>              Print the parsed AST as JSON (for tooling)")
+	fmt.Println("  watch <path> -- <cmd...>     Run <cmd> whenever any file in <path> changes")
 	fmt.Println("  version               Print version and exit")
 	fmt.Println("  help                  Show this help")
 	fmt.Println()
@@ -1877,6 +1880,80 @@ func parseSemver(tag string) [3]int {
 		out[i] = n
 	}
 	return out
+}
+
+// ===== mx watch =====
+
+// cmdWatch runs an arbitrary command whenever any file under the
+// given path changes. The command is everything after `--` so the
+// shell quotes pass through cleanly:
+//
+//	mx watch . -- go test ./...
+//	mx watch src -- npm run build
+//	mx watch . -- mx run app.mx --port 3000
+//
+// Same dirHash polling loop as `mx run --watch` so dependencies
+// stay zero. Each iteration kills any in-flight child before
+// launching the next so long-running processes (servers, tests) get
+// proper hot-reload.
+func cmdWatch(args []string) {
+	// Find the `--` separator.
+	dashIdx := -1
+	for i, a := range args {
+		if a == "--" {
+			dashIdx = i
+			break
+		}
+	}
+	if dashIdx < 1 || dashIdx == len(args)-1 {
+		fatal("usage: mx watch <path> -- <cmd> [args...]")
+	}
+	path := args[0]
+	cmdParts := args[dashIdx+1:]
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		fatal("cannot resolve %s: %v", path, err)
+	}
+	if info, err := os.Stat(abs); err != nil {
+		fatal("cannot read %s: %v", path, err)
+	} else if !info.IsDir() {
+		fatal("%s is not a directory", path)
+	}
+
+	fmt.Printf("%s[mx watch]%s watching %s — running %s%s%s on every change\n",
+		cYellow, cReset, abs, cBold, strings.Join(cmdParts, " "), cReset)
+
+	var current *exec.Cmd
+	stopCurrent := func() {
+		if current != nil && current.Process != nil {
+			_ = current.Process.Kill()
+			_, _ = current.Process.Wait()
+		}
+	}
+	startCurrent := func() {
+		current = exec.Command(cmdParts[0], cmdParts[1:]...)
+		current.Stdout = os.Stdout
+		current.Stderr = os.Stderr
+		current.Stdin = os.Stdin
+		if err := current.Start(); err != nil {
+			fmt.Fprintf(os.Stderr, "%sstart error:%s %v\n", cRed, cReset, err)
+		}
+	}
+
+	startCurrent()
+
+	var lastHash [32]byte
+	for {
+		time.Sleep(500 * time.Millisecond)
+		hash, err := dirHash(abs)
+		if err != nil || hash == lastHash {
+			continue
+		}
+		lastHash = hash
+		fmt.Printf("\n%s[mx watch]%s change detected — restarting\n", cYellow, cReset)
+		stopCurrent()
+		startCurrent()
+	}
 }
 
 // ===== mx parse =====

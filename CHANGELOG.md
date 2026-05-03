@@ -4,6 +4,26 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.26.0] — 2026-05-03
+
+### Added — `mx watch <path> -- <cmd>` (generic file watcher)
+
+```bash
+mx watch . -- go test ./...
+mx watch src -- npm run build
+mx watch . -- mx run app.mx --port 3000
+mx watch app.mx -- mx audit app.mx
+```
+
+Generic on top of the existing dirHash polling loop. Each iteration
+kills any in-flight child before launching the next so long-running
+processes (servers, tests) get proper hot-reload semantics.
+
+The `--` separator lets shell quotes pass through cleanly to the
+inner command, matching how `xargs` and `bun --watch` handle it.
+
+[1.26.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.26.0
+
 ## [1.25.0] — 2026-05-03
 
 ### Added — `config.load` + `config.expand` (env-aware config)
