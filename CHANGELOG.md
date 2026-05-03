@@ -4,6 +4,32 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.50.0] — 2026-05-03
+
+### Added — `sql.update()` + `sql.delete()` — finishes the CRUD set
+
+```mx
+sql.update(db, "users", { name: "Ada Lovelace" }, { id: 1 })
+// → UPDATE users SET name = ? WHERE id = ?
+
+sql.update(db, "users", { active: 0 }, { role: "trial", expired: true })
+// → UPDATE users SET active = ? WHERE expired = ? AND role = ?
+
+sql.delete(db, "sessions", { user_id: 7 })
+// → DELETE FROM sessions WHERE user_id = ?
+```
+
+Both `set` and `where` are objects; `where` is AND-joined. **Empty
+`where` is rejected** in both — refusing to update/delete every row
+when a typo zaps the matcher. Drop down to `sql.exec` for the rare
+"yes, change every row" case.
+
+With `sql.insert` (v1.48), `sql.upsert` (v1.49), and these two,
+the full CRUD surface for one-file APIs is object-driven — no more
+hand-rolled SQL strings for the 80% case.
+
+[1.50.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.50.0
+
 ## [1.49.0] — 2026-05-03
 
 ### Added — `sql.upsert(db, table, row, conflict_keys)`

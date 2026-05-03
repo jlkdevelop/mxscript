@@ -229,6 +229,123 @@ func builtinSQLUpsert(_ *Interpreter, args []Value) (Value, error) {
 	return sqlExec(h, query, flat)
 }
 
+// sql.update(db, table, set, where) — UPDATE table SET col = ? WHERE col = ?
+//
+//   sql.update(db, "users", { name: "Ada", role: "admin" }, { id: 1 })
+//
+// `set` is the columns to change; `where` is the columns to match (AND-joined).
+// Both must be objects. Empty `set` errors out so a typo doesn't accidentally
+// no-op every row in the table. Empty `where` is also rejected — a bare
+// UPDATE with no WHERE is almost always a bug; users who really want to
+// rewrite a whole column should drop down to sql.exec.
+func builtinSQLUpdate(_ *Interpreter, args []Value) (Value, error) {
+	h, err := mustDBHandle(args)
+	if err != nil {
+		return Value{}, err
+	}
+	if len(args) < 4 {
+		return Value{}, fmt.Errorf("sql.update(db, table, set, where) requires 4 arguments")
+	}
+	table, err := stringArg(args, 1)
+	if err != nil {
+		return Value{}, err
+	}
+	if !validIdent(table) {
+		return Value{}, fmt.Errorf("sql.update: table name %q must be a plain identifier", table)
+	}
+	if args[2].Kind != KindObject {
+		return Value{}, fmt.Errorf("sql.update: 'set' (3rd arg) must be an object")
+	}
+	if args[3].Kind != KindObject {
+		return Value{}, fmt.Errorf("sql.update: 'where' (4th arg) must be an object")
+	}
+	setObj := args[2].Object
+	whereObj := args[3].Object
+	if len(setObj.Keys) == 0 {
+		return Value{}, fmt.Errorf("sql.update: 'set' cannot be empty")
+	}
+	if len(whereObj.Keys) == 0 {
+		return Value{}, fmt.Errorf("sql.update: 'where' cannot be empty (refusing to update every row)")
+	}
+
+	setCols := append([]string(nil), setObj.Keys...)
+	sort.Strings(setCols)
+	whereCols := append([]string(nil), whereObj.Keys...)
+	sort.Strings(whereCols)
+	for _, c := range append(setCols, whereCols...) {
+		if !validIdent(c) {
+			return Value{}, fmt.Errorf("sql.update: column name %q must be a plain identifier", c)
+		}
+	}
+
+	var setExprs, whereExprs []string
+	flat := make([]Value, 0, len(setCols)+len(whereCols))
+	for _, c := range setCols {
+		setExprs = append(setExprs, c+" = ?")
+		v, _ := setObj.Get(c)
+		flat = append(flat, v)
+	}
+	for _, c := range whereCols {
+		whereExprs = append(whereExprs, c+" = ?")
+		v, _ := whereObj.Get(c)
+		flat = append(flat, v)
+	}
+	q := fmt.Sprintf("UPDATE %s SET %s WHERE %s",
+		table,
+		strings.Join(setExprs, ", "),
+		strings.Join(whereExprs, " AND "))
+	return sqlExec(h, q, flat)
+}
+
+// sql.delete(db, table, where) — DELETE FROM table WHERE col = ?
+//
+//   sql.delete(db, "sessions", { user_id: 7 })
+//   sql.delete(db, "events", { type: "trial", expired: true })
+//
+// `where` is an object of column-equality matches, AND-joined. Empty
+// `where` is rejected — same reasoning as sql.update.
+func builtinSQLDelete(_ *Interpreter, args []Value) (Value, error) {
+	h, err := mustDBHandle(args)
+	if err != nil {
+		return Value{}, err
+	}
+	if len(args) < 3 {
+		return Value{}, fmt.Errorf("sql.delete(db, table, where) requires 3 arguments")
+	}
+	table, err := stringArg(args, 1)
+	if err != nil {
+		return Value{}, err
+	}
+	if !validIdent(table) {
+		return Value{}, fmt.Errorf("sql.delete: table name %q must be a plain identifier", table)
+	}
+	if args[2].Kind != KindObject {
+		return Value{}, fmt.Errorf("sql.delete: 'where' (3rd arg) must be an object")
+	}
+	whereObj := args[2].Object
+	if len(whereObj.Keys) == 0 {
+		return Value{}, fmt.Errorf("sql.delete: 'where' cannot be empty (refusing to delete every row)")
+	}
+	whereCols := append([]string(nil), whereObj.Keys...)
+	sort.Strings(whereCols)
+	for _, c := range whereCols {
+		if !validIdent(c) {
+			return Value{}, fmt.Errorf("sql.delete: column name %q must be a plain identifier", c)
+		}
+	}
+	var whereExprs []string
+	flat := make([]Value, 0, len(whereCols))
+	for _, c := range whereCols {
+		whereExprs = append(whereExprs, c+" = ?")
+		v, _ := whereObj.Get(c)
+		flat = append(flat, v)
+	}
+	q := fmt.Sprintf("DELETE FROM %s WHERE %s",
+		table,
+		strings.Join(whereExprs, " AND "))
+	return sqlExec(h, q, flat)
+}
+
 // validIdent matches identifiers safe to interpolate into SQL — letters,
 // digits, underscore, no embedded quotes or whitespace. We don't quote
 // table/column names because the supported SQLite/Postgres/MySQL trio
