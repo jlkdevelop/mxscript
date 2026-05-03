@@ -4,6 +4,49 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.69.0] — 2026-05-03
+
+### Added — `rate_limit()` builtin (token-bucket, per-key)
+
+Application-level rate limiting keyed by an arbitrary string. Use it
+per user, per tenant, per IP, per endpoint — whatever makes sense.
+
+```mx
+route POST /signup {
+  if (!rate_limit("signup:" + request.ip, 5, 60)) {
+    return status(429, { error: "too many requests, slow down" })
+  }
+  // ... real signup
+}
+
+route POST /messages {
+  if (!rate_limit("msg:" + claims.user_id, 30, 60)) {
+    return status(429, { error: "rate limited" })
+  }
+  // ... send the message
+}
+```
+
+- **Token-bucket algorithm.** Capacity `max` tokens; refills linearly
+  at `max / window_seconds` tokens/sec. First call after a long pause
+  sees a full bucket. Each successful call consumes one token.
+- **In-process registry.** Buckets share a global `sync.Mutex`-guarded
+  map. Restarts reset every bucket — for cross-instance limits, back
+  this onto Redis with `redis.incr(...)`.
+- **`rate_limit_reset(key?)`** clears one bucket (or all if no key) —
+  test-only escape hatch.
+- **6 tests** cover the burn-budget-then-deny path, key independence,
+  timing-accurate refill (waits 150ms, asserts a token reappeared),
+  invalid-budget zero/negative handling, error reporting on bad args,
+  and per-key reset.
+
+This complements (not replaces) the existing global `server { rate_limit
+{ ... } }` config. The server-level limit is a defense for the whole
+app; the new builtin lets individual routes apply finer-grained
+controls.
+
+[0.69.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.69.0
+
 ## [0.68.0] — 2026-05-03
 
 ### Added — `time.*`, `path.*`, `fs.glob` stdlib expansion

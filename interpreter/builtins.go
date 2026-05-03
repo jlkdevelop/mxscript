@@ -150,6 +150,8 @@ func registerBuiltins(i *Interpreter) {
 	def("min", builtinMin)
 	def("max", builtinMax)
 	def("random", builtinRandom)
+	def("rate_limit", builtinRateLimit)
+	def("rate_limit_reset", builtinRateLimitReset)
 	def("random_string", builtinRandomString)
 	def("random_bytes", builtinRandomBytes)
 	def("base32_encode", builtinBase32Encode)
