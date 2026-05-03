@@ -1,106 +1,91 @@
 # Getting started with MX Script
 
-Five minutes from zero to a running JSON API.
+Five minutes from zero to a running, production-shaped JSON API.
 
 ## Install
 
-You need [Go 1.21+](https://go.dev/dl/). Then:
-
 ```bash
-git clone https://github.com/jlkdevelop/mxscript.git
-cd mxscript
-go build -o mx .
+# macOS or Linux Homebrew
+brew install jlkdevelop/tap/mx
+
+# or — one-liner
+curl -fsSL https://raw.githubusercontent.com/jlkdevelop/mxscript/main/scripts/install.sh | bash
+
+# or — Go users
+go install github.com/jlkdevelop/mxscript@latest
 ```
 
 Verify:
 
 ```bash
-./mx version
-# MX Script v0.1.0
+mx version
+mx help
 ```
 
-Drop `mx` somewhere on your `$PATH` (e.g. `/usr/local/bin/mx`) so you can call it from anywhere.
-
-## Your first program
-
-Make a file called `hello.mx`:
-
-```mx
-print("Hello, MX Script!")
-```
-
-Run it:
+## Your first one-file API
 
 ```bash
-mx run hello.mx
-```
-
-That's it. No project file, no `main()`, no config.
-
-## Your first API
-
-Make `app.mx`:
-
-```mx
-server {
-  port: 8080
-}
-
-route GET / {
-  return json({ message: "hello world" })
-}
-
-route GET /users/:id {
-  return json({ id: request.params.id })
-}
-```
-
-Run it:
-
-```bash
+mx new shortener my-app
+cd my-app
 mx run app.mx
 ```
 
-You'll see:
+That's a real, deployable URL shortener — paginated stats endpoint,
+ETag-cached detail, validated POST, RFC 7807 error responses. Open
+`app.mx` to see ~50 lines that exercise the whole MX one-file API
+toolkit.
 
-```
-🚀 MX Script running at http://localhost:8080
-
-Routes:
-  GET    /
-  GET    /users/:id
-```
-
-In another terminal:
+Try it:
 
 ```bash
-curl http://localhost:8080/
-# {"message":"hello world"}
+curl -X POST :8080/shorten \
+  -H 'Content-Type: application/json' \
+  -d '{"url":"https://mxscript.com"}'
+# → {"code":"abc1234","short_url":"http://localhost:8080/abc1234",...}
 
-curl http://localhost:8080/users/42
-# {"id":"42"}
+curl -i :8080/abc1234     # 302 redirect, increments hit count
+curl :8080/api/links      # paginated list with stats
 ```
 
-## Hot reload
-
-Pass `--watch` and `mx` will restart automatically whenever any `.mx` file in the directory changes:
+## Templates
 
 ```bash
-mx run app.mx --watch
+mx new --list             # see all templates with descriptions
+mx new api      my-api    # REST showcase: paginate, uploads, OpenAPI, api-key auth
+mx new shortener my-short # the canonical 50-line demo
+mx new todo     my-todos  # JWT + SQLite todo list
+mx new chat     my-chat   # WebSocket chat with embedded browser client
+mx new ai       my-bot    # Tool-calling /chat endpoint, 13 LLM providers
+mx new blog     my-blog   # SSR markdown blog with admin
+mx new saas     my-saas   # Magic-link auth + Stripe + /metrics + cron
+mx new dashboard my-admin # Live admin dashboard with charts
+mx new react    my-app    # Vite + React + MX backend
 ```
 
-## Scaffolding
+## What every MX API has
 
-`mx init my-api` creates a starter project so you don't have to remember the boilerplate:
+After `mx run app.mx` you automatically get:
 
-```bash
-mx init my-api
-cd my-api
-mx run app.mx
-```
+| Feature | How to use |
+|---|---|
+| **Routes** | `get /users/:id { return json(...) }` |
+| **JSON in/out** | `request.body` is auto-parsed; `json(value)` responds |
+| **Pagination** | `let p = paginate(request); page_response(items, p, total)` |
+| **Validation** | `let r = body_validate(request, schema); if (!r.ok) { return r.response }` |
+| **Errors** | `return problem(404, "Not found")` — RFC 7807 problem+json |
+| **CRUD** | `sql.find/find_one/insert/upsert/update/delete/count/exists` |
+| **Caching** | `etag(value)` + `not_modified()` + `cache_control({...})` |
+| **Tracing** | `request.id` and `X-Request-ID` are auto-set on every request |
+| **Uploads** | `request.files.image`, `save_upload(img, path)` |
+| **Auth** | JWT, sessions, OAuth, magic-link, TOTP, `api_key_auth` |
+| **Deploy** | `mx build --vercel` / `--docker` / `--fly` / `--railway` / `--compose` |
 
-## Next steps
+## Where to look next
 
-- [Syntax reference](syntax.md) — the full language
-- [API reference](api.md) — every built-in function
-- [Examples](examples.md) — common patterns
+- `examples/` — runnable single-file demos
+- `examples/url_shortener.mx` — same as `mx new shortener`
+- `examples/crud.mx` — REST API for a `posts` collection
+- `examples/saas_pro.mx` — Stripe + magic link + metrics
+- `mx help <name>` — docs for any builtin (e.g. `mx help sql.find`)
+- [`mxscript.com`](https://mxscript.com) — language site
+- [GitHub](https://github.com/jlkdevelop/mxscript) — source + releases
