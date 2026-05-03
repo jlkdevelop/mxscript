@@ -50,6 +50,15 @@ println("openai:    ", ai.complete(prompt))
 // --- Local Ollama (run `ollama serve` first) ------------------------
 // println("ollama:    ", ai.complete(prompt, { provider: "ollama" }))
 
+// --- Perplexity (web-grounded answers) ------------------------------
+// println("perplexity:", ai.complete(prompt, { provider: "perplexity" }))
+
+// --- Fireworks (fast Llama hosting) ---------------------------------
+// println("fireworks: ", ai.complete(prompt, { provider: "fireworks" }))
+
+// --- Cerebras (extreme low-latency Llama) ---------------------------
+// println("cerebras:  ", ai.complete(prompt, { provider: "cerebras" }))
+
 // Streaming works on every OpenAI-compatible provider too:
 //
 //   ai.stream(prompt, fn(chunk) { write(chunk) }, { provider: "groq" })

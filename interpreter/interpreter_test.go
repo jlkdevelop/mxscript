@@ -443,7 +443,7 @@ func TestOpenAICompatProvidersTable(t *testing.T) {
 		}
 	}
 	// Verify the seven providers we ship are actually wired up.
-	expected := []string{"grok", "mistral", "deepseek", "groq", "openrouter", "together", "ollama"}
+	expected := []string{"grok", "mistral", "deepseek", "groq", "openrouter", "together", "ollama", "perplexity", "fireworks", "cerebras"}
 	for _, name := range expected {
 		if _, ok := openAICompatProviders[name]; !ok {
 			t.Errorf("provider %q missing from dispatch table", name)

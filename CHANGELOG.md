@@ -4,6 +4,41 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.2.0] — 2026-05-03
+
+### Added — three more AI providers (13 total)
+
+```mx
+ai.complete(prompt, { provider: "perplexity" })  // web-grounded answers
+ai.complete(prompt, { provider: "fireworks" })   // fast Llama hosting
+ai.complete(prompt, { provider: "cerebras" })    // extreme low-latency Llama
+```
+
+The provider matrix now spans:
+
+| Provider | `provider:` value | API key env var |
+|---|---|---|
+| OpenAI | `openai` | `OPENAI_API_KEY` |
+| Anthropic | `anthropic` | `ANTHROPIC_API_KEY` |
+| Gemini | `gemini` | `GEMINI_API_KEY` |
+| xAI Grok | `grok` | `XAI_API_KEY` |
+| Mistral | `mistral` | `MISTRAL_API_KEY` |
+| DeepSeek | `deepseek` | `DEEPSEEK_API_KEY` |
+| Groq | `groq` | `GROQ_API_KEY` |
+| OpenRouter | `openrouter` | `OPENROUTER_API_KEY` |
+| Together | `together` | `TOGETHER_API_KEY` |
+| Ollama (local) | `ollama` | (none) |
+| **Perplexity** | `perplexity` | `PERPLEXITY_API_KEY` |
+| **Fireworks** | `fireworks` | `FIREWORKS_API_KEY` |
+| **Cerebras** | `cerebras` | `CEREBRAS_API_KEY` |
+
+Same dispatch-table architecture as v0.54: adding the next OpenAI-
+compatible provider stays one entry. Test coverage for all three is
+folded into the existing `TestOpenAICompatProvidersTable` and
+`TestOpenAICompatRequiresKey` round-trips.
+
+[1.2.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.2.0
+
 ## [1.1.0] — 2026-05-03
 
 ### Added — `mx test --watch` (TDD-friendly test runner)

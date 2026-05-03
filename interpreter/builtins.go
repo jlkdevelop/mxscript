@@ -5718,6 +5718,24 @@ var openAICompatProviders = map[string]openAICompatProvider{
 		DefaultModel: "llama3.2",
 		NoAuth:       true, // local instance, no key required
 	},
+	"perplexity": {
+		Name:         "perplexity",
+		BaseURL:      "https://api.perplexity.ai/chat/completions",
+		EnvKey:       "PERPLEXITY_API_KEY",
+		DefaultModel: "llama-3.1-sonar-large-128k-online",
+	},
+	"fireworks": {
+		Name:         "fireworks",
+		BaseURL:      "https://api.fireworks.ai/inference/v1/chat/completions",
+		EnvKey:       "FIREWORKS_API_KEY",
+		DefaultModel: "accounts/fireworks/models/llama-v3p1-70b-instruct",
+	},
+	"cerebras": {
+		Name:         "cerebras",
+		BaseURL:      "https://api.cerebras.ai/v1/chat/completions",
+		EnvKey:       "CEREBRAS_API_KEY",
+		DefaultModel: "llama3.1-70b",
+	},
 }
 
 // aiCompleteOpenAICompat handles every provider in openAICompatProviders.
