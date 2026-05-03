@@ -4,6 +4,34 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.42.0] — 2026-05-03
+
+### Added — `etag()` + `not_modified()` + `cache_control()` for read-heavy APIs
+
+```mx
+get /users/:id {
+  let user = sql.first(db, "SELECT * FROM users WHERE id = ?", request.params.id)
+  let tag  = etag(user)
+  if (request.headers["if-none-match"] == tag) { return not_modified() }
+  return json(user, {
+    headers: {
+      "ETag":          tag,
+      "Cache-Control": cache_control({ private: true, max_age: 60 })
+    }
+  })
+}
+```
+
+- `etag(value)` — stable SHA-256 hash, JSON-encoded with deterministic
+  key order. Strings hash directly. Returns the standard quoted form.
+- `not_modified()` — 304 with no body. Six characters of code on the
+  warm path instead of hand-building a Response.
+- `cache_control({ public: true, max_age: 300, immutable: true })` →
+  `"public, max-age=300, immutable"`. Bool keys for directives, number
+  keys for durations. Conventional order, no string-glue ceremony.
+
+[1.42.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.42.0
+
 ## [1.41.0] — 2026-05-03
 
 ### Improved — file uploads: `save_upload()`, `.ext` field, multi-file support
