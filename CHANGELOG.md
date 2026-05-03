@@ -4,6 +4,23 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.58.0] — 2026-05-03
+
+### Improved — refreshed `examples/app.mx` + `examples/crud.mx`
+
+The examples folder is the second thing people read after the README.
+The two canonical examples now use the modern toolkit (`sql.find/insert/
+update/delete/count`, `body_validate`, `paginate` + `page_response`,
+`problem`, `api_key_auth`) instead of in-memory arrays + hand-rolled
+SQL strings.
+
+`examples/crud.mx` is now a real ~50-line REST API for a `posts`
+collection — auth via `X-API-Key`, paginated list, validated POST/PUT,
+404s as `application/problem+json`. The shape any new MX user can
+copy-paste into their own project.
+
+[1.58.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.58.0
+
 ## [1.57.0] — 2026-05-03
 
 ### Added — `mx new shortener` + `examples/url_shortener.mx`

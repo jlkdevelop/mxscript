@@ -1,27 +1,31 @@
-// app.mx — a tour of MX Script as a web framework.
+// app.mx — a tour of MX Script as a web framework. The simplest
+// possible API in MX, for the very first try.
+//
+// For the modern, batteries-included toolkit (sql.*, body_validate,
+// problem, paginate, etag, etc.) see examples/url_shortener.mx or
+// run `mx new shortener` for a real CRUD app.
+//
 // Run with:  mx run examples/app.mx
-//   curl http://localhost:8080/
-//   curl http://localhost:8080/users
-//   curl http://localhost:8080/users/1
-//   curl -X POST http://localhost:8080/users -d '{"name":"Ada"}' -H "content-type: application/json"
+//   curl :8080/
+//   curl :8080/users
+//   curl :8080/users/1
+//   curl -X POST :8080/users -d '{"name":"Ada"}' -H 'content-type: application/json'
 
-server {
-  port: 8080
-  host: "0.0.0.0"
-}
+server { port: 8080, host: "0.0.0.0" }
 
 let appName = "MX Script Demo"
 
 let users = [
   { id: 1, name: "Jassim Alkharafi", role: "Creator" },
-  { id: 2, name: "Ada Lovelace", role: "Computing Pioneer" }
+  { id: 2, name: "Ada Lovelace",     role: "Computing Pioneer" }
 ]
 
 get / {
   return json({
-    app: appName,
-    version: "0.9.0",
-    docs: "https://mxscript.com"
+    app:   appName,
+    info:  "A lightweight scripting language for one-file web APIs",
+    docs:  "https://mxscript.com",
+    repo:  "https://github.com/jlkdevelop/mxscript"
   })
 }
 
@@ -31,23 +35,24 @@ get /users {
 
 get /users/:id {
   let wanted = num(request.params.id)
-  let found = find(users, fn(u) { return u.id == wanted })
+  let found  = find(users, fn(u) { return u.id == wanted })
   if (found == null) {
-    return status(404, { error: "user not found", id: wanted })
+    return problem(404, "User not found", "", { id: wanted })
   }
   return json(found)
 }
 
 post /users {
-  let body = request.body
-  if (body == null || body.name == null) {
-    return status(400, { error: "name is required" })
-  }
-  let nextId = len(users) + 1
-  let created = { id: nextId, name: body.name, role: "Member" }
+  let r = body_validate(request, {
+    type: "object",
+    required: ["name"],
+    properties: { name: { type: "string", min_length: 1 } }
+  })
+  if (!r.ok) { return r.response }
+
+  let nextId  = len(users) + 1
+  let created = { id: nextId, name: r.body.name, role: "Member" }
   return status(201, created)
 }
 
-get /health {
-  return json({ status: "ok", uptime_ms: now() })
-}
+get /healthz { return health.live() }

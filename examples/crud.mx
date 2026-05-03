@@ -1,61 +1,81 @@
-// crud.mx — full CRUD example showing if/else, loops, middleware, and errors.
-// Run with:  mx run examples/crud.mx --port 3000
+// crud.mx — a real REST API in ~50 lines using the MX one-file toolkit.
+//
+// SQLite-backed posts collection with auth, validation, pagination, and
+// proper RFC 7807 error responses. The SQL is structural — no
+// hand-rolled INSERT/UPDATE/DELETE/SELECT strings.
+//
+// Run:    mx run examples/crud.mx --port 3000
+// Auth:   set API_KEY=secret and pass X-API-Key on every protected request
 
-server {
-  port: 3000
-}
+server { port: 3000, log: true }
 
-let posts = []
-let nextId = 1
+let API_KEY = env("API_KEY") || "secret"
 
-middleware logger {
-  print("[" + request.method + "]", request.path)
-}
+let db = sql.open("./posts.db")
+sql.migrate(db, [
+  "CREATE TABLE IF NOT EXISTS posts (
+     id INTEGER PRIMARY KEY,
+     title TEXT NOT NULL,
+     body TEXT,
+     created_at TEXT NOT NULL
+   )"
+])
 
-middleware auth {
-  let token = request.headers["authorization"]
-  if (token != "Bearer secret") {
-    return status(401, { error: "unauthorized" })
+middleware require_api_key {
+  if (!api_key_auth(request, API_KEY)) {
+    return problem(401, "Unauthorized", "Missing or invalid X-API-Key header")
   }
 }
 
-route GET /posts {
-  use logger
-  return json(posts)
+let SCHEMA = {
+  type: "object",
+  required: ["title"],
+  properties: {
+    title: { type: "string", min_length: 1 },
+    body:  { type: "string" }
+  }
 }
 
-route POST /posts {
-  use logger
-  use auth
-  let body = request.body
-  if (body == null || body.title == null) {
-    return status(400, { error: "title required" })
+group /posts {
+  // Public: GET endpoints stay open. Mutating endpoints require the API key.
+  get / {
+    let p     = paginate(request)
+    let total = sql.count(db, "posts", {})
+    let items = sql.find(db, "posts", {}, { order: "id DESC", limit: p.limit, offset: p.offset })
+    return json(page_response(items, p, total))
   }
-  let post = { id: nextId, title: body.title, body: body.body }
-  posts = push(posts, post)
-  nextId = nextId + 1
-  return status(201, post)
-}
 
-route GET /posts/:id {
-  use logger
-  let want = num(request.params.id)
-  let found = null
-  loop posts as p {
-    if (p.id == want) {
-      found = p
-    }
+  get /:id {
+    let post = sql.find_one(db, "posts", { id: num(request.params.id) })
+    if (post == null) { return problem(404, "Post not found") }
+    return json(post)
   }
-  if (found == null) {
-    return status(404, { error: "not found" })
-  }
-  return json(found)
-}
 
-route DELETE /posts/:id {
-  use logger
-  use auth
-  let want = num(request.params.id)
-  posts = filter(posts, fn(p) { return p.id != want })
-  return json({ deleted: want })
+  post / {
+    use require_api_key
+    let r = body_validate(request, SCHEMA)
+    if (!r.ok) { return r.response }
+    let id = sql.insert(db, "posts", {
+      title:      r.body.title,
+      body:       r.body.body,
+      created_at: now_iso()
+    }).last_insert_id
+    return status(201, { id: id })
+  }
+
+  put /:id {
+    use require_api_key
+    let r = body_validate(request, SCHEMA)
+    if (!r.ok) { return r.response }
+    let res = sql.update(db, "posts", r.body, { id: num(request.params.id) })
+    if (res.rows_affected == 0) { return problem(404, "Post not found") }
+    return json({ ok: true })
+  }
+
+  delete /:id {
+    use require_api_key
+    let res = sql.delete(db, "posts", { id: num(request.params.id) })
+    if (res.rows_affected == 0) { return problem(404, "Post not found") }
+    return json({ deleted: request.params.id })
+  }
 }
