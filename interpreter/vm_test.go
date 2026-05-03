@@ -152,14 +152,51 @@ func TestVMShortCircuitOps(t *testing.T) {
 	}
 }
 
-func TestVMRefusesUnsupportedNode(t *testing.T) {
-	// Optional chaining still falls back. Spread inside arrays falls
-	// back too. Short-circuit ops compile in v0.80.
-	for _, src := range []string{
-		`null?.field`, // optional chaining
-	} {
-		if _, ok := CompileExpr(parseExpr(t, src)); ok {
-			t.Errorf("%q: expected compile to refuse, but it accepted", src)
+func TestVMOptionalChaining(t *testing.T) {
+	// `a?.b` should return null when a is null and the actual field
+	// otherwise. v0.81's OpJumpIfNullKeep makes both compile cleanly.
+	cases := []struct {
+		src  string
+		setup func(*Env)
+		want any
+	}{
+		{
+			"x?.name",
+			func(e *Env) { e.Set("x", NullValue()) },
+			nil,
+		},
+		{
+			"x?.name",
+			func(e *Env) {
+				m := NewOrderedMap()
+				m.Set("name", StringValue("Jassim"))
+				e.Set("x", ObjectValue(m))
+			},
+			"Jassim",
+		},
+	}
+	for _, tc := range cases {
+		c, ok := CompileExpr(parseExpr(t, tc.src))
+		if !ok {
+			t.Errorf("%q: compile refused", tc.src)
+			continue
+		}
+		env := NewEnv(nil)
+		tc.setup(env)
+		v, err := c.Run(nil, env)
+		if err != nil {
+			t.Errorf("%q: %v", tc.src, err)
+			continue
+		}
+		switch want := tc.want.(type) {
+		case nil:
+			if v.Kind != KindNull {
+				t.Errorf("%q: want null, got %+v", tc.src, v)
+			}
+		case string:
+			if v.Kind != KindString || v.String != want {
+				t.Errorf("%q: want %q, got %+v", tc.src, want, v)
+			}
 		}
 	}
 }

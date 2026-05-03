@@ -4,6 +4,25 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.81.0] — 2026-05-03
+
+### Added — VM lowers `?.` optional chaining
+
+```mx
+let city = user?.profile?.city ?? "unknown"   // entirely VM-compiled
+```
+
+New `OpJumpIfNullKeep` opcode peeks the top of the stack and, if it's
+null, jumps over the field access while leaving the null on the
+stack as the result of the chain. Combined with the existing
+`OpGetField` and v0.80's `OpNullishJump`, optional-chain expressions
+compile cleanly without dropping into the tree-walker.
+
+This was the last common expression form still falling back. The VM
+now lowers virtually every shape day-to-day MX programs use.
+
+[0.81.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.81.0
+
 ## [0.80.0] — 2026-05-03
 
 ### Added — VM lowers `&&`, `||`, `??` short-circuit

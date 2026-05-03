@@ -8,6 +8,8 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.81.0** (2026-05-03)
+  - VM lowers `?.` optional chaining via new `OpJumpIfNullKeep` opcode
 - **v0.80.0** (2026-05-03)
   - VM lowers `&&` / `||` / `??` short-circuit operators (new `OpAndJump`, `OpOrJump`, `OpNullishJump` opcodes)
   - Tripwire test asserts the right side doesn't evaluate when the left determines the result

@@ -59,6 +59,7 @@ const (
 	OpAndJump               // peek; if falsy: pc = arg (leaves value); else pop + continue
 	OpOrJump                // peek; if truthy: pc = arg (leaves value); else pop + continue
 	OpNullishJump           // peek; if non-null: pc = arg (leaves value); else pop + continue
+	OpJumpIfNullKeep        // peek; if null: pc = arg (leaves null); else continue with value still on stack
 )
 
 type Instr struct {
@@ -181,14 +182,18 @@ func (c *Compiled) compileExpr(e parser.Expr) bool {
 		c.emit(OpCall, int32(len(n.Args)))
 		return true
 	case *parser.MemberExpr:
-		// Support obj.field reads on the VM. Optional chaining (?.)
-		// would need a guarded path — fall back to the tree-walker
-		// for that case.
-		if n.Optional {
-			return false
-		}
 		if !c.compileExpr(n.Object) {
 			return false
+		}
+		if n.Optional {
+			// `a?.b` short-circuits to null if `a` is null. Emit a
+			// JumpIfNullKeep that leaves null on the stack for the
+			// rest of the expression chain, then patch over the
+			// field access on null.
+			jump := c.emit(OpJumpIfNullKeep, 0)
+			c.emit(OpGetField, c.addConst(StringValue(n.Property)))
+			c.patch(jump, c.here())
+			return true
 		}
 		c.emit(OpGetField, c.addConst(StringValue(n.Property)))
 		return true
@@ -661,6 +666,13 @@ func (c *Compiled) Run(interp *Interpreter, env *Env) (Value, error) {
 				pc = int(ins.Arg) // leave the non-null value
 			} else {
 				stack = stack[:len(stack)-1]
+			}
+		case OpJumpIfNullKeep:
+			top := stack[len(stack)-1]
+			if top.Kind == KindNull {
+				// Leave the null value as the result of the optional-
+				// chain expression and skip the rest of the access.
+				pc = int(ins.Arg)
 			}
 		case OpLength:
 			v := stack[len(stack)-1]
