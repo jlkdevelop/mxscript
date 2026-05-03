@@ -4,6 +4,51 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.74.0] — 2026-05-03
+
+### Added — `id.*` namespace + object helpers
+
+#### `id.*` — five ID schemes
+
+```mx
+id.uuid()                       // 7d4f5c8a-3a2b-4d6e-9f1a-2c8b7d6e5f4a
+id.ulid()                       // 01J2A3B4C5DEFGHJKMNPQRSTV  (26 chars, time-sortable)
+id.nanoid()                     // V1StGXR8_Z5jdHi6B-myT       (21 chars, URL-safe)
+id.nanoid(10)                   // 7gJZ_2QK4w                  (custom length)
+id.short()                      // 7gJZ_2QK                    (8 chars)
+id.snowflake()                  // "1714665843123712"          (64-bit time-sortable)
+```
+
+- **ULID** uses Crockford base32 (no I/L/O/U) and packs the
+  millisecond timestamp into the first 10 chars, so two IDs minted
+  in the same DB query sort lexicographically by creation time.
+- **NanoID** uses 64-char URL-safe alphabet — drops in anywhere
+  UUIDs go but with shorter strings (21 chars vs 36).
+- **Snowflake** packs ms-since-2020 + 22 random bits into a 64-bit
+  ID returned as a numeric string (MX's float64 numbers can't
+  represent it without precision loss).
+
+#### Object helpers
+
+```mx
+let safe   = pick(user, ["id", "email", "name"])      // copy with only those keys
+let public = omit(user, ["password_hash", "api_key"]) // copy without those keys
+let cfg    = merge(defaults, overrides)               // shallow, b wins
+let cfg    = deep_merge(defaults, overrides)          // recursive — descends nested objects
+```
+
+All four are copy-rather-than-mutate so chained transformations
+don't surprise callers. `merge` preserves key order from `a` and
+appends new keys from `b`; `deep_merge` recurses when both sides
+have objects at the same key.
+
+- **10 tests** cover ULID shape + uniqueness, NanoID default + custom
+  length, short(), snowflake's all-digits invariant, pick/omit
+  semantics, merge tie-breaking, deep_merge with `db.host` overridden
+  but `db.port` preserved.
+
+[0.74.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.74.0
+
 ## [0.73.0] — 2026-05-03
 
 ### Improved — friendlier "did you mean" hints on namespace typos

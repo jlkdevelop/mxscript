@@ -157,6 +157,20 @@ func registerBuiltins(i *Interpreter) {
 	def("random_bytes", builtinRandomBytes)
 	def("base32_encode", builtinBase32Encode)
 	def("base32_decode", builtinBase32Decode)
+	def("pick", builtinPick)
+	def("omit", builtinOmit)
+	def("merge", builtinMerge)
+	def("deep_merge", builtinDeepMerge)
+
+	// id.* namespace — uuid / ulid / nanoid / short / snowflake
+	idNS := NewOrderedMap()
+	idNS.Set("uuid", FunctionValue(&Function{Name: "id.uuid", Native: builtinIDUUID}))
+	idNS.Set("ulid", FunctionValue(&Function{Name: "id.ulid", Native: builtinIDULID}))
+	idNS.Set("nanoid", FunctionValue(&Function{Name: "id.nanoid", Native: builtinIDNanoID}))
+	idNS.Set("short", FunctionValue(&Function{Name: "id.short", Native: builtinIDShort}))
+	idNS.Set("snowflake", FunctionValue(&Function{Name: "id.snowflake", Native: builtinIDSnowflake}))
+	g.Set("id", ObjectValue(idNS))
+	builtinNames["id"] = true
 	def("pow", builtinPow)
 	def("sqrt", builtinSqrt)
 	def("log", builtinLog)

@@ -8,6 +8,9 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.74.0** (2026-05-03)
+  - `id.*` namespace: `uuid` / `ulid` / `nanoid` / `short` / `snowflake`
+  - `pick`, `omit`, `merge`, `deep_merge` object helpers
 - **v0.73.0** (2026-05-03)
   - "did you mean .complete?" hints on namespace typos (`ai.complte` → suggest `.complete`)
 - **v0.72.0** (2026-05-03)
