@@ -4,6 +4,40 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.6.0] — 2026-05-03
+
+### Added — `mx env` (env var status with masked secrets)
+
+```
+$ mx env
+MX Script — environment
+
+  AI
+    ✓ OPENAI_API_KEY             sk-t…
+    ✗ ANTHROPIC_API_KEY          (unset)
+    ✗ XAI_API_KEY                (unset)
+    ...
+
+  Payments
+    ✓ STRIPE_SECRET_KEY          sk_t…
+    ✗ STRIPE_WEBHOOK_SECRET      (unset)
+
+  Object storage
+    ✓ AWS_ACCESS_KEY_ID          AKIA…
+    ✓ AWS_SECRET_ACCESS_KEY      wJal…
+    ...
+```
+
+40+ env vars grouped by purpose: AI providers, payments,
+notifications, object storage, auth, OAuth, webhooks, runtime.
+Values are first-4-chars + ellipsis so the output is safe to share
+in bug reports — confirms a key is set without leaking it.
+
+Defangs the most common SaaS-debugging question: "why isn't my
+$THING working?" — usually the env var was misnamed or unset.
+
+[1.6.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.6.0
+
 ## [1.5.0] — 2026-05-03
 
 ### Improved — LSP completion now offers user-defined names

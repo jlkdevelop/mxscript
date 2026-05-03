@@ -58,7 +58,7 @@ func (rr *replReader) ReadLine() (string, bool) {
 // Version is bumped at release time. Override at build with:
 //
 //	go build -ldflags "-X main.Version=v0.2.0"
-var Version = "v1.5.0"
+var Version = "v1.6.0"
 
 const (
 	cReset  = "\033[0m"
@@ -122,6 +122,8 @@ func main() {
 		cmdCI(args)
 	case "examples":
 		cmdExamples(args)
+	case "env":
+		cmdEnv(args)
 	case "version", "-v", "--version":
 		fmt.Println("MX Script", Version)
 	case "help", "-h", "--help":
@@ -175,6 +177,7 @@ func printHelp() {
 	fmt.Println("  help [topic]            Show built-in docs for a function (e.g. mx help ai.complete)")
 	fmt.Println("  docs [topic]            Alias for `help`")
 	fmt.Println("  examples [list|show <name>]  Browse / view bundled .mx examples")
+	fmt.Println("  env                          Show MX-relevant env vars (secrets masked)")
 	fmt.Println("  version               Print version and exit")
 	fmt.Println("  help                  Show this help")
 	fmt.Println()
@@ -1710,6 +1713,70 @@ func mustAbs(p string) string {
 		return p
 	}
 	return abs
+}
+
+// ===== mx env =====
+
+// cmdEnv prints the env vars MX programs commonly read, with values
+// masked so the output is safe to share in bug reports. Each entry
+// shows: variable name, whether it's set, and a 4-char prefix +
+// dot-dot-dot of the value. Helps users debug "why isn't my Stripe
+// key being read" without forcing them to grep the docs for which
+// names matter.
+func cmdEnv(args []string) {
+	groups := map[string][]string{
+		"AI": {
+			"OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY",
+			"XAI_API_KEY", "MISTRAL_API_KEY", "DEEPSEEK_API_KEY", "GROQ_API_KEY",
+			"OPENROUTER_API_KEY", "TOGETHER_API_KEY", "PERPLEXITY_API_KEY",
+			"FIREWORKS_API_KEY", "CEREBRAS_API_KEY",
+		},
+		"Payments": {"STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "STRIPE_PRICE_ID"},
+		"Notifications": {
+			"SLACK_WEBHOOK", "DISCORD_WEBHOOK",
+			"RESEND_API_KEY", "RESEND_FROM",
+		},
+		"Object storage": {"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION"},
+		"Auth": {"JWT_SECRET", "SESSION_SECRET", "APP_SECRET", "MX_VAULT_KEY"},
+		"OAuth": {
+			"GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET",
+			"GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET",
+			"DISCORD_CLIENT_ID", "DISCORD_CLIENT_SECRET",
+		},
+		"Webhooks": {
+			"GITHUB_WEBHOOK_SECRET", "SHOPIFY_WEBHOOK_SECRET",
+			"SVIX_SECRET", "SLACK_SIGNING_SECRET",
+		},
+		"Runtime": {"PORT", "DATABASE_URL", "REDIS_URL"},
+	}
+
+	groupOrder := []string{"AI", "Payments", "Notifications", "Object storage", "Auth", "OAuth", "Webhooks", "Runtime"}
+	fmt.Printf("\n%sMX Script — environment%s\n\n", cBold, cReset)
+	for _, g := range groupOrder {
+		fmt.Printf("  %s%s%s\n", cCyan, g, cReset)
+		for _, key := range groups[g] {
+			val, set := os.LookupEnv(key)
+			marker := cRed + "✗" + cReset
+			display := cGray + "(unset)" + cReset
+			if set && val != "" {
+				marker = cGreen + "✓" + cReset
+				display = maskSecret(val)
+			}
+			fmt.Printf("    %s %-26s %s\n", marker, key, display)
+		}
+		fmt.Println()
+	}
+}
+
+// maskSecret reduces a value to "first 4 chars + …" so users can
+// confirm an env var is set to roughly the expected key without
+// leaking it. Empty / very-short values are shown as `(set)` without
+// any prefix.
+func maskSecret(v string) string {
+	if len(v) <= 4 {
+		return cGreen + "(set)" + cReset
+	}
+	return v[:4] + cGray + "…" + cReset
 }
 
 // ===== mx help <topic> / mx docs <topic> =====
