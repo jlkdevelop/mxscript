@@ -30,7 +30,7 @@ server { port: 8080, log: true }
 
 let SECRET = env_required("APP_SECRET")
 
-let db = sql.open("./saas_pro.db")
+let db = sql.open(env("DATABASE_URL") || "./saas_pro.db")
 sql.migrate(db, [
   "CREATE TABLE IF NOT EXISTS users (
      id INTEGER PRIMARY KEY,

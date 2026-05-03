@@ -11,7 +11,7 @@ server { port: 3000, log: true }
 
 let API_KEY = env("API_KEY") || "secret"
 
-let db = sql.open("./posts.db")
+let db = sql.open(env("DATABASE_URL") || "./posts.db")
 sql.migrate(db, [
   "CREATE TABLE IF NOT EXISTS posts (
      id INTEGER PRIMARY KEY,

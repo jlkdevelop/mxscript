@@ -17,7 +17,7 @@
 
 server { port: 8080, log: true }
 
-let db = sql.open("./shortener.db")
+let db = sql.open(env("DATABASE_URL") || "./shortener.db")
 sql.migrate(db, [
   "CREATE TABLE IF NOT EXISTS links (
      code TEXT PRIMARY KEY,

@@ -4,6 +4,33 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.68.0] — 2026-05-03
+
+### Improved — every template + example honors `DATABASE_URL`
+
+```mx
+// Set DATABASE_URL=postgres://... in production. Defaults to local SQLite.
+let db = sql.open(env("DATABASE_URL") || "./app.db")
+```
+
+Previously the templates (`todo`, `blog`, `saas`, `shortener`) and SQL
+examples (`crud.mx`, `url_shortener.mx`, `saas_pro.mx`) hardcoded
+`./app.db`, forcing users moving to production to either edit the
+file or shadow `sql.open` themselves.
+
+Now every one prefers `env("DATABASE_URL")` with the local SQLite
+file as the default. Dev → prod is a one-env-var change:
+
+```bash
+# dev — uses ./shortener.db
+mx run app.mx
+
+# prod
+DATABASE_URL=postgres://user:pass@host/db mx run app.mx
+```
+
+[1.68.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.68.0
+
 ## [1.67.0] — 2026-05-03
 
 ### Added — `mx tutorial` hands-on walkthrough
