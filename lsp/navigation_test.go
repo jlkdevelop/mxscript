@@ -1,6 +1,9 @@
 package lsp
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 const navSrc = `let DB_PATH = "./data.db"
 
@@ -83,6 +86,28 @@ func TestFindReferencesWholeWord(t *testing.T) {
 	// must not match.
 	if len(refs) != 2 {
 		t.Errorf("got %d refs, want 2 (got matches in 'username'?)", len(refs))
+	}
+}
+
+func TestUserSymbolsExtractsLetFnMiddleware(t *testing.T) {
+	syms := userSymbols(navSrc)
+	names := map[string]string{}
+	for _, s := range syms {
+		names[s.Name] = s.Detail
+	}
+	for _, want := range []string{"DB_PATH", "make_user", "require_auth"} {
+		if _, ok := names[want]; !ok {
+			t.Errorf("missing user symbol %q", want)
+		}
+	}
+	if !strings.Contains(names["make_user"], "fn") {
+		t.Errorf("make_user detail: %q", names["make_user"])
+	}
+	if !strings.Contains(names["DB_PATH"], "let") {
+		t.Errorf("DB_PATH detail: %q", names["DB_PATH"])
+	}
+	if !strings.Contains(names["require_auth"], "middleware") {
+		t.Errorf("require_auth detail: %q", names["require_auth"])
 	}
 }
 

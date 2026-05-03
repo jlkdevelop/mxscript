@@ -4,6 +4,23 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.5.0] — 2026-05-03
+
+### Improved — LSP completion now offers user-defined names
+
+Until v1.4 the completion list contained only the ~200 builtins +
+language keywords + curated snippets. v1.5 extends it with every
+top-level `let` / `fn` / `middleware` from the open document so:
+
+- Typing `make_` autocompletes to your local `make_user` function
+- Typing `req` offers your `require_auth` middleware
+- Typing `DB_` offers your `DB_PATH` constant
+
+Each user symbol carries a "(user-defined)" detail string so editors
+visually distinguish them from stdlib functions in the dropdown.
+
+[1.5.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.5.0
+
 ## [1.4.0] — 2026-05-03
 
 ### Added — `sh.*` shell helpers

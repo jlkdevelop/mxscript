@@ -309,7 +309,17 @@ func (s *server) handle(body []byte) error {
 		return s.respond(req.ID, documentSymbols(text))
 
 	case "textDocument/completion":
-		// Lazy completion: every builtin name + every keyword + curated snippets.
+		var p struct {
+			TextDocument struct {
+				URI string `json:"uri"`
+			} `json:"textDocument"`
+		}
+		_ = json.Unmarshal(req.Params, &p)
+
+		// Lazy completion: every builtin name + every keyword +
+		// curated snippets + every user-defined name from the open
+		// document so editors offer the user's own functions /
+		// middlewares / lets in autocomplete too.
 		items := make([]map[string]any, 0, len(builtinDocs)+len(keywords)+len(snippets))
 		for name, doc := range builtinDocs {
 			items = append(items, map[string]any{
@@ -336,6 +346,16 @@ func (s *server) handle(body []byte) error {
 				"insertText":       sn.Body,
 				"insertTextFormat": 2, // Snippet (with $1, $2 tabstops)
 			})
+		}
+		// User-defined names from the open document.
+		if text := s.getDoc(p.TextDocument.URI); text != "" {
+			for _, sym := range userSymbols(text) {
+				items = append(items, map[string]any{
+					"label":  sym.Name,
+					"kind":   sym.Kind,
+					"detail": sym.Detail,
+				})
+			}
 		}
 		return s.respond(req.ID, map[string]any{
 			"isIncomplete": false,
@@ -855,6 +875,44 @@ func wordAt(text string, line, col int) string {
 		return ""
 	}
 	return row[start:end]
+}
+
+// UserSymbol is one declaration extracted from an open document.
+// Surfaces in completion results so editors offer the user's own
+// names alongside builtins.
+type UserSymbol struct {
+	Name   string
+	Kind   int
+	Detail string
+}
+
+// userSymbols extracts top-level let / fn / middleware names from
+// the source text. Uses the same line-prefix heuristic as
+// documentSymbols; routes are skipped (they're not callable as
+// names from elsewhere in the program).
+func userSymbols(text string) []UserSymbol {
+	var out []UserSymbol
+	for _, line := range strings.Split(text, "\n") {
+		trimmed := strings.TrimLeft(line, " \t")
+		switch {
+		case strings.HasPrefix(trimmed, "fn "):
+			rest := strings.TrimLeft(trimmed[len("fn "):], " \t")
+			if name := identPrefix(rest); name != "" {
+				out = append(out, UserSymbol{Name: name, Kind: 3, Detail: "fn (user-defined)"})
+			}
+		case strings.HasPrefix(trimmed, "let "):
+			rest := strings.TrimLeft(trimmed[len("let "):], " \t")
+			if name := identPrefix(rest); name != "" {
+				out = append(out, UserSymbol{Name: name, Kind: 6, Detail: "let (user-defined)"})
+			}
+		case strings.HasPrefix(trimmed, "middleware "):
+			rest := strings.TrimLeft(trimmed[len("middleware "):], " \t")
+			if name := identPrefix(rest); name != "" {
+				out = append(out, UserSymbol{Name: name, Kind: 9, Detail: "middleware"})
+			}
+		}
+	}
+	return out
 }
 
 // findDefinition scans the source for a top-level binding of `name` —
