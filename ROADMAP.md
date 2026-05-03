@@ -8,6 +8,8 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.93.0** (2026-05-03)
+  - Capstone `examples/saas_pro.mx` — magic-link auth + Stripe + AI + FTS5 search + S3 presigned uploads + GraphQL + metrics + cron + health probes, ~150 lines
 - **v0.92.0** (2026-05-03)
   - Integration test: every `examples/*.mx` runs through `mx check` in CI; catches drift before users
 - **v0.91.0** (2026-05-03)

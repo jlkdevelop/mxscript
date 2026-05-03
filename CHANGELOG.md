@@ -4,6 +4,32 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.93.0] — 2026-05-03
+
+### Added — `examples/saas_pro.mx` (capstone showcase)
+
+A single-file SaaS app that exercises the full surface added in
+v0.52→v0.92:
+
+- **Magic-link auth** with Resend-sent emails
+- **Stripe** checkout + customer portal + webhook activation
+- **AI summarization** with `ai.complete`, gated to subscribers
+- **FTS5 search** over user notes
+- **S3 presigned uploads** for direct browser → R2 / S3 transfers
+- **GraphQL API** for `me { ... }` and `notes { ... }` queries
+- **Metrics** middleware counting every request, exposed at
+  `/metrics`
+- **k8s probes** at `/healthz` and `/readyz`
+- **Per-IP rate limiting** middleware
+- **Daily-digest cron** at 09:00
+
+Roughly 150 lines of MX. No JS, no React, no build tool. The whole
+file passes `mx check` cleanly and runs end-to-end with the right
+env vars set. Doubles as the proof of MX's pitch: a real production
+SaaS surface in a single readable file.
+
+[0.93.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.93.0
+
 ## [0.92.0] — 2026-05-03
 
 ### Added — Examples integration test
