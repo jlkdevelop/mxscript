@@ -98,6 +98,17 @@ type TestDecl struct {
 
 func (*TestDecl) stmtNode() {}
 
+// BenchDecl is `bench "name" { ... }` — the benchmarking sibling of
+// TestDecl. `mx bench` discovers them, runs the body in a calibrated
+// loop, and reports ops/sec.
+type BenchDecl struct {
+	pos
+	Name string
+	Body []Stmt
+}
+
+func (*BenchDecl) stmtNode() {}
+
 type ServerBlock struct {
 	pos
 	Settings []ObjectPair

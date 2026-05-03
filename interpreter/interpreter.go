@@ -598,7 +598,32 @@ func (i *Interpreter) RunTest(idx int) error {
 	if idx < 0 || idx >= len(i.tests) {
 		return fmt.Errorf("test index %d out of range", idx)
 	}
-	t := i.tests[idx]
+	return i.runRegistered(i.tests[idx])
+}
+
+// Benches returns the inline `bench "name" { ... }` declarations the
+// loaded program registered, in source order. `mx bench` calls this
+// after Load to discover what to time.
+func (i *Interpreter) Benches() []TestInfo {
+	out := make([]TestInfo, 0, len(i.benches))
+	for _, b := range i.benches {
+		out = append(out, TestInfo{Name: b.Name, Line: b.Line})
+	}
+	return out
+}
+
+// RunBench evaluates the body of the inline benchmark at the given
+// index once. The CLI's `mx bench` calls this in a tight loop to
+// time it; we don't add timing here because the calibration logic
+// belongs in the runner, not the language.
+func (i *Interpreter) RunBench(idx int) error {
+	if idx < 0 || idx >= len(i.benches) {
+		return fmt.Errorf("bench index %d out of range", idx)
+	}
+	return i.runRegistered(i.benches[idx])
+}
+
+func (i *Interpreter) runRegistered(t *registeredTest) error {
 	scope := NewEnv(t.Env)
 	for _, s := range t.Body {
 		if err := i.execStmt(s, scope); err != nil {
@@ -709,6 +734,10 @@ type Interpreter struct {
 	// during Load. `mx test` discovers them via Tests() and runs them
 	// one by one; everything else (mx run / mx serve) ignores them.
 	tests []*registeredTest
+
+	// benches is the same idea for `bench "name" { ... }` — `mx bench`
+	// looks them up via Benches() and runs each in a calibrated loop.
+	benches []*registeredTest
 
 	// Out / Err are the destinations for print/println/write and eprint
 	// respectively. Default to os.Stdout / os.Stderr; embedders (notably
@@ -1021,6 +1050,16 @@ func (i *Interpreter) execStmt(s parser.Stmt, env *Env) error {
 		// runs only when RunTest is called — `mx run app.mx` skips them.
 		line, _ := n.Pos()
 		i.tests = append(i.tests, &registeredTest{
+			Name: n.Name,
+			Body: n.Body,
+			Env:  env,
+			Line: line,
+		})
+	case *parser.BenchDecl:
+		// Same registration pattern as TestDecl — inert at load time,
+		// only runs when `mx bench` invokes RunBench.
+		line, _ := n.Pos()
+		i.benches = append(i.benches, &registeredTest{
 			Name: n.Name,
 			Body: n.Body,
 			Env:  env,

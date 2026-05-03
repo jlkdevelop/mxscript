@@ -4,6 +4,35 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.32.0] — 2026-05-03
+
+### Added — inline `bench "name" { ... }` blocks
+
+Mirror of the `test "name" { ... }` form for benchmarking:
+
+```mx
+fn fib(n) {
+  if (n < 2) { return n }
+  return fib(n - 1) + fib(n - 2)
+}
+
+bench "fib 10" { fib(10) }
+bench "fib 15" { fib(15) }
+```
+
+```bash
+$ mx bench app_bench.mx
+app_bench.mx
+  fib 10                            12521 ops   93.16 us/op   (10735 ops/s)
+  fib 15                             1095 ops   1062.46 us/op  (941 ops/s)
+```
+
+`mx bench` discovers both styles in the same pass — `bench "name" { ... }`
+and the legacy `fn bench_name() { ... }` form. Calibrates iteration
+count to ≥1s of wall time per benchmark like Go's `go test -bench=.`.
+
+[1.32.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.32.0
+
 ## [1.31.0] — 2026-05-03
 
 ### Improved — `format()` now does Rust-style `{}` interpolation

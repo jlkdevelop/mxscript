@@ -58,7 +58,7 @@ func (rr *replReader) ReadLine() (string, bool) {
 // Version is bumped at release time. Override at build with:
 //
 //	go build -ldflags "-X main.Version=v0.2.0"
-var Version = "v1.31.0"
+var Version = "v1.32.0"
 
 const (
 	cReset  = "\033[0m"
@@ -910,17 +910,25 @@ func cmdBench(args []string) {
 			printError(file, err)
 			continue
 		}
-		var names []string
+		var fnNames []string
+		var inlineNames []string
+		var inlineIdx []int
+		nthInline := -1
 		for _, s := range prog.Stmts {
 			if fn, ok := s.(*parser.FnDecl); ok && strings.HasPrefix(fn.Name, "bench_") {
-				names = append(names, fn.Name)
+				fnNames = append(fnNames, fn.Name)
+			}
+			if bd, ok := s.(*parser.BenchDecl); ok {
+				nthInline++
+				inlineNames = append(inlineNames, bd.Name)
+				inlineIdx = append(inlineIdx, nthInline)
 			}
 		}
-		if len(names) == 0 {
-			fmt.Printf("  %s(no bench_* functions in this file)%s\n", cGray, cReset)
+		if len(fnNames)+len(inlineNames) == 0 {
+			fmt.Printf("  %s(no bench_* functions or `bench \"...\"` blocks)%s\n", cGray, cReset)
 			continue
 		}
-		for _, name := range names {
+		for _, name := range fnNames {
 			interp := interpreter.New()
 			interp.SetFile(file)
 			if bytecode {
@@ -932,7 +940,56 @@ func cmdBench(args []string) {
 			}
 			runBench(interp, name)
 		}
+		for i, name := range inlineNames {
+			interp := interpreter.New()
+			interp.SetFile(file)
+			if bytecode {
+				interp.SetBytecode(true)
+			}
+			if err := runProgramQuietly(interp, prog); err != nil {
+				fmt.Printf("  %s✗%s %s — %v\n", cRed, cReset, name, err)
+				continue
+			}
+			runBenchInline(interp, name, inlineIdx[i])
+		}
 	}
+}
+
+// runBenchInline is the inline-bench counterpart to runBench. Same
+// calibration loop — start at 1 iter, double until elapsed ≥ 1s — but
+// driven via interp.RunBench(idx) instead of CallByName since inline
+// blocks aren't named functions.
+func runBenchInline(interp *interpreter.Interpreter, name string, idx int) {
+	const target = 1 * time.Second
+	n := 1
+	var elapsed time.Duration
+	for {
+		start := time.Now()
+		for i := 0; i < n; i++ {
+			if err := interp.RunBench(idx); err != nil {
+				fmt.Printf("  %s✗%s %s — %v\n", cRed, cReset, name, err)
+				return
+			}
+		}
+		elapsed = time.Since(start)
+		if elapsed >= target || n >= 1<<24 {
+			break
+		}
+		ratio := float64(target) / float64(elapsed)
+		next := int(float64(n) * ratio * 1.2)
+		if next <= n {
+			next = n * 2
+		}
+		n = next
+	}
+	nsPerOp := float64(elapsed.Nanoseconds()) / float64(n)
+	opsPerSec := float64(n) / elapsed.Seconds()
+	fmt.Printf("  %s%-32s%s %s%9d ops%s   %s%.2f us/op%s   %s(%.0f ops/s)%s\n",
+		cBold, name, cReset,
+		cYellow, n, cReset,
+		cCyan, nsPerOp/1000, cReset,
+		cGray, opsPerSec, cReset,
+	)
 }
 
 func findBenchFiles(root string) ([]string, error) {

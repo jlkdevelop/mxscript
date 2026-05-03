@@ -168,6 +168,10 @@ func (p *Parser) parseStmt() (Stmt, error) {
 		if p.cur().Lexeme == "test" && p.peek(1).Type == lexer.TokenString {
 			return p.parseTest()
 		}
+		// Same shape for benchmarks: `bench "name" { ... }`.
+		if p.cur().Lexeme == "bench" && p.peek(1).Type == lexer.TokenString {
+			return p.parseBench()
+		}
 		return p.parseExprStmt()
 	default:
 		return p.parseExprStmt()
@@ -190,6 +194,21 @@ func (p *Parser) parseTest() (Stmt, error) {
 		return nil, err
 	}
 	return &TestDecl{pos: mkPos(tok), Name: nameTok.Lexeme, Body: body}, nil
+}
+
+// parseBench is the benchmark counterpart to parseTest: `bench "name"
+// { ... }`. Discovered by `mx bench` and run in a calibrated loop.
+func (p *Parser) parseBench() (Stmt, error) {
+	tok := p.advance() // `bench`
+	nameTok, err := p.expect(lexer.TokenString, "as bench name (expected a string literal after `bench`)")
+	if err != nil {
+		return nil, err
+	}
+	body, err := p.parseBlock()
+	if err != nil {
+		return nil, err
+	}
+	return &BenchDecl{pos: mkPos(tok), Name: nameTok.Lexeme, Body: body}, nil
 }
 
 // isHTTPMethod reports whether `name` is one of the HTTP verbs we accept
