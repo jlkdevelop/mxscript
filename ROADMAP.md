@@ -8,6 +8,9 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.72.0** (2026-05-03)
+  - `mx build --docker` / `--fly` / `--railway` — one-command deploy artifacts (multi-stage Dockerfile + platform configs)
+  - Defensive: never overwrites existing files
 - **v0.71.0** (2026-05-03)
   - VM lowers array literals `[1,2,3]`, object literals `{a:1}`, indexed reads, and `loop xs as item { }` iteration
   - New opcodes: `OpMakeArray`, `OpMakeObject`, `OpGetIndex`, `OpLength`; ~1.5-2× speedup on loops and object construction

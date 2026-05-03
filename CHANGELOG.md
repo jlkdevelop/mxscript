@@ -4,6 +4,49 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.72.0] — 2026-05-03
+
+### Added — `mx build --docker` / `--fly` / `--railway`
+
+Three deploy-target generators that get an MX project from "works on
+my machine" to "deployed" in two commands.
+
+```bash
+mx build --docker     # Dockerfile + .dockerignore
+docker build -t my-app . && docker run -p 8080:8080 my-app
+
+mx build --fly        # Dockerfile + .dockerignore + fly.toml
+fly launch --copy-config && fly deploy
+
+mx build --railway    # Dockerfile + .dockerignore + railway.toml
+railway up
+```
+
+- **Multi-stage Dockerfile.** Builds the `mx` binary with
+  `golang:1.25-alpine`, copies it into a tiny `alpine:3.19` runtime
+  image, embeds the user's `.mx` files, exposes `8080`, sets
+  `ENTRYPOINT ["mx", "run", "app.mx"]`. Works for any MX project
+  without modification.
+
+- **Defensive writes.** Each generator skips files that already
+  exist — users can customize freely without losing their changes
+  on the next build. The CLI prints `<file> already exists —
+  leaving it alone` so it's obvious nothing happened.
+
+- **Sensible deploy defaults.** Fly's config sets the smallest VM
+  size (`shared-cpu-1x`, `256mb`), turns on `auto_stop_machines`,
+  and forces HTTPS. Railway's config defines a healthcheck on `/`
+  and `restartPolicyType = ON_FAILURE` with 3 retries.
+
+- **`.dockerignore` ships with sane excludes** (`.git`, `.env`,
+  `*.bin`, `*.db`, `mx_modules/`, `dist/`, `node_modules/`).
+
+Combined with the existing `mx build --vercel` and `--wasm`, MX now
+generates deploy artifacts for the five most common targets:
+Vercel, the browser, Docker, Fly, Railway.
+
+[0.72.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.72.0
+
 ## [0.71.0] — 2026-05-03
 
 ### Added — VM lowers `[arr]` / `{obj}` / `loop` / `[index]`
