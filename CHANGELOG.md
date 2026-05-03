@@ -4,6 +4,48 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.94.0] — 2026-05-03
+
+### Added — `http.session()` (stateful client with cookie jar)
+
+The standard `fetch()` builtin is stateless; `http.session()` returns
+a session object that shares cookies + default headers across calls
+— useful for SDKs that consume legacy form-login APIs:
+
+```mx
+let s = http.session({
+  base_url: "https://api.example.com",
+  headers:  { "X-Auth": "Bearer " + env("API_TOKEN") },
+  timeout:  30
+})
+
+s.post("/login", { email: "x", password: "y" })
+let me = s.get("/me")            // session cookie auto-attaches
+println(me.body.name)             // JSON responses auto-decoded into .body
+
+let cookies = s.cookies()         // inspect what got set
+s.close()                         // clear the jar
+```
+
+- **Methods**: `get(path) / post(path, body?) / put(path, body?) /
+  delete(path)`. Paths starting with `/` get prefixed with the
+  `base_url`; absolute URLs pass through.
+- **Body type detection**: objects + arrays → JSON; strings starting
+  with `{` or `[` are sent as JSON; other strings as
+  `application/x-www-form-urlencoded`.
+- **JSON responses are auto-decoded** into the `body` field; the
+  raw `text` is always present alongside.
+- **`cookies()` snapshots the jar** so callers can persist auth state
+  across runs (write to disk, hydrate next time).
+- **`close()` resets the jar** by replacing it with a fresh one —
+  convenient for tearing down test fixtures.
+
+- **4 tests** cover the cookie-persistence round trip, default-header
+  attachment, JSON body encoding (`{ count: 3 }` → `{"count":3}`),
+  and close-clears-cookies.
+
+[0.94.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.94.0
+
 ## [0.93.0] — 2026-05-03
 
 ### Added — `examples/saas_pro.mx` (capstone showcase)

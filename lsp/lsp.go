@@ -539,6 +539,7 @@ var builtinDocs = map[string]builtinDoc{
 	"debug.dump":              {"debug.dump(value, label?) -> value", "Pretty-print value (pp-style) and return it unchanged."},
 	"csv_records":             {"csv_records(s) -> array", "Parse CSV with header row → array of objects keyed by column name."},
 	"csv_write_records":       {"csv_write_records(rows) -> string", "Inverse of csv_records — array of objects → CSV string with header."},
+	"http.session":            {"http.session(opts?) -> { get, post, put, delete, cookies, close }", "Stateful HTTP client with cookie jar. opts: base_url, headers, timeout."},
 	"cron":                     {"cron(spec, fn) -> stop_fn", "Vixie cron schedule. 5 fields: minute hour dom month dow. Returns a function that cancels the schedule."},
 	"notify.slack":             {"notify.slack(webhook_url, message) -> { ok, status, error }", "Post to a Slack incoming webhook. Message can be a string or a full Slack payload object."},
 	"notify.discord":           {"notify.discord(webhook_url, message) -> { ok, status, error }", "Post to a Discord webhook. String → content; object passes through (content, embeds, etc.)."},

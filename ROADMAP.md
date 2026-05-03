@@ -8,6 +8,8 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.94.0** (2026-05-03)
+  - `http.session(opts?)` — stateful HTTP client with cookie jar; for SDKs that consume legacy form-login APIs
 - **v0.93.0** (2026-05-03)
   - Capstone `examples/saas_pro.mx` — magic-link auth + Stripe + AI + FTS5 search + S3 presigned uploads + GraphQL + metrics + cron + health probes, ~150 lines
 - **v0.92.0** (2026-05-03)

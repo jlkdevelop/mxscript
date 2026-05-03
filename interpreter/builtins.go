@@ -162,6 +162,14 @@ func registerBuiltins(i *Interpreter) {
 	g.Set("ws", ObjectValue(wsNS))
 	builtinNames["ws"] = true
 
+	// http.* — stateful client with cookie jar. Stateless one-shots
+	// already work via fetch(); this is for SDKs that need session
+	// continuity across calls.
+	httpNS := NewOrderedMap()
+	httpNS.Set("session", FunctionValue(&Function{Name: "http.session", Native: builtinHTTPSession}))
+	g.Set("http", ObjectValue(httpNS))
+	builtinNames["http"] = true
+
 	// health.* — k8s-style liveness / readiness probes.
 	healthNS := NewOrderedMap()
 	healthNS.Set("live", FunctionValue(&Function{Name: "health.live", Native: builtinHealthLive}))
