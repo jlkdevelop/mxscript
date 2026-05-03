@@ -1,133 +1,106 @@
 # Examples
 
-Five real-world patterns in MX Script.
+Five common patterns in MX Script. Copy-paste, change the bits you don't like, ship.
 
-## 1. Health check + version endpoint
+## 1. Validated POST + Insert
 
 ```mx
-server { port: 8080 }
+let SCHEMA = {
+  type: "object",
+  required: ["name", "email"],
+  properties: {
+    name:  { type: "string", min_length: 2 },
+    email: { type: "string", format: "email" }
+  }
+}
 
-route GET /health {
-  return json({
-    status: "ok",
-    version: "1.0.0",
-    uptime_ms: now()
+post /users {
+  let r = body_validate(request, SCHEMA)
+  if (!r.ok) { return r.response }                   // 400 problem+json with errors
+
+  let id = sql.insert(db, "users", r.body).last_insert_id
+  return status(201, { id: id })
+}
+```
+
+`body_validate()` returns either a validated body or a fully-formed `application/problem+json` 400 — no manual error envelope construction.
+
+## 2. Paginated list
+
+```mx
+get /users {
+  let p     = paginate(request)
+  let total = sql.count(db, "users", {})
+  let items = sql.find(db, "users", {}, {
+    order:  "id DESC",
+    limit:  p.limit,
+    offset: p.offset
+  })
+  return json(page_response(items, p, total))
+}
+```
+
+`paginate(request)` reads `?page=` and `?per_page=` with sensible defaults. `page_response()` builds the standard `{ items, page, per_page, total, total_pages, has_next, has_prev }` envelope.
+
+## 3. Cacheable detail endpoint with ETag
+
+```mx
+get /users/:id {
+  let user = sql.find_one(db, "users", { id: num(request.params.id) })
+  if (user == null) { return problem(404, "User not found") }
+
+  let tag = etag(user)
+  if (request.headers["if-none-match"] == tag) { return not_modified() }
+
+  return json(user, {
+    headers: {
+      "ETag":          tag,
+      "Cache-Control": cache_control({ private: true, max_age: 60 })
+    }
   })
 }
 ```
 
-## 2. CRUD with in-memory store
+First request pays for the JSON body once. Subsequent identical requests get 304s with no body.
+
+## 4. File upload
 
 ```mx
-let posts = []
-let nextId = 1
+post /users/:id/avatar {
+  let img = request.files?.image
+  if (img == null)         { return problem(400, "Missing 'image' file") }
+  if (img.size > 5_000_000) { return problem(413, "Max 5 MB") }
 
-route GET /posts {
-  return json(posts)
-}
+  let saved = save_upload(img, "./uploads/" + uuid() + img.ext)
+  if (!saved.ok) { return problem(500, "Save failed", saved.error) }
 
-route POST /posts {
-  let body = request.body
-  if (body == null || body.title == null) {
-    return status(400, { error: "title required" })
-  }
-  let post = { id: nextId, title: body.title }
-  posts = push(posts, post)
-  nextId = nextId + 1
-  return status(201, post)
-}
-
-route GET /posts/:id {
-  let id = num(request.params.id)
-  let post = find(posts, fn(p) { return p.id == id })
-  if (post == null) {
-    return status(404, { error: "not found" })
-  }
-  return json(post)
-}
-
-route DELETE /posts/:id {
-  let id = num(request.params.id)
-  posts = filter(posts, fn(p) { return p.id != id })
-  return json({ deleted: id })
+  return json({ url: saved.path, size: saved.size })
 }
 ```
 
-## 3. Auth middleware
+`request.files` is auto-parsed from `multipart/form-data`. `save_upload` writes atomically and creates parent dirs.
+
+## 5. Service-to-service auth
 
 ```mx
-middleware require_token {
-  if (request.headers["authorization"] != "Bearer " + env("API_TOKEN")) {
-    return status(401, { error: "unauthorized" })
+middleware require_api_key {
+  if (!api_key_auth(request, env("API_KEYS"))) {
+    return problem(401, "Invalid API key")
   }
 }
 
-route GET /private {
-  use require_token
-  return json({ secret: "hello, authenticated user" })
+group /api {
+  use require_api_key
+  get /me { return json({ ok: true }) }
 }
 ```
 
-## 4. Calling another API with `fetch`
+`api_key_auth` checks `X-API-Key` (falls back to `Authorization: Bearer`). Allow-list comes from a comma-separated env var. Constant-time compare. Empty allow-list always returns false (fail-closed).
 
-```mx
-route GET /github/:user {
-  let res = fetch("https://api.github.com/users/" + request.params.user)
-  if (res.status >= 400) {
-    return status(res.status, { error: "github says no" })
-  }
-  return json({
-    name: res.body.name,
-    repos: res.body.public_repos,
-    followers: res.body.followers
-  })
-}
-```
+## More
 
-## 5. Login with cookies
-
-```mx
-let users = { jassim: "secret" }
-
-route POST /login {
-  let body = request.body
-  if (users[body.username] == body.password) {
-    let token = uuid()
-    return json({ ok: true }, {
-      cookies: [{ name: "session", value: token,
-                  path: "/", http_only: true,
-                  max_age: 86400, same_site: "Lax" }]
-    })
-  }
-  return status(401, { error: "bad creds" })
-}
-
-route GET /me {
-  let token = request.cookies?.session
-  if (token == null) {
-    return status(401, { error: "not logged in" })
-  }
-  return json({ session: token })
-}
-```
-
-## 6. AI-powered summariser
-
-```mx
-route POST /summarise {
-  let body = request.body
-  if (body == null || body.text == null) {
-    return status(400, { error: "text required" })
-  }
-  try {
-    let summary = ai.complete(
-      "Summarise the following in two sentences:\n\n" + body.text
-    )
-    return json({ summary: summary })
-  } catch (e) {
-    return status(500, { error: e.message })
-  }
-}
-```
-
-Set `OPENAI_API_KEY` in the environment, hit the endpoint, get a summary back.
+- `mx new shortener` — a complete URL shortener in 50 lines
+- `mx new api` — REST API showcase
+- `mx new todo` — JWT + SQLite
+- `mx new ai` — tool-calling agent endpoint
+- `examples/` in the source tree — runnable demos
