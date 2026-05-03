@@ -4,6 +4,34 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.47.0] — 2026-05-03
+
+### Added — automatic `request.id` + `X-Request-ID` echo
+
+Every request now carries a trace identifier:
+
+```mx
+get /thing {
+  log.info("[" + request.id + "] processing thing")
+  return problem(404, "Not found", "", { trace_id: request.id })
+}
+```
+
+```
+$ curl -i :8080/thing
+HTTP/1.1 404 Not Found
+X-Request-Id: 8c8b3aa2-1e4f-4cda-a8b9-2cf8c5b3f0e6
+...
+```
+
+Inbound `X-Request-ID` and `X-Correlation-ID` headers are honored
+verbatim so traces stitch across services. When neither is present
+the server generates a fresh UUID v4. The ID is always echoed back
+in the `X-Request-ID` response header so a client can correlate
+log lines without server-side bookkeeping.
+
+[1.47.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.47.0
+
 ## [1.46.0] — 2026-05-03
 
 ### Added — `problem()` for RFC 7807 problem+json error responses

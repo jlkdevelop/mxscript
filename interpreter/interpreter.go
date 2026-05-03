@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	cryptorand "crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -2326,7 +2327,42 @@ func (i *Interpreter) Handler() http.Handler {
 			inner.ServeHTTP(w, r)
 		})
 	}
+	// Request ID — applied last so it wraps everything else and the
+	// inner middlewares (logging, CORS, route handlers) all see the
+	// same value via r.Header. Honors any incoming X-Request-ID or
+	// X-Correlation-ID so traces stitch across services. Echoed back
+	// as X-Request-ID on every response.
+	{
+		inner := handler
+		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			id := r.Header.Get("X-Request-ID")
+			if id == "" {
+				id = r.Header.Get("X-Correlation-ID")
+			}
+			if id == "" {
+				id = newRequestID()
+			}
+			r.Header.Set("X-Request-ID", id)
+			w.Header().Set("X-Request-ID", id)
+			inner.ServeHTTP(w, r)
+		})
+	}
 	return handler
+}
+
+// newRequestID returns a UUID v4 for request tagging. The same generator
+// powers `uuid()`, but we keep this internal helper so the request layer
+// doesn't reach across into builtins for one call.
+func newRequestID() string {
+	b := make([]byte, 16)
+	if _, err := cryptorand.Read(b); err != nil {
+		// In the astronomically unlikely event the kernel CSPRNG fails,
+		// emit something obviously synthetic instead of returning "".
+		return "fallback-" + fmt.Sprintf("%d", time.Now().UnixNano())
+	}
+	b[6] = (b[6] & 0x0f) | 0x40 // version 4
+	b[8] = (b[8] & 0x3f) | 0x80 // variant 10
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }
 
 func (i *Interpreter) startServer() error {
@@ -2761,6 +2797,10 @@ func buildRequestObject(r *http.Request, params map[string]string) Value {
 	req.Set("bearer_token", StringValue(bearer))
 	req.Set("is_json", BoolValue(strings.Contains(r.Header.Get("Content-Type"), "application/json")))
 	req.Set("ip", StringValue(clientIP(r)))
+	// Trace identifier — set by the outermost middleware before this
+	// handler runs, so handlers can log it ("[req_id=abc] processing...")
+	// and include it in error responses for client debugging.
+	req.Set("id", StringValue(r.Header.Get("X-Request-ID")))
 
 	bodyVal := NullValue()
 	filesVal := NullValue()
