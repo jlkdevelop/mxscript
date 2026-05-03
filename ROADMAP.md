@@ -8,6 +8,8 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.92.0** (2026-05-03)
+  - Integration test: every `examples/*.mx` runs through `mx check` in CI; catches drift before users
 - **v0.91.0** (2026-05-03)
   - `csv_records(s)` / `csv_write_records(rows)` — header-keyed CSV; array-of-objects round-trip
 - **v0.90.0** (2026-05-03)

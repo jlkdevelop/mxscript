@@ -4,6 +4,32 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.92.0] — 2026-05-03
+
+### Added — Examples integration test
+
+Every bundled example in `examples/` now runs through `mx check` as
+part of the test suite. CI catches drift between the language and its
+showcase code: a renamed builtin, a removed function, a new keyword
+collision — anything that would break a copy-paste from an example —
+fails the test before reaching users.
+
+```
+$ go test ./checker/ -run EveryBundled -v
+=== RUN   TestEveryBundledExamplePassesChecker
+    --- PASS: agent.mx
+    --- PASS: ai_providers.mx
+    --- PASS: app.mx
+    ... (16 examples total) ...
+PASS
+```
+
+Each example runs as a subtest so when one fails, you see which file
++ line + column. Errors fail the suite; warnings (like unused-let)
+stay tolerated.
+
+[0.92.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.92.0
+
 ## [0.91.0] — 2026-05-03
 
 ### Added — `csv_records` / `csv_write_records` (header-aware CSV)
