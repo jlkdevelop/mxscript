@@ -4,6 +4,30 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.36.0] — 2026-05-03
+
+### Added — compound assignment `+=` `-=` `*=` `/=` `??=`
+
+```mx
+let count = 0
+count += 1
+count *= 2
+
+let cfg = { retries: 3 }
+cfg.retries -= 1                       // works on object fields
+arr[i] *= 2                            // works on indexed targets
+
+let cached = null
+cached ??= compute_expensive_thing()   // set only if currently null
+```
+
+Desugared at parse time — `x += 1` rewrites to `x = x + 1` so the
+interpreter, bytecode VM, and checker all keep working unchanged. The
+nullish-set form `x ??= y` desugars to `x = x ?? y`, which is the
+standard "remember the first non-null value" pattern for caches.
+
+[1.36.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.36.0
+
 ## [1.35.0] — 2026-05-03
 
 ### Added — pipe operator `|>`

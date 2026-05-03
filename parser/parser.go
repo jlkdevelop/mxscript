@@ -697,8 +697,39 @@ func (p *Parser) parseExprStmt() (Stmt, error) {
 		p.match(lexer.TokenSemicolon)
 		return &AssignStmt{pos: mkPos(startTok), Target: expr, Value: val}, nil
 	}
+	// Compound assignment — desugar at parse time so the interpreter,
+	// VM, and checker only ever see plain assignments + binary ops.
+	if op, ok := compoundAssignOp(p.cur().Type); ok {
+		opTok := p.advance()
+		val, err := p.parseExpr()
+		if err != nil {
+			return nil, err
+		}
+		p.match(lexer.TokenSemicolon)
+		rhs := &BinaryExpr{pos: mkPos(opTok), Op: op, Left: expr, Right: val}
+		return &AssignStmt{pos: mkPos(startTok), Target: expr, Value: rhs}, nil
+	}
 	p.match(lexer.TokenSemicolon)
 	return &ExprStmt{pos: mkPos(startTok), Expr: expr}, nil
+}
+
+// compoundAssignOp maps a compound-assignment token to the binary
+// operator it desugars into. ??= becomes the `??` null-coalesce
+// operator so `x ??= y` rewrites to `x = x ?? y`.
+func compoundAssignOp(t lexer.TokenType) (string, bool) {
+	switch t {
+	case lexer.TokenPlusEq:
+		return "+", true
+	case lexer.TokenMinusEq:
+		return "-", true
+	case lexer.TokenStarEq:
+		return "*", true
+	case lexer.TokenSlashEq:
+		return "/", true
+	case lexer.TokenNullCoalesceAssign:
+		return "??", true
+	}
+	return "", false
 }
 
 // ===== Expressions (Pratt-ish precedence climbing) =====

@@ -72,6 +72,13 @@ const (
 	TokenAnd
 	TokenOr
 	TokenPipe // |> — value forward into a function call
+
+	// Compound assignment — `x += 1` desugars to `x = x + 1` at parse time.
+	TokenPlusEq
+	TokenMinusEq
+	TokenStarEq
+	TokenSlashEq
+	TokenNullCoalesceAssign // ??= — set only when LHS is null
 	TokenSpread
 	TokenQuestionDot  // ?.
 	TokenNullCoalesce // ??
@@ -134,9 +141,14 @@ var tokenNames = map[TokenType]string{
 	TokenSlash:        "/",
 	TokenPercent:      "%",
 	TokenBang:         "!",
-	TokenAnd:          "&&",
-	TokenOr:           "||",
-	TokenPipe:         "|>",
+	TokenAnd:                "&&",
+	TokenOr:                 "||",
+	TokenPipe:               "|>",
+	TokenPlusEq:             "+=",
+	TokenMinusEq:            "-=",
+	TokenStarEq:             "*=",
+	TokenSlashEq:            "/=",
+	TokenNullCoalesceAssign: "??=",
 	TokenSpread:       "...",
 	TokenQuestionDot:  "?.",
 	TokenNullCoalesce: "??",
@@ -595,6 +607,15 @@ func (l *Lexer) readSymbol(line, col int) error {
 		l.tokens = append(l.tokens, Token{Type: TokenSpread, Lexeme: "...", Line: line, Col: col})
 		return nil
 	}
+	// Three-char `??=` (nullish set) — must come before the two-char `??`
+	// dispatch below so it claims the longer match.
+	if c == '?' && l.peek(1) == '?' && l.peek(2) == '=' {
+		l.advance()
+		l.advance()
+		l.advance()
+		l.tokens = append(l.tokens, Token{Type: TokenNullCoalesceAssign, Lexeme: "??=", Line: line, Col: col})
+		return nil
+	}
 	two := ""
 	if l.pos+1 < len(l.src) {
 		two = string(c) + string(l.src[l.pos+1])
@@ -650,6 +671,26 @@ func (l *Lexer) readSymbol(line, col int) error {
 		l.advance()
 		l.advance()
 		l.tokens = append(l.tokens, Token{Type: TokenPipe, Lexeme: "|>", Line: line, Col: col})
+		return nil
+	case "+=":
+		l.advance()
+		l.advance()
+		l.tokens = append(l.tokens, Token{Type: TokenPlusEq, Lexeme: "+=", Line: line, Col: col})
+		return nil
+	case "-=":
+		l.advance()
+		l.advance()
+		l.tokens = append(l.tokens, Token{Type: TokenMinusEq, Lexeme: "-=", Line: line, Col: col})
+		return nil
+	case "*=":
+		l.advance()
+		l.advance()
+		l.tokens = append(l.tokens, Token{Type: TokenStarEq, Lexeme: "*=", Line: line, Col: col})
+		return nil
+	case "/=":
+		l.advance()
+		l.advance()
+		l.tokens = append(l.tokens, Token{Type: TokenSlashEq, Lexeme: "/=", Line: line, Col: col})
 		return nil
 	}
 
