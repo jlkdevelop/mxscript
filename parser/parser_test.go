@@ -136,3 +136,34 @@ func TestTestIdentifierStillCallable(t *testing.T) {
 		t.Fatalf("expected *LetStmt, got %T", prog.Stmts[0])
 	}
 }
+
+func TestPipeRewriteIntoCall(t *testing.T) {
+	// `5 |> double` should desugar to a CallExpr with double as
+	// callee and 5 as the lone argument.
+	prog := mustParse(t, `let x = 5 |> double`)
+	let := prog.Stmts[0].(*LetStmt)
+	call, ok := let.Value.(*CallExpr)
+	if !ok {
+		t.Fatalf("expected CallExpr, got %T", let.Value)
+	}
+	if id, _ := call.Callee.(*Identifier); id == nil || id.Name != "double" {
+		t.Errorf("callee: %+v", call.Callee)
+	}
+	if len(call.Args) != 1 {
+		t.Fatalf("expected 1 arg, got %d", len(call.Args))
+	}
+}
+
+func TestPipePrependsToExistingArgs(t *testing.T) {
+	// `5 |> add(10)` should desugar to add(5, 10) — LHS prepended.
+	prog := mustParse(t, `let x = 5 |> add(10)`)
+	let := prog.Stmts[0].(*LetStmt)
+	call := let.Value.(*CallExpr)
+	if len(call.Args) != 2 {
+		t.Fatalf("expected 2 args, got %d", len(call.Args))
+	}
+	first, _ := call.Args[0].(*NumberLit)
+	if first == nil || first.Value != 5 {
+		t.Errorf("first arg should be 5, got %+v", call.Args[0])
+	}
+}

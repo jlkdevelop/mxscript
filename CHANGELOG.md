@@ -4,6 +4,37 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.35.0] — 2026-05-03
+
+### Added — pipe operator `|>`
+
+```mx
+let n = 5 |> double               // → double(5)              = 10
+let s = "hello" |> str.upper      // → str.upper("hello")     = "HELLO"
+let x = 3 |> double |> double     // → double(double(3))      = 12
+let y = 5 |> add(10)              // → add(5, 10)             = 15
+```
+
+`a |> f` rewrites at parse time to `f(a)`. If the right-hand side is
+already a call, the LHS is prepended as the first argument so
+`x |> f(y, z)` becomes `f(x, y, z)`. Lower precedence than every
+binary operator so `(a + b) |> f` reads naturally.
+
+Useful for transformation pipelines:
+
+```mx
+let report = users
+  |> arr.filter(fn(u) { return u.active })
+  |> arr.map(fn(u) { return u.email })
+  |> arr.sort
+  |> json_stringify
+```
+
+Desugared at parse time so there's zero runtime overhead — the bytecode
+VM just sees a chain of CallExpr nodes.
+
+[1.35.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.35.0
+
 ## [1.34.0] — 2026-05-03
 
 ### Added — `assert_snapshot()` for golden-file testing

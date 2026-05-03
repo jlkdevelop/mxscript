@@ -71,6 +71,7 @@ const (
 	TokenBang
 	TokenAnd
 	TokenOr
+	TokenPipe // |> — value forward into a function call
 	TokenSpread
 	TokenQuestionDot  // ?.
 	TokenNullCoalesce // ??
@@ -135,6 +136,7 @@ var tokenNames = map[TokenType]string{
 	TokenBang:         "!",
 	TokenAnd:          "&&",
 	TokenOr:           "||",
+	TokenPipe:         "|>",
 	TokenSpread:       "...",
 	TokenQuestionDot:  "?.",
 	TokenNullCoalesce: "??",
@@ -643,6 +645,11 @@ func (l *Lexer) readSymbol(line, col int) error {
 		l.advance()
 		l.advance()
 		l.tokens = append(l.tokens, Token{Type: TokenOr, Lexeme: "||", Line: line, Col: col})
+		return nil
+	case "|>":
+		l.advance()
+		l.advance()
+		l.tokens = append(l.tokens, Token{Type: TokenPipe, Lexeme: "|>", Line: line, Col: col})
 		return nil
 	}
 

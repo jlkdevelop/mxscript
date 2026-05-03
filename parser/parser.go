@@ -703,7 +703,53 @@ func (p *Parser) parseExprStmt() (Stmt, error) {
 
 // ===== Expressions (Pratt-ish precedence climbing) =====
 
-func (p *Parser) parseExpr() (Expr, error) { return p.parseNullCoalesce() }
+func (p *Parser) parseExpr() (Expr, error) { return p.parsePipe() }
+
+// parsePipe handles the F#-style forward pipe `|>`. `a |> f` rewrites
+// to `f(a)`. `a |> f(b, c)` rewrites to `f(a, b, c)` (LHS is prepended
+// as the first arg). Lower precedence than `??` so `a || b |> f` is
+// `(a || b) |> f` — the whole logical result feeds the pipe.
+//
+// We desugar at parse time so the interpreter and bytecode VM never
+// see a pipe node — they just see calls. Cheap, no runtime cost.
+func (p *Parser) parsePipe() (Expr, error) {
+	left, err := p.parseNullCoalesce()
+	if err != nil {
+		return nil, err
+	}
+	for p.check(lexer.TokenPipe) {
+		tok := p.advance()
+		right, err := p.parseNullCoalesce()
+		if err != nil {
+			return nil, err
+		}
+		left, err = pipeRewrite(left, right, mkPos(tok))
+		if err != nil {
+			return nil, err
+		}
+	}
+	return left, nil
+}
+
+// pipeRewrite turns `lhs |> rhs` into a CallExpr.
+//
+//   - rhs is a CallExpr (e.g. `f(x, y)`)  →  prepend lhs to its args.
+//   - rhs is anything else (identifier, member, etc.)  →  call it
+//     with lhs as the sole argument.
+//
+// Errors out if the RHS would be a clearly nonsensical pipe target —
+// a literal number, a string, a binary op — to catch typos early.
+func pipeRewrite(lhs, rhs Expr, p pos) (Expr, error) {
+	switch r := rhs.(type) {
+	case *CallExpr:
+		args := append([]Expr{lhs}, r.Args...)
+		return &CallExpr{pos: r.pos, Callee: r.Callee, Args: args}, nil
+	case *Identifier, *MemberExpr:
+		return &CallExpr{pos: p, Callee: rhs, Args: []Expr{lhs}}, nil
+	default:
+		return nil, fmt.Errorf("right-hand side of `|>` must be a function call or name, got %T", rhs)
+	}
+}
 
 func (p *Parser) parseNullCoalesce() (Expr, error) {
 	left, err := p.parseOr()
