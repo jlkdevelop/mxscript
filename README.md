@@ -79,7 +79,7 @@ MX Script is opinionated: **the language is the framework**. Routes, JSON, SQL, 
 | **Editor support** | TextMate grammar, VS Code extension, full LSP (diagnostics, format-on-save, hover, completion for all builtins) |
 | **Distribution** | GoReleaser binaries on every tag, Homebrew tap, `mx build --vercel` adapter |
 
-### Five starter projects, one command
+### Six starter projects, one command
 
 ```bash
 mx new api my-api         # REST API + OpenAPI + Swagger UI + status page
@@ -87,6 +87,7 @@ mx new todo my-todos      # JWT auth + SQLite + groups + validate
 mx new chat realtime      # WebSockets + sessions + broadcast
 mx new ai my-bot          # Tool-calling agent (5-turn loop)
 mx new blog my-blog       # SSR markdown blog with admin
+mx new saas my-saas       # Magic-link auth + Stripe + /metrics + cron + admin
 ```
 
 Each scaffolds a complete, runnable app. Read the source, change the bits you don't like, ship.

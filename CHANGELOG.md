@@ -4,6 +4,44 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.67.0] — 2026-05-03
+
+### Added — `mx new saas` template
+
+- **A complete SaaS starter in one file.** Showcases the full
+  v0.55–v0.66 feature surface end-to-end:
+
+  ```bash
+  mx new saas my-app
+  cd my-app
+  cp .env.example .env       # fill in Stripe + Resend keys
+  mx run app.mx
+  ```
+
+  What it ships:
+  - **Magic-link auth** (`magic_link.create` / `verify`)
+  - **Stripe checkout** with `customer_create` + `subscription` mode
+  - **Customer portal** for self-service billing management
+  - **Webhook handler** (`webhooks.verify_stripe`) marks users active
+  - **Prometheus `/metrics`** endpoint with per-route request counter
+  - **Daily-digest cron** job at 09:00
+  - **`/admin` dashboard** listing every user + plan + signup date
+  - **Pricing page** + dashboard + sign-in flow
+
+  Total: ~150 lines of MX, zero JS, zero React, zero build tool.
+
+- **Six templates total** now ship (`api`, `todo`, `chat`, `ai`,
+  `blog`, `saas`). The `mx new --help` enumerates them in the same
+  order builders typically encounter them.
+
+- **Real-checker-validated.** `mx check` now passes cleanly on the
+  saas template — caught a `?:` ternary I mis-typed (MX uses
+  `match cond { true => x, _ => y }` instead) and the missing
+  scope-bind for the magic-link click handler. Before-shipping
+  verification, in seconds.
+
+[0.67.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.67.0
+
 ## [0.66.0] — 2026-05-03
 
 ### Added — `metrics.*` namespace + Prometheus `/metrics` endpoint

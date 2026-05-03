@@ -8,6 +8,8 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.67.0** (2026-05-03)
+  - `mx new saas` — full SaaS starter: magic-link auth + Stripe checkout + customer portal + webhooks + metrics + cron + admin dashboard, in one file
 - **v0.66.0** (2026-05-03)
   - `metrics.counter` / `gauge` / `histogram` with labels; `metrics.handler()` mounts a Prometheus exposition `/metrics` endpoint
   - Stable label fingerprinting (insertion-order independent); cumulative-count histograms
