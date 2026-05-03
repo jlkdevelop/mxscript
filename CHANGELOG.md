@@ -4,6 +4,32 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.54.0] — 2026-05-03
+
+### Added — `server_timing()` for browser devtools timing breakdowns
+
+```mx
+get /users/:id {
+  let t0    = now()
+  let user  = sql.find_one(db, "users", { id: request.params.id })
+  let db_ms = now() - t0
+
+  return json(user, {
+    headers: {
+      "Server-Timing": server_timing({ db: db_ms, total: now() - request_start })
+    }
+  })
+}
+```
+
+Renders `db;dur=23, total;dur=42`. Browser devtools surface this
+under Network → Timing automatically — no extra Chrome/Firefox config.
+
+Number values are durations in ms; strings become `desc=`-style
+descriptions (`{ cache: "hit" }` → `cache;desc="hit"`).
+
+[1.54.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.54.0
+
 ## [1.53.0] — 2026-05-03
 
 ### Improved — `mx new todo` rewritten to use the object-driven CRUD

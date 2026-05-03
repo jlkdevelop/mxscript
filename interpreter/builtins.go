@@ -103,6 +103,7 @@ func registerBuiltins(i *Interpreter) {
 	def("etag", builtinEtag)
 	def("not_modified", builtinNotModified)
 	def("cache_control", builtinCacheControl)
+	def("server_timing", builtinServerTiming)
 	def("api_key_auth", builtinAPIKeyAuth)
 	def("paginate", builtinPaginate)
 	def("page_response", builtinPageResponse)

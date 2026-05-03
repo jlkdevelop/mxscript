@@ -19,6 +19,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
+	"strings"
 )
 
 // etag(value) -> string — stable strong-hash etag for any value.
@@ -103,4 +104,81 @@ func builtinCacheControl(_ *Interpreter, args []Value) (Value, error) {
 		out += p
 	}
 	return StringValue(out), nil
+}
+
+// server_timing(metrics) -> string — build a Server-Timing header.
+//
+//   let t0 = now()
+//   let users = sql.find(db, "users", {})
+//   let db_ms = now() - t0
+//   return json(users, {
+//     headers: { "Server-Timing": server_timing({ db: db_ms, total: now() - start }) }
+//   })
+//
+// Renders `db;dur=23, total;dur=42`. Browser devtools surface this
+// under Network → Timing automatically. Pure number values mean
+// duration in milliseconds; pass a string to set a description-only
+// entry: `{ cache: "hit" }` → `cache;desc="hit"`.
+func builtinServerTiming(_ *Interpreter, args []Value) (Value, error) {
+	if len(args) < 1 || args[0].Kind != KindObject {
+		return Value{}, fmt.Errorf("server_timing(metrics) requires an object")
+	}
+	o := args[0].Object
+	parts := make([]string, 0, len(o.Keys))
+	for _, k := range o.Keys {
+		if !validServerTimingName(k) {
+			return Value{}, fmt.Errorf("server_timing: metric name %q must be a plain identifier", k)
+		}
+		v, _ := o.Get(k)
+		switch v.Kind {
+		case KindNumber:
+			// Format with up to 3 decimal places, trimming trailing zeros.
+			parts = append(parts, fmt.Sprintf("%s;dur=%s", k, trimNum(v.Number)))
+		case KindString:
+			// Quote per RFC 7230 quoted-string. Embedded quotes are escaped.
+			parts = append(parts, fmt.Sprintf(`%s;desc="%s"`, k, escapeQuoted(v.String)))
+		default:
+			return Value{}, fmt.Errorf("server_timing: metric %q must be a number or string", k)
+		}
+	}
+	return StringValue(strings.Join(parts, ", ")), nil
+}
+
+func validServerTimingName(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case r >= 'A' && r <= 'Z':
+		case r >= '0' && r <= '9':
+		case r == '_' || r == '-':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func trimNum(n float64) string {
+	s := fmt.Sprintf("%.3f", n)
+	// Strip trailing zeros after the decimal, then a trailing dot.
+	for strings.HasSuffix(s, "0") {
+		s = s[:len(s)-1]
+	}
+	s = strings.TrimSuffix(s, ".")
+	return s
+}
+
+func escapeQuoted(s string) string {
+	out := make([]byte, 0, len(s))
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c == '"' || c == '\\' {
+			out = append(out, '\\')
+		}
+		out = append(out, c)
+	}
+	return string(out)
 }
