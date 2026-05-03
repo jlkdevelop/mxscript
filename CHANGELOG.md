@@ -4,6 +4,29 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.95.0] — 2026-05-03
+
+### Added — `str.*` namespace (organising the existing string builtins)
+
+The 15 most-used string helpers now have namespaced aliases so
+library code can favor clarity over brevity:
+
+```mx
+// Top-level form (unchanged) — best for terse scripts
+let name = upper(trim(input))
+
+// Namespaced form — clearer in shared libraries
+let name = str.upper(str.trim(input))
+```
+
+Both forms point at the same underlying functions; pick whichever
+reads better in context. Aliased: `upper`, `lower`, `trim`,
+`split`, `replace`, `contains`, `starts_with`, `ends_with`,
+`substr`, `index_of`, `pad_left`, `pad_right`, `repeat`,
+`escape_html` (= `html_escape`), `unescape_html` (= `html_unescape`).
+
+[0.95.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.95.0
+
 ## [0.94.0] — 2026-05-03
 
 ### Added — `http.session()` (stateful client with cookie jar)

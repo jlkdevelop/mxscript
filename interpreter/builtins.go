@@ -121,6 +121,28 @@ func registerBuiltins(i *Interpreter) {
 	def("index_of", builtinIndexOf)
 	def("html_escape", builtinHTMLEscape)
 	def("html_unescape", builtinHTMLUnescape)
+
+	// str.* — namespaced aliases for the top-level string builtins.
+	// Lets users prefer `str.upper(s)` for clarity in libraries while
+	// keeping the bare-name form (`upper(s)`) for terse scripts.
+	strNS := NewOrderedMap()
+	strNS.Set("upper", FunctionValue(&Function{Name: "str.upper", Native: builtinUpper}))
+	strNS.Set("lower", FunctionValue(&Function{Name: "str.lower", Native: builtinLower}))
+	strNS.Set("trim", FunctionValue(&Function{Name: "str.trim", Native: builtinTrim}))
+	strNS.Set("split", FunctionValue(&Function{Name: "str.split", Native: builtinSplit}))
+	strNS.Set("replace", FunctionValue(&Function{Name: "str.replace", Native: builtinReplace}))
+	strNS.Set("contains", FunctionValue(&Function{Name: "str.contains", Native: builtinContains}))
+	strNS.Set("starts_with", FunctionValue(&Function{Name: "str.starts_with", Native: builtinStartsWith}))
+	strNS.Set("ends_with", FunctionValue(&Function{Name: "str.ends_with", Native: builtinEndsWith}))
+	strNS.Set("substr", FunctionValue(&Function{Name: "str.substr", Native: builtinSubstr}))
+	strNS.Set("index_of", FunctionValue(&Function{Name: "str.index_of", Native: builtinIndexOf}))
+	strNS.Set("pad_left", FunctionValue(&Function{Name: "str.pad_left", Native: builtinPadLeft}))
+	strNS.Set("pad_right", FunctionValue(&Function{Name: "str.pad_right", Native: builtinPadRight}))
+	strNS.Set("repeat", FunctionValue(&Function{Name: "str.repeat", Native: builtinRepeat}))
+	strNS.Set("escape_html", FunctionValue(&Function{Name: "str.escape_html", Native: builtinHTMLEscape}))
+	strNS.Set("unescape_html", FunctionValue(&Function{Name: "str.unescape_html", Native: builtinHTMLUnescape}))
+	g.Set("str", ObjectValue(strNS))
+	builtinNames["str"] = true
 	def("slug", builtinSlug)
 	def("markdown", builtinMarkdown)
 
