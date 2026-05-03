@@ -4,6 +4,25 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.59.0] — 2026-05-03
+
+### Improved — `mx init` scaffold polish
+
+`mx init my-app` is the absolute first thing many people type. The
+scaffold now:
+
+- Uses `get /` shorthand instead of the verbose `route GET /`
+- Includes a `POST /echo` route that surfaces `request.id` so
+  newcomers see distributed tracing is built-in from the first run
+- Points at `mx new <template>` (api / shortener / todo / etc.)
+  with a one-line "want more?" comment
+
+The bare scaffold is still tiny (three routes, no DB) — the goal is
+that the very first `mx run app.mx` lands on something visibly more
+than "hello world" without being overwhelming.
+
+[1.59.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.59.0
+
 ## [1.58.0] — 2026-05-03
 
 ### Improved — refreshed `examples/app.mx` + `examples/crud.mx`
