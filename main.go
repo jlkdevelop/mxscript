@@ -58,7 +58,7 @@ func (rr *replReader) ReadLine() (string, bool) {
 // Version is bumped at release time. Override at build with:
 //
 //	go build -ldflags "-X main.Version=v0.2.0"
-var Version = "v1.10.0"
+var Version = "v1.11.0"
 
 const (
 	cReset  = "\033[0m"
@@ -128,6 +128,8 @@ func main() {
 		cmdDB(args)
 	case "audit":
 		cmdAudit(args)
+	case "stats":
+		cmdStats(args)
 	case "version", "-v", "--version":
 		fmt.Println("MX Script", Version)
 	case "help", "-h", "--help":
@@ -184,6 +186,7 @@ func printHelp() {
 	fmt.Println("  env                          Show MX-relevant env vars (secrets masked)")
 	fmt.Println("  db <dsn>                     Interactive SQL REPL (sqlite/postgres/mysql)")
 	fmt.Println("  audit <file.mx>              Security checklist (rate limits, TLS, secrets, etc.)")
+	fmt.Println("  stats <file.mx>              Code metrics (routes, fns, middleware, namespaces used)")
 	fmt.Println("  version               Print version and exit")
 	fmt.Println("  help                  Show this help")
 	fmt.Println()
@@ -1775,6 +1778,120 @@ func mustAbs(p string) string {
 		return p
 	}
 	return abs
+}
+
+// ===== mx stats =====
+
+// cmdStats parses an MX file and prints a punchy summary: line count,
+// routes, fn declarations, middlewares, top-level lets, namespaces
+// touched. Helps users understand the shape of an unfamiliar codebase
+// at a glance, and confirms after a refactor that the surface didn't
+// drift unexpectedly.
+func cmdStats(args []string) {
+	if len(args) < 1 {
+		fatal("usage: mx stats <file.mx>")
+	}
+	file := args[0]
+	src, err := os.ReadFile(file)
+	if err != nil {
+		fatal("cannot read %s: %v", file, err)
+	}
+	tokens, err := lexer.New(string(src)).Tokenize()
+	if err != nil {
+		printError(file, err)
+		os.Exit(1)
+	}
+	prog, err := parser.New(tokens).Parse()
+	if err != nil {
+		printError(file, err)
+		os.Exit(1)
+	}
+
+	// Tally.
+	lineCount := strings.Count(string(src), "\n") + 1
+	commentCount := 0
+	for _, line := range strings.Split(string(src), "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "//") {
+			commentCount++
+		}
+	}
+
+	var routes, fns, mws, lets int
+	for _, s := range prog.Stmts {
+		switch s.(type) {
+		case *parser.RouteDecl:
+			routes++
+		case *parser.FnDecl:
+			fns++
+		case *parser.MiddlewareDecl:
+			mws++
+		case *parser.LetStmt:
+			lets++
+		}
+	}
+
+	// Namespaces in use — match against `<word>.<word>(`.
+	namespaces := map[string]int{}
+	srcStr := string(src)
+	knownNS := []string{
+		"ai", "stripe", "webhooks", "metrics", "totp", "magic_link",
+		"notify", "time", "path", "fs", "redis", "sql", "oauth", "jwt",
+		"pubsub", "search", "s3", "id", "password", "session", "ws",
+		"http", "vault", "debug", "graphql", "health", "shell", "sh",
+		"crypto", "str", "arr", "image",
+	}
+	for _, ns := range knownNS {
+		// Count `<ns>.` followed by a letter (not `..` or `.5`).
+		needle := ns + "."
+		count := 0
+		idx := 0
+		for {
+			n := strings.Index(srcStr[idx:], needle)
+			if n < 0 {
+				break
+			}
+			idx += n + len(needle)
+			if idx < len(srcStr) {
+				c := srcStr[idx]
+				if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_' {
+					count++
+				}
+			}
+		}
+		if count > 0 {
+			namespaces[ns] = count
+		}
+	}
+
+	// Output.
+	fmt.Printf("\n%sMX Script — stats %s%s\n\n", cBold, file, cReset)
+	fmt.Printf("  %-22s %d\n", "lines", lineCount)
+	fmt.Printf("  %-22s %d\n", "comment lines", commentCount)
+	fmt.Printf("  %-22s %d\n", "routes", routes)
+	fmt.Printf("  %-22s %d\n", "fn declarations", fns)
+	fmt.Printf("  %-22s %d\n", "middlewares", mws)
+	fmt.Printf("  %-22s %d\n", "top-level lets", lets)
+
+	if len(namespaces) > 0 {
+		fmt.Printf("\n  %snamespaces used:%s\n", cCyan, cReset)
+		// Stable sorted order.
+		nsKeys := make([]string, 0, len(namespaces))
+		for k := range namespaces {
+			nsKeys = append(nsKeys, k)
+		}
+		sort.Strings(nsKeys)
+		for _, ns := range nsKeys {
+			fmt.Printf("    %-12s %d call%s\n", ns, namespaces[ns], pluralS(namespaces[ns]))
+		}
+	}
+	fmt.Println()
+}
+
+func pluralS(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
 }
 
 // ===== mx audit =====

@@ -4,6 +4,43 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.11.0] — 2026-05-03
+
+### Added — `mx stats <file.mx>` (code-shape summary)
+
+```
+$ mx stats examples/saas_pro.mx
+MX Script — stats examples/saas_pro.mx
+
+  lines                  198
+  comment lines          36
+  routes                 14
+  fn declarations        0
+  middlewares            3
+  top-level lets         3
+
+  namespaces used:
+    ai           1 call
+    graphql      1 call
+    health       2 calls
+    magic_link   3 calls
+    metrics      2 calls
+    s3           1 call
+    search       3 calls
+    sql          14 calls
+    stripe       3 calls
+    webhooks     1 call
+    ...
+```
+
+Punchy summary of an MX program: total + comment lines, route /
+function / middleware / let counts, and a per-namespace call count
+ranked by use. Lets users understand the shape of an unfamiliar
+file at a glance and confirm after refactors that the surface
+hasn't drifted.
+
+[1.11.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.11.0
+
 ## [1.10.0] — 2026-05-03
 
 ### Added — `mx audit <file.mx>` (security checklist)
