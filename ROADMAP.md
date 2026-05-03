@@ -8,6 +8,8 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.73.0** (2026-05-03)
+  - "did you mean .complete?" hints on namespace typos (`ai.complte` → suggest `.complete`)
 - **v0.72.0** (2026-05-03)
   - `mx build --docker` / `--fly` / `--railway` — one-command deploy artifacts (multi-stage Dockerfile + platform configs)
   - Defensive: never overwrites existing files

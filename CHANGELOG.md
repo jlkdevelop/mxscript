@@ -4,6 +4,36 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.73.0] — 2026-05-03
+
+### Improved — friendlier "did you mean" hints on namespace typos
+
+Top-level builtins already suggested fixes (`prntln` → `println`).
+Now namespace typos do too:
+
+```
+$ mx run --eval 'ai.complte("hi")'
+error: cannot call null (did you mean .complete?)
+
+$ mx run --eval 'webhooks.verify_strpe(...)'
+error: cannot call null (did you mean .verify_stripe?)
+
+$ mx run --eval 'metrics.contr("x")'
+error: cannot call null (did you mean .counter?)
+```
+
+When a `CallExpr` resolves to null and the callee was a `MemberExpr`
+on an object, the runtime walks the object's keys and proposes the
+closest match within Levenshtein-2. Powered by a new `suggestKey()`
+helper that mirrors the existing `suggestIdentifier` for top-level
+names.
+
+Hits every namespace MX ships: `ai.*`, `stripe.*`, `webhooks.*`,
+`metrics.*`, `totp.*`, `magic_link.*`, `notify.*`, `time.*`,
+`path.*`, `redis.*`, `sql.*`, `oauth.*`, `jwt.*`, `pubsub.*`, `fs.*`.
+
+[0.73.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.73.0
+
 ## [0.72.0] — 2026-05-03
 
 ### Added — `mx build --docker` / `--fly` / `--railway`

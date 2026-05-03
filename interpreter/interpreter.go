@@ -147,6 +147,27 @@ func suggestIdentifier(env *Env, name string) string {
 	return best
 }
 
+// suggestKey looks for the closest match to `name` among the keys of
+// `obj` (Levenshtein <= 2). Returns "" when nothing's close enough.
+// Powers the "did you mean .complete?" hint on missing-namespace-key
+// calls.
+func suggestKey(obj *OrderedMap, name string) string {
+	if obj == nil {
+		return ""
+	}
+	best := ""
+	bestDist := 3
+	lower := strings.ToLower(name)
+	for _, k := range obj.Keys {
+		d := levenshtein(lower, strings.ToLower(k))
+		if d < bestDist {
+			bestDist = d
+			best = k
+		}
+	}
+	return best
+}
+
 func allKnownIdents(env *Env) []string {
 	seen := map[string]bool{}
 	var out []string
@@ -1935,6 +1956,17 @@ func (i *Interpreter) evalCall(n *parser.CallExpr, env *Env) (Value, error) {
 		return Value{}, err
 	}
 	if callee.Kind != KindFunction {
+		// Helpful error: when the user wrote `ai.complte(...)` we
+		// can resolve `ai` (the namespace object) and suggest the
+		// closest matching key on it.
+		if me, ok := n.Callee.(*parser.MemberExpr); ok {
+			obj, oerr := i.evalExpr(me.Object, env)
+			if oerr == nil && obj.Kind == KindObject {
+				if hint := suggestKey(obj.Object, me.Property); hint != "" {
+					return Value{}, runtimeErrorf(n, "cannot call %s (did you mean .%s?)", callee.typeName(), hint)
+				}
+			}
+		}
 		return Value{}, runtimeErrorf(n, "cannot call %s", callee.typeName())
 	}
 	var args []Value
