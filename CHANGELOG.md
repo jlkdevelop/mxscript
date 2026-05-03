@@ -4,6 +4,40 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.91.0] — 2026-05-03
+
+### Added — `csv_records` / `csv_write_records` (header-aware CSV)
+
+The existing `csv_parse` / `csv_stringify` are array-of-arrays
+helpers; SaaS imports + exports almost always want the
+header-keyed version:
+
+```mx
+let users = csv_records(read_file("./signups.csv"))
+loop users as u {
+  sql.exec(db, "INSERT INTO users (email, name) VALUES (?, ?)", u.email, u.name)
+}
+
+let payload = csv_write_records([
+  { id: 1, email: "j@example.com" },
+  { id: 2, email: "a@example.com" }
+])
+notify.email(admin, "Daily export", payload)
+```
+
+- **First row becomes the header** for `csv_records` and the column
+  set for `csv_write_records`.
+- **Tolerant of ragged rows.** Missing columns return empty strings
+  instead of erroring.
+- **Header order from the first row's keys** in `csv_write_records`
+  so columns stay deterministic across calls.
+- **Escaping is stdlib-correct.** Embedded commas, quotes, and
+  newlines all round-trip cleanly via Go's `encoding/csv`.
+- **5 tests** including the round-trip + the embedded-comma escape
+  case.
+
+[0.91.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.91.0
+
 ## [0.90.0] — 2026-05-03
 
 ### Added — `debug.*` (assert / invariant / unreachable / trace / dump)

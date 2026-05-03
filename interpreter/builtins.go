@@ -259,6 +259,8 @@ func registerBuiltins(i *Interpreter) {
 	// --- CSV ---
 	def("csv_parse", builtinCSVParse)
 	def("csv_stringify", builtinCSVStringify)
+	def("csv_records", builtinCSVRecords)
+	def("csv_write_records", builtinCSVWriteRecords)
 
 	// --- Printf ---
 	def("format", builtinFormat)
@@ -2483,6 +2485,80 @@ func builtinCSVStringify(i *Interpreter, args []Value) (Value, error) {
 		fields := make([]string, len(row.Array))
 		for k, c := range row.Array {
 			fields[k] = c.Display()
+		}
+		if err := w.Write(fields); err != nil {
+			return Value{}, err
+		}
+	}
+	w.Flush()
+	if err := w.Error(); err != nil {
+		return Value{}, err
+	}
+	return StringValue(buf.String()), nil
+}
+
+// csv_records(s) — like csv_parse but treats the first row as a
+// header and returns an array of objects keyed by column name. The
+// shape SaaS exporters / importers usually want.
+func builtinCSVRecords(_ *Interpreter, args []Value) (Value, error) {
+	s, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	r := csv.NewReader(strings.NewReader(s))
+	r.FieldsPerRecord = -1
+	rows, err := r.ReadAll()
+	if err != nil {
+		return Value{}, err
+	}
+	if len(rows) == 0 {
+		return ArrayValue(nil), nil
+	}
+	headers := rows[0]
+	out := make([]Value, 0, len(rows)-1)
+	for _, row := range rows[1:] {
+		om := NewOrderedMap()
+		for k, h := range headers {
+			val := ""
+			if k < len(row) {
+				val = row[k]
+			}
+			om.Set(h, StringValue(val))
+		}
+		out = append(out, ObjectValue(om))
+	}
+	return ArrayValue(out), nil
+}
+
+// csv_write_records(rows) — inverse of csv_records. Takes an array
+// of objects, derives column names from the first row's keys, and
+// returns a CSV string with the header row prepended.
+func builtinCSVWriteRecords(_ *Interpreter, args []Value) (Value, error) {
+	if len(args) < 1 || args[0].Kind != KindArray {
+		return Value{}, fmt.Errorf("csv_write_records(rows) requires an array of objects")
+	}
+	rows := args[0].Array
+	if len(rows) == 0 {
+		return StringValue(""), nil
+	}
+	if rows[0].Kind != KindObject {
+		return Value{}, fmt.Errorf("csv_write_records: each row must be an object")
+	}
+	// Use the first row's key order so columns stay deterministic.
+	headers := append([]string(nil), rows[0].Object.Keys...)
+	var buf bytes.Buffer
+	w := csv.NewWriter(&buf)
+	if err := w.Write(headers); err != nil {
+		return Value{}, err
+	}
+	for _, row := range rows {
+		if row.Kind != KindObject {
+			return Value{}, fmt.Errorf("csv_write_records: each row must be an object")
+		}
+		fields := make([]string, len(headers))
+		for k, h := range headers {
+			v, _ := row.Object.Get(h)
+			fields[k] = v.Display()
 		}
 		if err := w.Write(fields); err != nil {
 			return Value{}, err
