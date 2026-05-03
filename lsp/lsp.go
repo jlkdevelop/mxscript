@@ -511,7 +511,7 @@ var builtinDocs = map[string]builtinDoc{
 	"println": {"println(...args)", "Alias for `print`."},
 	"write":   {"write(...args)", "Print without trailing newline."},
 	"eprint":  {"eprint(...args)", "Print to stderr."},
-	"format":  {"format(fmt, ...args) -> string", "Printf-style formatter (%s %d %f %v)."},
+	"format":  {"format(fmt, ...args) -> string", "Rust-style {} placeholders by default. {N} for indexed, {:?} for pretty repr. {{ and }} escape literal braces. Falls back to printf %-directives if no {} present."},
 
 	// HTTP responses
 	"json":     {"json(value, opts?) -> response", "JSON response. opts may include cookies / headers."},

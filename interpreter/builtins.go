@@ -2944,33 +2944,152 @@ func builtinCSVWriteRecords(_ *Interpreter, args []Value) (Value, error) {
 	return StringValue(buf.String()), nil
 }
 
-// ===== Printf-style format =====
+// ===== format() — string interpolation =====
 
-// format(fmtStr, ...args) — minimal printf clone. Supports %s, %d, %f,
-// %v (any). MX Script users mostly want string interpolation; format
-// shows up in log lines and CSV rows.
+// format(fmtStr, ...args) — Rust-style positional placeholders by default,
+// with printf-style %-directives as a fallback for legacy users.
+//
+//	format("Hello {}, age {}", name, age)        // → "Hello alice, age 30"
+//	format("Index {0}: {1}, also {0}", "a", "b") // → "Index a: b, also a"
+//	format("{:?}", obj)                          // → debug repr (PrettyDisplay)
+//	format("%s = %d", "n", 7)                    // → "n = 7" (printf fallback)
+//
+// `{}` consumes the next positional arg in order. `{N}` references arg
+// index N (0-based) — handy for repeating an arg or reordering. `{:?}`
+// renders the value with PrettyDisplay so nested objects/arrays show
+// their full structure instead of stringifying flat.
+//
+// If the format string contains no `{}` / `{N}` / `{:?}` placeholders,
+// format() falls back to fmt.Sprintf so older code that uses %s/%d/%f
+// keeps working unchanged.
 func builtinFormat(i *Interpreter, args []Value) (Value, error) {
 	if len(args) < 1 || args[0].Kind != KindString {
 		return Value{}, fmt.Errorf("format(fmt, ...args) requires a format string")
 	}
-	rest := make([]any, 0, len(args)-1)
-	for _, a := range args[1:] {
+	tmpl := args[0].String
+	rest := args[1:]
+
+	if hasBracePlaceholder(tmpl) {
+		return StringValue(interpolateBraces(tmpl, rest)), nil
+	}
+
+	// Printf fallback for legacy %-directive callers.
+	pf := make([]any, 0, len(rest))
+	for _, a := range rest {
 		switch a.Kind {
 		case KindNumber:
 			if a.Number == float64(int64(a.Number)) {
-				rest = append(rest, int64(a.Number))
+				pf = append(pf, int64(a.Number))
 			} else {
-				rest = append(rest, a.Number)
+				pf = append(pf, a.Number)
 			}
 		case KindString:
-			rest = append(rest, a.String)
+			pf = append(pf, a.String)
 		case KindBool:
-			rest = append(rest, a.Bool)
+			pf = append(pf, a.Bool)
 		default:
-			rest = append(rest, a.Display())
+			pf = append(pf, a.Display())
 		}
 	}
-	return StringValue(fmt.Sprintf(args[0].String, rest...)), nil
+	return StringValue(fmt.Sprintf(tmpl, pf...)), nil
+}
+
+// hasBracePlaceholder returns true if tmpl contains any of `{}`,
+// `{N}` (digits), or `{:?}`. We escape literal braces by doubling
+// them — `{{` and `}}` decay to `{` / `}` and aren't placeholders.
+func hasBracePlaceholder(tmpl string) bool {
+	for i := 0; i < len(tmpl); i++ {
+		if tmpl[i] != '{' {
+			continue
+		}
+		if i+1 < len(tmpl) && tmpl[i+1] == '{' {
+			i++ // skip escaped `{{`
+			continue
+		}
+		// Look for a closing `}` that's part of THIS placeholder.
+		j := i + 1
+		for j < len(tmpl) && tmpl[j] != '}' {
+			j++
+		}
+		if j < len(tmpl) {
+			return true
+		}
+	}
+	return false
+}
+
+// interpolateBraces walks tmpl and substitutes each `{...}` placeholder
+// with the matching arg from `args`. Unfilled or out-of-range positions
+// render as empty (matches Python's `.format`).
+func interpolateBraces(tmpl string, args []Value) string {
+	var b strings.Builder
+	b.Grow(len(tmpl) + 16*len(args))
+	auto := 0 // next positional index for bare `{}`
+	for i := 0; i < len(tmpl); i++ {
+		c := tmpl[i]
+		if c == '{' {
+			if i+1 < len(tmpl) && tmpl[i+1] == '{' {
+				b.WriteByte('{')
+				i++
+				continue
+			}
+			// Find closing `}`.
+			j := i + 1
+			for j < len(tmpl) && tmpl[j] != '}' {
+				j++
+			}
+			if j >= len(tmpl) {
+				b.WriteString(tmpl[i:])
+				return b.String()
+			}
+			spec := tmpl[i+1 : j]
+			i = j
+			b.WriteString(renderPlaceholder(spec, args, &auto))
+			continue
+		}
+		if c == '}' && i+1 < len(tmpl) && tmpl[i+1] == '}' {
+			b.WriteByte('}')
+			i++
+			continue
+		}
+		b.WriteByte(c)
+	}
+	return b.String()
+}
+
+func renderPlaceholder(spec string, args []Value, auto *int) string {
+	debug := false
+	if strings.HasSuffix(spec, ":?") {
+		debug = true
+		spec = strings.TrimSuffix(spec, ":?")
+	}
+	idx := *auto
+	if spec != "" {
+		// {N} — explicit index.
+		n := 0
+		ok := true
+		for _, r := range spec {
+			if r < '0' || r > '9' {
+				ok = false
+				break
+			}
+			n = n*10 + int(r-'0')
+		}
+		if !ok {
+			return "{" + spec + "}" // unrecognized — leave as-is
+		}
+		idx = n
+	} else {
+		*auto++
+	}
+	if idx < 0 || idx >= len(args) {
+		return ""
+	}
+	v := args[idx]
+	if debug {
+		return PrettyDisplay(v, false)
+	}
+	return v.Display()
 }
 
 // ===== KV store =====

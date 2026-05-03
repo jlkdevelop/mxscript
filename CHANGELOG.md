@@ -4,6 +4,30 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.31.0] — 2026-05-03
+
+### Improved — `format()` now does Rust-style `{}` interpolation
+
+```mx
+format("Hello {}, age {}", name, age)        // → "Hello alice, age 30"
+format("{0}-{1}-{0}", "a", "b")              // → "a-b-a"
+format("{:?}", { name: "alice", age: 30 })   // → pretty multi-line repr
+format("{{ {} }}", "hi")                     // → "{ hi }"
+format("%s = %d", "n", 7)                    // → "n = 7"  (printf still works)
+```
+
+`{}` is positional. `{N}` references arg index N. `{:?}` renders with
+the REPL pretty-printer so nested objects/arrays show structure. `{{`
+and `}}` escape literal braces. If the format string has no `{}`,
+format() falls back to printf so existing `%s` / `%d` callers keep
+working unchanged.
+
+This was a long-standing rough edge — concatenating with `+` is verbose
+and forces explicit number-to-string coercion. `format()` now reads
+naturally without giving up the printf form.
+
+[1.31.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.31.0
+
 ## [1.30.0] — 2026-05-03
 
 ### Improved — pretty `assert_eq` failures + `mx test --filter`
