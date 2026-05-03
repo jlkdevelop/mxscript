@@ -339,6 +339,18 @@ type CallExpr struct {
 
 func (*CallExpr) exprNode() {}
 
+// RangeExpr is `start..end` (exclusive) or `start..=end` (inclusive).
+// Materialises to an array of integers — usable on the RHS of `loop`,
+// `for`, anywhere an iterable is expected.
+type RangeExpr struct {
+	pos
+	Start     Expr
+	End       Expr
+	Inclusive bool
+}
+
+func (*RangeExpr) exprNode() {}
+
 type IndexExpr struct {
 	pos
 	Object Expr

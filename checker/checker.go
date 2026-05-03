@@ -328,6 +328,9 @@ func (c *checker) checkExpr(e parser.Expr) {
 	case *parser.BinaryExpr:
 		c.checkExpr(n.Left)
 		c.checkExpr(n.Right)
+	case *parser.RangeExpr:
+		c.checkExpr(n.Start)
+		c.checkExpr(n.End)
 	case *parser.UnaryExpr:
 		c.checkExpr(n.Operand)
 	case *parser.CallExpr:

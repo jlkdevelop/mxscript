@@ -4,6 +4,26 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.37.0] — 2026-05-03
+
+### Added — range expressions `1..10` and `1..=10`
+
+```mx
+loop 1..=10 as i { println(i) }            // 1, 2, 3, ..., 10
+let evens = 0..20 |> arr.filter(fn(n) { return n % 2 == 0 })
+let counts = 1..=n                          // dynamic upper bound
+```
+
+`a..b` is exclusive (Python-style); `a..=b` is inclusive (Rust-style).
+Both materialise to integer arrays so they slot into every iterable
+position — `loop`, `arr.map`, pipe chains. Empty when `a > b`.
+
+Lower precedence than addition so `1..n+1` reads as `1..(n+1)`. Higher
+than comparison so `1..5 > x` would (rightly) be a type error if you
+tried — ranges aren't comparable.
+
+[1.37.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.37.0
+
 ## [1.36.0] — 2026-05-03
 
 ### Added — compound assignment `+=` `-=` `*=` `/=` `??=`

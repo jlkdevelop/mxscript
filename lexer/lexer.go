@@ -79,6 +79,10 @@ const (
 	TokenStarEq
 	TokenSlashEq
 	TokenNullCoalesceAssign // ??= — set only when LHS is null
+
+	// Range operators: 1..10 (exclusive end), 1..=10 (inclusive end).
+	TokenRange
+	TokenRangeEq
 	TokenSpread
 	TokenQuestionDot  // ?.
 	TokenNullCoalesce // ??
@@ -149,6 +153,8 @@ var tokenNames = map[TokenType]string{
 	TokenStarEq:             "*=",
 	TokenSlashEq:            "/=",
 	TokenNullCoalesceAssign: "??=",
+	TokenRange:              "..",
+	TokenRangeEq:            "..=",
 	TokenSpread:       "...",
 	TokenQuestionDot:  "?.",
 	TokenNullCoalesce: "??",
@@ -614,6 +620,22 @@ func (l *Lexer) readSymbol(line, col int) error {
 		l.advance()
 		l.advance()
 		l.tokens = append(l.tokens, Token{Type: TokenNullCoalesceAssign, Lexeme: "??=", Line: line, Col: col})
+		return nil
+	}
+	// Three-char `..=` (inclusive range) before the two-char `..`. The
+	// readNumber path already prevents `1..10` from greedily eating the
+	// dots as a decimal point — see emitNumber comment.
+	if c == '.' && l.peek(1) == '.' && l.peek(2) == '=' {
+		l.advance()
+		l.advance()
+		l.advance()
+		l.tokens = append(l.tokens, Token{Type: TokenRangeEq, Lexeme: "..=", Line: line, Col: col})
+		return nil
+	}
+	if c == '.' && l.peek(1) == '.' {
+		l.advance()
+		l.advance()
+		l.tokens = append(l.tokens, Token{Type: TokenRange, Lexeme: "..", Line: line, Col: col})
 		return nil
 	}
 	two := ""

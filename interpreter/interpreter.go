@@ -1708,6 +1708,32 @@ func (i *Interpreter) evalExpr(e parser.Expr, env *Env) (Value, error) {
 			return Value{}, runtimeErrorf(n, "undefined identifier %q", n.Name)
 		}
 		return v, nil
+	case *parser.RangeExpr:
+		startV, err := i.evalExpr(n.Start, env)
+		if err != nil {
+			return Value{}, err
+		}
+		endV, err := i.evalExpr(n.End, env)
+		if err != nil {
+			return Value{}, err
+		}
+		if startV.Kind != KindNumber || endV.Kind != KindNumber {
+			return Value{}, runtimeErrorf(n, "range bounds must be numbers")
+		}
+		start := int64(startV.Number)
+		end := int64(endV.Number)
+		if n.Inclusive {
+			end++
+		}
+		if end < start {
+			// Empty range — match Rust / Python conventions.
+			return ArrayValue(nil), nil
+		}
+		out := make([]Value, 0, end-start)
+		for k := start; k < end; k++ {
+			out = append(out, NumberValue(float64(k)))
+		}
+		return ArrayValue(out), nil
 	case *parser.ArrayLit:
 		var arr []Value
 		for _, el := range n.Elements {

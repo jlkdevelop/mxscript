@@ -847,17 +847,42 @@ func (p *Parser) parseEquality() (Expr, error) {
 }
 
 func (p *Parser) parseComparison() (Expr, error) {
-	left, err := p.parseAddition()
+	left, err := p.parseRange()
 	if err != nil {
 		return nil, err
 	}
 	for p.check(lexer.TokenLT) || p.check(lexer.TokenGT) || p.check(lexer.TokenLTEq) || p.check(lexer.TokenGTEq) {
 		tok := p.advance()
-		right, err := p.parseAddition()
+		right, err := p.parseRange()
 		if err != nil {
 			return nil, err
 		}
 		left = &BinaryExpr{pos: mkPos(tok), Op: tok.Lexeme, Left: left, Right: right}
+	}
+	return left, nil
+}
+
+// parseRange handles `1..10` (exclusive) and `1..=10` (inclusive).
+// Sits between comparison and addition in precedence so `1..10 > 5`
+// reads as `(1..10) > 5` and `1..n+1` reads as `1..(n+1)`. Single-shot,
+// not chainable — `a..b..c` is a parse error.
+func (p *Parser) parseRange() (Expr, error) {
+	left, err := p.parseAddition()
+	if err != nil {
+		return nil, err
+	}
+	if p.check(lexer.TokenRange) || p.check(lexer.TokenRangeEq) {
+		tok := p.advance()
+		right, err := p.parseAddition()
+		if err != nil {
+			return nil, err
+		}
+		return &RangeExpr{
+			pos:       mkPos(tok),
+			Start:     left,
+			End:       right,
+			Inclusive: tok.Type == lexer.TokenRangeEq,
+		}, nil
 	}
 	return left, nil
 }
