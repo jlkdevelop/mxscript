@@ -4,6 +4,34 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.49.0] — 2026-05-03
+
+### Added — `sql.upsert(db, table, row, conflict_keys)`
+
+```mx
+sql.upsert(db, "users",
+  { id: 1, name: "Ada", email: "ada@example.com" },
+  ["id"])
+
+sql.upsert(db, "settings",
+  { user_id: 7, key: "theme", value: "dark" },
+  ["user_id", "key"])
+```
+
+Picks the right dialect from the connection driver:
+
+- **sqlite + postgres** → `INSERT ... ON CONFLICT (cols) DO UPDATE SET col = excluded.col`
+- **mysql** → `INSERT ... ON DUPLICATE KEY UPDATE col = VALUES(col)`
+
+`conflict_keys` is the unique-constraint column list. Non-key columns
+get the new value on conflict; key columns are left alone (assigning
+them to themselves would be a no-op).
+
+The other side of `sql.insert` — closes the "create or update" pattern
+every API hand-rolls.
+
+[1.49.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.49.0
+
 ## [1.48.0] — 2026-05-03
 
 ### Added — `sql.insert(db, table, row|rows)` for single + batched inserts

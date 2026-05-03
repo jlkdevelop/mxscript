@@ -662,6 +662,7 @@ var builtinDocs = map[string]builtinDoc{
 	"page_response":            {"page_response(items, page_info, total) -> envelope", "Build { items, page, per_page, total, total_pages, has_next, has_prev } from a paginate() result + total row count."},
 	"problem":                  {"problem(status, title, detail?, ext?) -> response", "RFC 7807 application/problem+json error response. ext object's keys are merged onto the top-level body — e.g. { errors: [...], trace_id: '...' }."},
 	"sql.insert":               {"sql.insert(db, table, row|rows) -> { rows_affected, last_insert_id }", "Insert one row (object) or many (array of objects). Builds INSERT INTO table (cols) VALUES (?,?), (?,?). Single round-trip for the whole batch. Missing keys → NULL, extra keys → error."},
+	"sql.upsert":               {"sql.upsert(db, table, row, conflict_keys) -> { rows_affected, last_insert_id }", "INSERT or UPDATE. Picks ON CONFLICT (sqlite/postgres) or ON DUPLICATE KEY UPDATE (mysql) from the connection driver. conflict_keys is the unique-constraint column list."},
 	"form.parse":               {"form.parse(s) -> object|null", "Parse application/x-www-form-urlencoded; multi-value keys collapse to arrays. null on malformed input."},
 	"form.encode":              {"form.encode(obj) -> string", "Encode an object as urlencoded form body with sorted keys. Arrays expand to repeated keys; null values skip."},
 	"xml.parse":                {"xml.parse(s) -> object|null", "Parse XML into { tag, attrs, text, children } nodes. null on empty input; throws on malformed."},

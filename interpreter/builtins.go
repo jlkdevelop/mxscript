@@ -551,6 +551,7 @@ func registerBuiltins(i *Interpreter) {
 	sqlNS.Set("transaction", FunctionValue(&Function{Name: "sql.transaction", Native: builtinSQLTransaction}))
 	sqlNS.Set("migrate", FunctionValue(&Function{Name: "sql.migrate", Native: builtinSQLMigrate}))
 	sqlNS.Set("insert", FunctionValue(&Function{Name: "sql.insert", Native: builtinSQLInsert}))
+	sqlNS.Set("upsert", FunctionValue(&Function{Name: "sql.upsert", Native: builtinSQLUpsert}))
 	g.Set("sql", ObjectValue(sqlNS))
 	builtinNames["sql"] = true
 

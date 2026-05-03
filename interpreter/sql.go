@@ -31,8 +31,9 @@ import (
 // connection pool (`db`) or an in-flight transaction (`tx`); the
 // `runner` shim picks whichever is set.
 type dbHandle struct {
-	db *sql.DB
-	tx *sql.Tx
+	db     *sql.DB
+	tx     *sql.Tx
+	driver string // "sqlite" / "postgres" / "mysql" — used by sql.upsert dialect picker
 }
 
 // runner is the subset of *sql.DB / *sql.Tx that we need. Picking the
@@ -79,7 +80,7 @@ func sqlOpen(path string) (*dbHandle, error) {
 		d.Close()
 		return nil, err
 	}
-	return &dbHandle{db: d}, nil
+	return &dbHandle{db: d, driver: driver}, nil
 }
 
 // goArgs unwraps Value args into native Go types the driver expects.
