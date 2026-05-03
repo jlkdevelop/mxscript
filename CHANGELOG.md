@@ -4,6 +4,41 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.33.0] — 2026-05-03
+
+### Added — `///` doc comments visible in `mx docs` and LSP hover
+
+```mx
+/// Add two numbers and return the sum.
+/// Both arguments are coerced to numbers.
+fn add(a, b) {
+  return a + b
+}
+
+/// Default path used by every kv_* call when no explicit path is given.
+let DB_PATH = "./data.db"
+```
+
+```bash
+$ mx docs add
+
+  fn add(a, b)   doc_test.mx
+
+  Add two numbers and return the sum.
+  Both arguments are coerced to numbers.
+```
+
+LSP hover now falls back to user-defined symbols when the hovered word
+isn't a builtin — editors render the signature + Markdown body the same
+way they do for `fetch`, `sql.query`, etc. Works for `fn`, `let`, and
+`middleware`.
+
+When `mx docs <name>` finds the symbol in multiple files, it prefers
+the documented copy so a tagged-along helper doesn't beat the version
+the developer wrote prose about.
+
+[1.33.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.33.0
+
 ## [1.32.0] — 2026-05-03
 
 ### Added — inline `bench "name" { ... }` blocks

@@ -58,7 +58,7 @@ func (rr *replReader) ReadLine() (string, bool) {
 // Version is bumped at release time. Override at build with:
 //
 //	go build -ldflags "-X main.Version=v0.2.0"
-var Version = "v1.32.0"
+var Version = "v1.33.0"
 
 const (
 	cReset  = "\033[0m"
@@ -2871,6 +2871,17 @@ func cmdHelpTopic(topic string) {
 		fmt.Printf("\n  %s%s%s\n\n  %s\n\n", cBold, sig, cReset, summary)
 		return
 	}
+	// User-defined symbols — scan every .mx file in the cwd looking for
+	// `fn topic`, `let topic`, or `middleware topic`. First match wins;
+	// /// doc comments above the declaration are shown as the body.
+	if sig, doc, file, ok := findUserDoc(topic); ok {
+		fmt.Printf("\n  %s%s%s   %s%s%s\n", cBold, sig, cReset, cGray, file, cReset)
+		if doc != "" {
+			fmt.Printf("\n  %s\n", strings.ReplaceAll(doc, "\n", "\n  "))
+		}
+		fmt.Println()
+		return
+	}
 	// Topic not found — try to suggest a close one.
 	hint := ""
 	bestDist := 3
@@ -2887,6 +2898,66 @@ func cmdHelpTopic(topic string) {
 		fmt.Fprintf(os.Stderr, "%sno docs for %q%s — try 'mx help' for the full list\n", cRed, topic, cReset)
 	}
 	os.Exit(1)
+}
+
+// findUserDoc scans every .mx file under the cwd looking for a top-level
+// `fn name`, `let name`, or `middleware name` declaration and returns
+// its signature plus any `///` doc-comment block that immediately
+// precedes it. Skips dotfiles and `mx_modules/` so search stays sane
+// on installed projects.
+//
+// Prefers a hit that actually carries a `///` block — if multiple files
+// declare the same name (helpers + tests, or shadowing across modules)
+// we want the one a developer wrote docs for.
+func findUserDoc(name string) (sig, doc, file string, ok bool) {
+	root := "."
+	// fallback captures the first match without docs; we keep walking
+	// in case a later file has a documented copy.
+	var fSig, fFile string
+	gotFallback := false
+
+	_ = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil || (ok && doc != "") {
+			return nil
+		}
+		if info.IsDir() {
+			base := info.Name()
+			if base == "mx_modules" || (strings.HasPrefix(base, ".") && path != root) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".mx") {
+			return nil
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return nil
+		}
+		s, d, found := lsp.UserSymbolDoc(string(raw), name)
+		if !found {
+			return nil
+		}
+		if d != "" {
+			sig = s
+			doc = d
+			file = path
+			ok = true
+			return nil
+		}
+		if !gotFallback {
+			fSig = s
+			fFile = path
+			gotFallback = true
+		}
+		return nil
+	})
+	if !ok && gotFallback {
+		sig = fSig
+		file = fFile
+		ok = true
+	}
+	return
 }
 
 // levenshteinHelp is a tiny edit-distance helper used to suggest

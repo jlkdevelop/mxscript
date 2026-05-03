@@ -138,3 +138,62 @@ func TestDocumentSymbolsExtractsAllDecls(t *testing.T) {
 		t.Errorf("expected get + post routes in outline, got %v", names)
 	}
 }
+
+const docSrc = `/// Add two numbers.
+/// Both args are coerced.
+fn add(a, b) {
+  return a + b
+}
+
+fn no_doc() {
+  return 1
+}
+
+/// Default DB path.
+let DB_PATH = "./data.db"
+`
+
+func TestUserSymbolDocWithDoc(t *testing.T) {
+	sig, doc, ok := userSymbolDoc(docSrc, "add")
+	if !ok {
+		t.Fatal("expected to find add")
+	}
+	if !strings.Contains(sig, "fn add") {
+		t.Errorf("sig: %q", sig)
+	}
+	if !strings.Contains(doc, "Add two numbers") || !strings.Contains(doc, "coerced") {
+		t.Errorf("doc: %q", doc)
+	}
+}
+
+func TestUserSymbolDocNoDoc(t *testing.T) {
+	sig, doc, ok := userSymbolDoc(docSrc, "no_doc")
+	if !ok {
+		t.Fatal("expected to find no_doc")
+	}
+	if doc != "" {
+		t.Errorf("doc should be empty, got %q", doc)
+	}
+	if !strings.Contains(sig, "fn no_doc") {
+		t.Errorf("sig: %q", sig)
+	}
+}
+
+func TestUserSymbolDocLet(t *testing.T) {
+	sig, doc, ok := userSymbolDoc(docSrc, "DB_PATH")
+	if !ok {
+		t.Fatal("expected to find DB_PATH")
+	}
+	if !strings.Contains(doc, "Default DB path") {
+		t.Errorf("doc: %q", doc)
+	}
+	if !strings.Contains(sig, "DB_PATH") {
+		t.Errorf("sig: %q", sig)
+	}
+}
+
+func TestUserSymbolDocMissing(t *testing.T) {
+	if _, _, ok := userSymbolDoc(docSrc, "nope"); ok {
+		t.Error("should not find nope")
+	}
+}

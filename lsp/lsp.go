@@ -241,6 +241,18 @@ func (s *server) handle(body []byte) error {
 				},
 			})
 		}
+		// Fall back to user-defined symbol: scan the file for a fn / let
+		// declaration matching `word`, then look at the lines above it
+		// for /// doc comments and show them.
+		if sig, doc, ok := userSymbolDoc(text, word); ok {
+			body := "**" + word + "**\n\n```mx\n" + sig + "\n```"
+			if doc != "" {
+				body += "\n\n" + doc
+			}
+			return s.respond(req.ID, map[string]any{
+				"contents": map[string]string{"kind": "markdown", "value": body},
+			})
+		}
 		return s.respond(req.ID, nil)
 
 	case "textDocument/definition":
@@ -937,6 +949,63 @@ func userSymbols(text string) []UserSymbol {
 // any of `let name = ...`, `fn name(...) { ... }`, or `middleware name`.
 // Returns line / column of the *name* itself (not the keyword) so the
 // editor's go-to-def lands on the binding's identifier.
+// UserSymbolDoc is the public version of userSymbolDoc — same behaviour,
+// callable from other packages (notably `mx docs <topic>` in main.go).
+func UserSymbolDoc(text, name string) (sig, doc string, ok bool) {
+	return userSymbolDoc(text, name)
+}
+
+// userSymbolDoc looks up a user-defined `fn` / `let` / `middleware`
+// declaration matching `name` and returns its signature line plus
+// any leading `///` doc-comment block. Used by hover when the word
+// isn't a builtin.
+//
+// `///` comments are treated as Markdown — same convention as Rust
+// rustdoc and TypeScript JSDoc — so editors can render bold / code
+// fences naturally.
+func userSymbolDoc(text, name string) (sig, doc string, ok bool) {
+	if name == "" {
+		return "", "", false
+	}
+	lines := strings.Split(text, "\n")
+	patterns := []string{"let ", "fn ", "middleware "}
+	for i, raw := range lines {
+		trimmed := strings.TrimLeft(raw, " \t")
+		for _, prefix := range patterns {
+			if !strings.HasPrefix(trimmed, prefix) {
+				continue
+			}
+			rest := strings.TrimLeft(trimmed[len(prefix):], " \t")
+			if !strings.HasPrefix(rest, name) {
+				continue
+			}
+			if len(rest) != len(name) && isIdentByte(rest[len(name)]) {
+				continue
+			}
+			// Found the declaration. Walk back collecting `///` lines.
+			var docLines []string
+			for j := i - 1; j >= 0; j-- {
+				ln := strings.TrimLeft(lines[j], " \t")
+				if !strings.HasPrefix(ln, "///") {
+					break
+				}
+				stripped := strings.TrimPrefix(ln, "///")
+				if len(stripped) > 0 && stripped[0] == ' ' {
+					stripped = stripped[1:]
+				}
+				docLines = append([]string{stripped}, docLines...)
+			}
+			// The signature is the trimmed declaration line. Strip any
+			// trailing `{` so hover doesn't include the brace.
+			sig = strings.TrimSpace(strings.TrimSuffix(trimmed, "{"))
+			sig = strings.TrimSpace(sig)
+			doc = strings.Join(docLines, "\n")
+			return sig, doc, true
+		}
+	}
+	return "", "", false
+}
+
 func findDefinition(text, name string) (int, int, bool) {
 	lines := strings.Split(text, "\n")
 	patterns := []string{"let ", "fn ", "middleware "}
