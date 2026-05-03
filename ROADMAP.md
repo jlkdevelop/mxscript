@@ -8,6 +8,10 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.61.0** (2026-05-02)
+  - `mx pkg init/add/list/remove/update/install` — git-backed package manager with `mxpkg.json` manifest and `mx_modules/` directory
+  - `import "github.com/foo/bar"` resolves through `PackageResolver` to `./mx_modules/foo/bar/main.mx`
+  - Reproducible installs via locked commit SHAs
 - **v0.60.0** (2026-05-02)
   - `mx check <file.mx>` — static analyzer for undefined identifiers, wrong arity on user-defined functions, and unused `let` bindings
   - Scope-aware: routes get `request`, WS routes get `send`/`recv`/`close`, SSE routes get `send`; loop / catch / destructure all bind correctly

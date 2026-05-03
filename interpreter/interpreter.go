@@ -697,6 +697,40 @@ func New() *Interpreter {
 // SetFile records the source file path for error messages.
 func (i *Interpreter) SetFile(path string) { i.file = path }
 
+// PackageResolver lets the host (the `mx` CLI) plug in a function
+// that turns a package-style import path like `github.com/foo/bar`
+// into an on-disk file. Returning "" means "not a package, fall
+// through to relative-path resolution". Wired up in main.go so the
+// interpreter package itself doesn't need to depend on pkg.
+var PackageResolver func(importPath string) string
+
+// resolveImportPath turns the literal string in an `import "..."`
+// statement into an actual file on disk. Resolution order:
+//
+//  1. Absolute path: used as-is.
+//  2. Relative path (./foo or foo.mx): resolved against the current
+//     file's directory.
+//  3. Package path (`github.com/owner/repo`): goes through
+//     PackageResolver if one is registered.
+func (i *Interpreter) resolveImportPath(raw string) string {
+	if strings.HasPrefix(raw, "/") {
+		return raw
+	}
+	if PackageResolver != nil {
+		if abs := PackageResolver(raw); abs != "" {
+			return abs
+		}
+	}
+	if i.file != "" {
+		dir := i.file
+		if idx := strings.LastIndex(dir, "/"); idx >= 0 {
+			dir = dir[:idx]
+			return dir + "/" + raw
+		}
+	}
+	return raw
+}
+
 // SetBytecode toggles the experimental stack VM. When on, expression
 // statements that compile cleanly are lowered to bytecode and run on the
 // VM; nodes the compiler doesn't understand fall back to the tree-walker
@@ -1456,15 +1490,7 @@ func (i *Interpreter) execTry(n *parser.TryStmt, env *Env) error {
 }
 
 func (i *Interpreter) execImport(n *parser.ImportStmt, env *Env) error {
-	// Resolve path relative to the current file.
-	path := n.Path
-	if i.file != "" && !strings.HasPrefix(path, "/") {
-		dir := i.file
-		if idx := strings.LastIndex(dir, "/"); idx >= 0 {
-			dir = dir[:idx]
-			path = dir + "/" + path
-		}
-	}
+	path := i.resolveImportPath(n.Path)
 	src, err := os.ReadFile(path)
 	if err != nil {
 		return runtimeErrorf(n, "cannot import %q: %v", n.Path, err)

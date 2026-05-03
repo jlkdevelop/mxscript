@@ -25,6 +25,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -35,6 +36,7 @@ import (
 	"github.com/jlkdevelop/mxscript/lexer"
 	"github.com/jlkdevelop/mxscript/lsp"
 	"github.com/jlkdevelop/mxscript/parser"
+	mxpkg "github.com/jlkdevelop/mxscript/pkg"
 )
 
 // replReader is a simple line-buffered stdin reader for the REPL.
@@ -55,7 +57,7 @@ func (rr *replReader) ReadLine() (string, bool) {
 // Version is bumped at release time. Override at build with:
 //
 //	go build -ldflags "-X main.Version=v0.2.0"
-var Version = "v0.60.0"
+var Version = "v0.61.0"
 
 const (
 	cReset  = "\033[0m"
@@ -68,6 +70,14 @@ const (
 )
 
 func main() {
+	// Wire the package-path resolver so `import "github.com/foo/bar"`
+	// in user code goes through mx_modules. Without this hook, the
+	// interpreter would treat package paths as relative files and
+	// fail to find them.
+	interpreter.PackageResolver = func(importPath string) string {
+		return mxpkg.ResolveImportFile(".", importPath)
+	}
+
 	if len(os.Args) < 2 {
 		printHelp()
 		return
@@ -103,6 +113,8 @@ func main() {
 		cmdRoutes(args)
 	case "check":
 		cmdCheck(args)
+	case "pkg":
+		cmdPkg(args)
 	case "version", "-v", "--version":
 		fmt.Println("MX Script", Version)
 	case "help", "-h", "--help":
@@ -134,6 +146,7 @@ func printHelp() {
 	fmt.Println("  doctor                Diagnose env / install / runtime")
 	fmt.Println("  routes <file.mx>      List every route the program registers (no server boot)")
 	fmt.Println("  check <file.mx>       Static analysis: undefined idents, wrong arity, unused lets")
+	fmt.Println("  pkg <init|add|list|update|remove|install> [args]")
 	fmt.Println("  version               Print version and exit")
 	fmt.Println("  help                  Show this help")
 	fmt.Println()
@@ -423,7 +436,7 @@ func cmdInit(args []string) {
 		"app.mx":     starterApp,
 		".env":       starterEnv,
 		"README.md":  fmt.Sprintf("# %s\n\nBuilt with [MX Script](https://github.com/jlkdevelop/mxscript).\n\n## Run\n\n```\nmx run app.mx\n```\n", name),
-		".gitignore": ".env\n*.bin\n",
+		".gitignore": ".env\n*.bin\nmx_modules/\n",
 	}
 	for f, content := range files {
 		path := filepath.Join(name, f)
@@ -1327,6 +1340,105 @@ func cmdCheck(args []string) {
 	}
 }
 
+// ===== mx pkg =====
+
+// cmdPkg dispatches to one of the package-manager subcommands. The
+// model: each project has a `mxpkg.json` manifest at its root and
+// a `mx_modules/` directory holding cloned dependencies.
+//
+//	mx pkg init                  scaffold mxpkg.json
+//	mx pkg add <import-path>     git clone + lock to current SHA
+//	mx pkg list                  print manifest deps
+//	mx pkg remove <import-path>  delete on disk + manifest entry
+//	mx pkg update [<path>]       git pull + re-lock SHA (all or one)
+//	mx pkg install               clone every manifest dep at locked SHA
+func cmdPkg(args []string) {
+	if len(args) < 1 {
+		fatal("usage: mx pkg <init|add|list|update|remove|install> [args]")
+	}
+	sub, rest := args[0], args[1:]
+	dir := "."
+	switch sub {
+	case "init":
+		name := filepath.Base(mustAbs(dir))
+		if len(rest) > 0 {
+			name = rest[0]
+		}
+		created, err := mxpkg.Init(dir, name)
+		if err != nil {
+			fatal("pkg init: %v", err)
+		}
+		if !created {
+			fmt.Printf("%s%s%s already exists\n", cYellow, mxpkg.ManifestFile, cReset)
+			return
+		}
+		fmt.Printf("%s✓%s wrote %s\n", cGreen, cReset, mxpkg.ManifestFile)
+	case "add":
+		if len(rest) < 1 {
+			fatal("usage: mx pkg add <import-path>")
+		}
+		dep, err := mxpkg.Add(dir, rest[0])
+		if err != nil {
+			fatal("pkg add: %v", err)
+		}
+		fmt.Printf("%s✓%s added %s @ %s\n", cGreen, cReset, dep.URL, dep.Ref[:12])
+	case "list", "ls":
+		m, err := mxpkg.LoadManifest(dir)
+		if err != nil {
+			fatal("pkg list: %v", err)
+		}
+		if m == nil || len(m.Dependencies) == 0 {
+			fmt.Printf("%sno dependencies%s\n", cGray, cReset)
+			return
+		}
+		keys := make([]string, 0, len(m.Dependencies))
+		for k := range m.Dependencies {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			d := m.Dependencies[k]
+			ref := d.Ref
+			if len(ref) > 12 {
+				ref = ref[:12]
+			}
+			fmt.Printf("  %s%s%s %s%s%s\n", cCyan, k, cReset, cGray, ref, cReset)
+		}
+	case "remove", "rm":
+		if len(rest) < 1 {
+			fatal("usage: mx pkg remove <import-path>")
+		}
+		if err := mxpkg.Remove(dir, rest[0]); err != nil {
+			fatal("pkg remove: %v", err)
+		}
+		fmt.Printf("%s✓%s removed %s\n", cGreen, cReset, rest[0])
+	case "update":
+		target := ""
+		if len(rest) > 0 {
+			target = rest[0]
+		}
+		if err := mxpkg.Update(dir, target); err != nil {
+			fatal("pkg update: %v", err)
+		}
+		fmt.Printf("%s✓%s updated\n", cGreen, cReset)
+	case "install":
+		if err := mxpkg.Install(dir); err != nil {
+			fatal("pkg install: %v", err)
+		}
+		fmt.Printf("%s✓%s install complete\n", cGreen, cReset)
+	default:
+		fatal("unknown pkg subcommand %q", sub)
+	}
+}
+
+func mustAbs(p string) string {
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		return p
+	}
+	return abs
+}
+
 // ===== mx routes =====
 
 // cmdRoutes parses and loads a program without booting the HTTP server,
@@ -1441,7 +1553,7 @@ var projectTemplates = map[string]projectTemplate{
 		Files: map[string]string{
 			"app.mx":       starterTodoApp,
 			".env.example": "JWT_SECRET=replace-me-with-something-long\n",
-			".gitignore":   ".env\n*.bin\n*.db\n",
+			".gitignore":   ".env\n*.bin\n*.db\nmx_modules/\n",
 			"README.md":    "# Todo API\n\nBuilt with [MX Script](https://mxscript.com).\n\n```\ncp .env.example .env\nmx run app.mx\n```\n",
 		},
 	},
@@ -1471,7 +1583,7 @@ var projectTemplates = map[string]projectTemplate{
 		Files: map[string]string{
 			"app.mx":       starterBlogApp,
 			".env.example": "ADMIN_PASSWORD=admin\nSESSION_SECRET=replace-me\n",
-			".gitignore":   ".env\n*.bin\n*.db\n",
+			".gitignore":   ".env\n*.bin\n*.db\nmx_modules/\n",
 			"README.md":    "# Blog\n\nMarkdown blog with SQLite backend.\n",
 		},
 	},
@@ -1481,7 +1593,7 @@ var projectTemplates = map[string]projectTemplate{
 		Files: map[string]string{
 			"app.mx":       starterAPIApp,
 			".env.example": "PORT=8080\n",
-			".gitignore":   ".env\n*.bin\n*.db\n",
+			".gitignore":   ".env\n*.bin\n*.db\nmx_modules/\n",
 			"README.md":    "# REST API\n\nWith built-in OpenAPI spec + Swagger UI.\n",
 		},
 	},

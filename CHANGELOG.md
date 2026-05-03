@@ -4,6 +4,54 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.61.0] — 2026-05-02
+
+### Added — `mx pkg` package manager
+
+- **Six subcommands cover the full dependency lifecycle:**
+
+  ```bash
+  mx pkg init                                # scaffold mxpkg.json
+  mx pkg add github.com/foo/bar              # clone + lock to current SHA
+  mx pkg list                                # show deps
+  mx pkg remove github.com/foo/bar
+  mx pkg update [import-path]                # git pull + relock (one or all)
+  mx pkg install                             # install every locked dep (post-clone)
+  ```
+
+- **Manifest format (`mxpkg.json`).** Stable JSON with `name`,
+  `version`, and a `dependencies` map of import-path → `{ url, ref,
+  entry? }`. Two-space indent, trailing newline — diffs stay
+  readable across versions.
+
+- **`import "github.com/foo/bar"` works.** The interpreter wires up
+  a `PackageResolver` callback at startup so package paths route to
+  `./mx_modules/foo/bar/main.mx` (or the entry file the manifest
+  specifies). Relative paths (`./auth.mx`, `../shared/x.mx`) keep
+  working unchanged.
+
+- **Path normalisation accepts every form users actually paste:**
+  `github.com/foo/bar`, `https://github.com/foo/bar`,
+  `https://github.com/foo/bar.git`, `git@github.com:foo/bar.git` —
+  all collapse to the canonical `github.com/foo/bar` key.
+
+- **Reproducible installs.** `mx pkg install` clones each manifest
+  dep at the locked SHA via `git clone` + `git reset --hard <sha>`.
+  Already-installed deps at the right SHA are skipped.
+
+- **`mx_modules/` auto-added to `.gitignore`** for both `mx init`
+  and every `mx new` template — projects don't accidentally commit
+  cloned dependencies.
+
+- **10 pkg tests** covering URL normalisation, clone-URL building,
+  on-disk path computation, manifest round-trip, package-vs-relative
+  path heuristic, and `init` idempotency.
+
+- **Smoke-tested live**: `mx pkg add github.com/jlkdevelop/mxscript`
+  cloned the real repo and locked the current commit successfully.
+
+[0.61.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.61.0
+
 ## [0.60.0] — 2026-05-02
 
 ### Added — `mx check` static analyzer + new randomness builtins
