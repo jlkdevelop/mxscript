@@ -4,6 +4,41 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.16.0] — 2026-05-03
+
+### Added — `xml.parse` + `xml.stringify`
+
+For the legacy APIs SaaS apps still need to integrate with: SOAP-
+style HTTP, RSS / Atom feeds, sitemaps, podcast metadata, Google
+Search Console responses.
+
+```mx
+let parsed = xml.parse(read_file("./feed.rss"))
+loop parsed.children[0].children as item {
+  if (item.tag == "item") {
+    let link = find(item.children, fn(c) { return c.tag == "link" })
+    println(link.text)
+  }
+}
+
+let doc = {
+  tag: "feed",
+  attrs: { xmlns: "http://www.w3.org/2005/Atom" },
+  children: [
+    { tag: "title", attrs: {}, text: "MX Updates", children: [] }
+  ]
+}
+return xml(xml.stringify(doc))   // pair with the existing xml() response helper
+```
+
+Each parsed node carries `tag`, `attrs`, `text` (immediate text
+content), and `children`. Mixed-content elements lose ordering
+between text and children — acceptable trade for the simpler API.
+Users who need full fidelity can drop to `encoding/xml`. Text
+escapes (`&`, `<`, `>`) round-trip through both directions.
+
+[1.16.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.16.0
+
 ## [1.15.0] — 2026-05-03
 
 ### Added — `mx ship` (preflight before merge)

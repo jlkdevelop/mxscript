@@ -274,6 +274,14 @@ func registerBuiltins(i *Interpreter) {
 	g.Set("form", ObjectValue(formNS))
 	builtinNames["form"] = true
 
+	// xml.* — minimal parser + stringifier for legacy APIs (SOAP,
+	// RSS/Atom, sitemaps, podcast feeds).
+	xmlNS := NewOrderedMap()
+	xmlNS.Set("parse", FunctionValue(&Function{Name: "xml.parse", Native: builtinXMLParse}))
+	xmlNS.Set("stringify", FunctionValue(&Function{Name: "xml.stringify", Native: builtinXMLStringify}))
+	g.Set("xml", ObjectValue(xmlNS))
+	builtinNames["xml"] = true
+
 	// health.* — k8s-style liveness / readiness probes.
 	healthNS := NewOrderedMap()
 	healthNS.Set("live", FunctionValue(&Function{Name: "health.live", Native: builtinHealthLive}))

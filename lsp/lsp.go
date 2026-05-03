@@ -640,6 +640,8 @@ var builtinDocs = map[string]builtinDoc{
 	"fetch_retry":              {"fetch_retry(url, opts?) -> { status, headers, body, text }", "Like fetch() but retries 5xx + network errors with exponential backoff. opts: max_attempts (default 3), delay_ms (default 200)."},
 	"form.parse":               {"form.parse(s) -> object|null", "Parse application/x-www-form-urlencoded; multi-value keys collapse to arrays. null on malformed input."},
 	"form.encode":              {"form.encode(obj) -> string", "Encode an object as urlencoded form body with sorted keys. Arrays expand to repeated keys; null values skip."},
+	"xml.parse":                {"xml.parse(s) -> object|null", "Parse XML into { tag, attrs, text, children } nodes. null on empty input; throws on malformed."},
+	"xml.stringify":            {"xml.stringify(node) -> string", "Inverse of xml.parse — render a node tree back to XML text."},
 	"time.in_zone":             {"time.in_zone(unix, zone) -> object", "Components for the timestamp in an IANA timezone (e.g. America/New_York)."},
 	"time.relative":            {"time.relative(unix) -> string", "Human-friendly elapsed: 'just now', '5m ago', '2h ago', '3 days ago', 'in 1h'."},
 	"cron":                     {"cron(spec, fn) -> stop_fn", "Vixie cron schedule. 5 fields: minute hour dom month dow. Returns a function that cancels the schedule."},
