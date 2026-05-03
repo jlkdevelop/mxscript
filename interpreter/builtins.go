@@ -95,6 +95,7 @@ func registerBuiltins(i *Interpreter) {
 	def("env", builtinEnv)
 	def("env_required", builtinEnvRequired)
 	def("fetch", builtinFetch)
+	def("fetch_retry", builtinFetchRetry)
 	def("error", builtinError)
 	def("typeof", builtinTypeof)
 	def("pp", builtinPP)
@@ -1113,6 +1114,53 @@ func builtinEnvRequired(i *Interpreter, args []Value) (Value, error) {
 		return Value{}, fmt.Errorf("required env var %q is not set", name)
 	}
 	return StringValue(v), nil
+}
+
+// fetch_retry(url, opts?) — same surface as fetch() plus exponential
+// backoff on transient failures. Retries 5xx responses and network
+// errors up to `max_attempts` (default 3) with a base delay of
+// `delay_ms` (default 200ms), doubling each attempt with a small
+// jitter to avoid thundering-herd patterns.
+func builtinFetchRetry(i *Interpreter, args []Value) (Value, error) {
+	maxAttempts := 3
+	delayMs := 200
+	if len(args) > 1 && args[1].Kind == KindObject {
+		if v, ok := args[1].Object.Get("max_attempts"); ok && v.Kind == KindNumber {
+			maxAttempts = int(v.Number)
+		}
+		if v, ok := args[1].Object.Get("delay_ms"); ok && v.Kind == KindNumber {
+			delayMs = int(v.Number)
+		}
+	}
+	if maxAttempts < 1 {
+		maxAttempts = 1
+	}
+	var lastErr error
+	var lastResp Value
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		v, err := builtinFetch(i, args)
+		if err == nil {
+			// Inspect the status. 5xx triggers a retry; everything
+			// else (incl. 4xx) returns immediately.
+			if v.Kind == KindObject {
+				if statusVal, _ := v.Object.Get("status"); statusVal.Kind == KindNumber && statusVal.Number < 500 {
+					return v, nil
+				}
+			}
+			lastResp = v
+		}
+		lastErr = err
+		if attempt < maxAttempts {
+			// Exponential backoff with up to 50% jitter.
+			d := time.Duration(delayMs<<uint(attempt-1)) * time.Millisecond
+			jitter := time.Duration(rand.Int63n(int64(d) / 2))
+			time.Sleep(d + jitter)
+		}
+	}
+	if lastErr != nil {
+		return Value{}, lastErr
+	}
+	return lastResp, nil
 }
 
 func builtinFetch(i *Interpreter, args []Value) (Value, error) {

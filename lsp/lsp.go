@@ -637,6 +637,7 @@ var builtinDocs = map[string]builtinDoc{
 	"sh.bash":                  {"sh.bash(script, opts?) -> { stdout, stderr, exit_code }", "Run a bash script via `bash -c`."},
 	"sh.which":                 {"sh.which(name) -> string|null", "Locate an executable on $PATH."},
 	"read_line":                {"read_line(prompt?) -> string|null", "Read one line from stdin (no trailing newline). null on EOF. Optional prompt is written to stdout first."},
+	"fetch_retry":              {"fetch_retry(url, opts?) -> { status, headers, body, text }", "Like fetch() but retries 5xx + network errors with exponential backoff. opts: max_attempts (default 3), delay_ms (default 200)."},
 	"cron":                     {"cron(spec, fn) -> stop_fn", "Vixie cron schedule. 5 fields: minute hour dom month dow. Returns a function that cancels the schedule."},
 	"notify.slack":             {"notify.slack(webhook_url, message) -> { ok, status, error }", "Post to a Slack incoming webhook. Message can be a string or a full Slack payload object."},
 	"notify.discord":           {"notify.discord(webhook_url, message) -> { ok, status, error }", "Post to a Discord webhook. String → content; object passes through (content, embeds, etc.)."},

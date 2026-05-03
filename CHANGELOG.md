@@ -4,6 +4,31 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.8.0] — 2026-05-03
+
+### Added — `fetch_retry()` (resilient HTTP)
+
+```mx
+let r = fetch_retry("https://flaky-api.example.com/data", {
+  max_attempts: 5,    // default 3
+  delay_ms:     200   // default 200; doubles each attempt + jitter
+})
+```
+
+Same surface as `fetch()` but retries 5xx responses and network
+errors with exponential backoff (200ms → 400ms → 800ms …) plus up
+to 50% jitter to avoid thundering-herd patterns.
+
+- 4xx responses **never retry** (client error — retry won't help).
+- 5xx and network errors retry up to `max_attempts` times.
+- Final response (or last error) is returned after exhausting
+  attempts so callers can still inspect the failure status.
+
+3 tests cover: 500-then-success retried 3 times, 404 retried 0
+times, always-503 retried exactly `max_attempts` times.
+
+[1.8.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.8.0
+
 ## [1.7.0] — 2026-05-03
 
 ### Added — `mx db <dsn>` (interactive SQL REPL) + `read_line()`
