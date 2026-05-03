@@ -148,3 +148,35 @@ let y = 2`
 		}
 	}
 }
+
+// TestRouteCatchAllNotComment guards against the regression where
+// `get /*` was being eaten as a block comment opener, breaking the
+// documented catch-all route pattern (proxy.go even uses it as the
+// canonical example). After the fix, `/*` after a route-method
+// shorthand or `group` should lex as Slash + Star.
+func TestRouteCatchAllNotComment(t *testing.T) {
+	cases := []string{
+		"get /* { return 1 }",
+		"post /* { return 1 }",
+		"group /* { }",
+	}
+	for _, src := range cases {
+		got := types(tokenize(t, src))
+		// The first three tokens must be a verb token (Ident or Group),
+		// then Slash, then Star.
+		if len(got) < 3 || (got[0] != TokenIdent && got[0] != TokenGroup) || got[1] != TokenSlash || got[2] != TokenStar {
+			t.Errorf("%q: got %v, want first three [Ident|Group Slash Star]", src, got)
+		}
+	}
+	// And we must NOT have broken regular block comments at file scope
+	// or after non-route tokens.
+	src := "let x = 1 /* still a comment */ let y = 2"
+	got := types(tokenize(t, src))
+	want := []TokenType{
+		TokenLet, TokenIdent, TokenAssign, TokenNumber,
+		TokenLet, TokenIdent, TokenAssign, TokenNumber,
+	}
+	if len(got) != len(want) {
+		t.Fatalf("regression in plain block comment: got %v", got)
+	}
+}

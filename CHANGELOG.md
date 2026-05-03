@@ -4,6 +4,35 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.28.0] — 2026-05-03
+
+### Added — `mx new react` template + `static_file()` helper
+
+```bash
+mx new react my-app
+cd my-app
+npm --prefix web install
+MX_DEV=1 mx run app.mx       # terminal 1, :8080
+npm --prefix web run dev      # terminal 2, Vite at :5173 (proxied)
+```
+
+A full-stack starter where MX owns `/api/*` and (in dev) proxies the
+React app from Vite for HMR; in production it serves the prebuilt
+`web/dist/` via a new `static_file(path) -> response | null` helper
+with an `index.html` SPA fallback. The new builtin guesses Content-Type
+from the extension and refuses path traversal.
+
+### Fixed — `get /*` no longer eats the rest of the file
+
+`get /*` (the documented catch-all route from the `proxy()` docstring)
+was being lexed as a `/* ... */` block-comment opener, so anything
+after it disappeared. The lexer now disambiguates: when the previous
+non-trivia token is an HTTP method shorthand (`get`, `post`, ...) or
+`group`, `/*` lexes as Slash + Star. Block comments everywhere else
+keep working.
+
+[1.28.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.28.0
+
 ## [1.27.0] — 2026-05-03
 
 ### Added — `mx build --compose` (self-hosted Postgres + Redis stack)

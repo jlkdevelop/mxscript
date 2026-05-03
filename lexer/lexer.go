@@ -273,6 +273,15 @@ func (l *Lexer) skipWhitespaceAndComments() {
 				l.tokens = append(l.tokens, Token{Type: TokenComment, Lexeme: string(l.src[start:l.pos]), Line: startLine, Col: startCol})
 			}
 		case c == '/' && l.peek(1) == '*':
+			// `/*` is normally a block comment opener — except inside a
+			// shorthand route declaration like `get /*` where it's the
+			// path's catch-all star. Look at the most recently emitted
+			// token: if it's a route-method identifier (get/post/...) or
+			// `group`, fall through and let `/` and `*` lex as their own
+			// tokens. Otherwise treat as a block comment as before.
+			if l.prevTokenIsRoutePrefix() {
+				return
+			}
 			startLine, startCol := l.line, l.col
 			start := l.pos
 			l.advance()
@@ -300,6 +309,31 @@ func (l *Lexer) skipWhitespaceAndComments() {
 			return
 		}
 	}
+}
+
+// prevTokenIsRoutePrefix returns true when the most recently emitted
+// non-comment token is one that a route path can follow: an HTTP
+// method shorthand (`get`, `post`, ...) or `group`. Used to disambiguate
+// `/*` between a block comment and a catch-all route path.
+func (l *Lexer) prevTokenIsRoutePrefix() bool {
+	for i := len(l.tokens) - 1; i >= 0; i-- {
+		t := l.tokens[i]
+		if t.Type == TokenComment || t.Type == TokenNewline {
+			continue
+		}
+		if t.Type == TokenGroup {
+			return true
+		}
+		if t.Type != TokenIdent {
+			return false
+		}
+		switch t.Lexeme {
+		case "get", "post", "put", "delete", "patch", "head", "options", "sse", "ws":
+			return true
+		}
+		return false
+	}
+	return false
 }
 
 func (l *Lexer) peek(offset int) rune {

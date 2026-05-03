@@ -640,6 +640,7 @@ var builtinDocs = map[string]builtinDoc{
 	"fetch_retry":              {"fetch_retry(url, opts?) -> { status, headers, body, text }", "Like fetch() but retries 5xx + network errors with exponential backoff. opts: max_attempts (default 3), delay_ms (default 200)."},
 	"fetch_all":                {"fetch_all(urls, opts?) -> array", "Parallel HTTP fan-out. urls: array of strings or { url, method, body, headers }. opts.concurrency caps in-flight (default 16)."},
 	"proxy":                    {"proxy(target_url, request) -> response", "Reverse-proxy the current request to an upstream service. Strips hop-by-hop headers; adds X-Forwarded-For."},
+	"static_file":              {"static_file(path) -> response|null", "Read a file from disk and return it as a response with Content-Type guessed from the extension. Returns null on miss / dir / traversal — pair with proxy() or html() for SPA fallback."},
 	"form.parse":               {"form.parse(s) -> object|null", "Parse application/x-www-form-urlencoded; multi-value keys collapse to arrays. null on malformed input."},
 	"form.encode":              {"form.encode(obj) -> string", "Encode an object as urlencoded form body with sorted keys. Arrays expand to repeated keys; null values skip."},
 	"xml.parse":                {"xml.parse(s) -> object|null", "Parse XML into { tag, attrs, text, children } nodes. null on empty input; throws on malformed."},
