@@ -97,6 +97,7 @@ func registerBuiltins(i *Interpreter) {
 	def("fetch", builtinFetch)
 	def("fetch_retry", builtinFetchRetry)
 	def("fetch_all", builtinFetchAll)
+	def("proxy", builtinProxy)
 	def("error", builtinError)
 	def("typeof", builtinTypeof)
 	def("pp", builtinPP)

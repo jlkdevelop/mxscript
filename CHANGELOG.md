@@ -4,6 +4,35 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.22.0] — 2026-05-03
+
+### Added — `proxy(target_url, request)` (reverse-proxy helper)
+
+```mx
+get /api/* {
+  return json(handle_api(request))     # MX handles the API
+}
+
+get /* {
+  return proxy("http://localhost:5173", request)  # forward everything else
+}                                                  # to a Vite dev server
+```
+
+- **Forwards method + path + body + headers** to the upstream and
+  returns the upstream response in MX's `Response` shape.
+- **Hop-by-hop headers stripped** per RFC 2616 §13.5.1 in both
+  directions (Connection, Keep-Alive, Transfer-Encoding, Upgrade,
+  proxy-* set).
+- **`X-Forwarded-For` added** so the upstream sees the original
+  client IP.
+- **Status, content-type, custom headers preserved** — the route
+  caller's `return proxy(...)` just works.
+
+3 tests cover method+path+body+header forwarding, hop-by-hop
+stripping, and `X-Forwarded-For` injection.
+
+[1.22.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.22.0
+
 ## [1.21.0] — 2026-05-03
 
 ### Added — `fetch_all(urls, opts?)` (parallel HTTP fan-out)
