@@ -58,7 +58,7 @@ func (rr *replReader) ReadLine() (string, bool) {
 // Version is bumped at release time. Override at build with:
 //
 //	go build -ldflags "-X main.Version=v0.2.0"
-var Version = "v1.69.0"
+var Version = "v1.70.0"
 
 const (
 	cReset  = "\033[0m"
@@ -181,8 +181,9 @@ func printHelp() {
 	fmt.Println()
 	fmt.Println("Commands:")
 	fmt.Println("  run <file.mx>         Run an MX Script file")
-	fmt.Println("  init [name]           Scaffold a new MX Script project (minimal)")
-	fmt.Println("  new <template> [name] Scaffold from template: todo|chat|ai|blog|api")
+	fmt.Println("  init [name] [--git]   Scaffold a new MX Script project (minimal)")
+	fmt.Println("  new <template> [name] [--git]  Scaffold a project. Templates: api|todo|chat|ai|blog|saas|react|dashboard|shortener (or --list)")
+	fmt.Println("  tutorial [topic]      Hands-on walkthrough — start with no args; topics: sql/auth/ai")
 	fmt.Println("  build <file.mx>       Type-check & validate an MX Script file")
 	fmt.Println("  build --vercel        Generate a Vercel-deployable Go project from app.mx")
 	fmt.Println("  build --wasm          Compile the interpreter to dist/mx.wasm + JS shim (browser playground)")
@@ -205,7 +206,6 @@ func printHelp() {
 	fmt.Println("  help [topic]            Show built-in docs for a function (e.g. mx help ai.complete)")
 	fmt.Println("  docs [topic]            Alias for `help`")
 	fmt.Println("  examples [list|show <name>]  Browse / view bundled .mx examples")
-	fmt.Println("  tutorial [topic]             Hands-on walkthrough — start with no args; pass sql/auth/ai for deeper dives")
 	fmt.Println("  env                          Show MX-relevant env vars (secrets masked)")
 	fmt.Println("  db <dsn>                     Interactive SQL REPL (sqlite/postgres/mysql)")
 	fmt.Println("  audit <file.mx>              Security checklist (rate limits, TLS, secrets, etc.)")
@@ -537,8 +537,18 @@ func dirHash(dir string) ([32]byte, error) {
 
 func cmdInit(args []string) {
 	name := "my-mx-app"
-	if len(args) > 0 && args[0] != "" {
-		name = args[0]
+	initGit := false
+	for _, a := range args {
+		switch a {
+		case "--git", "-g":
+			initGit = true
+		case "--no-git":
+			initGit = false
+		default:
+			if a != "" && !strings.HasPrefix(a, "-") && name == "my-mx-app" {
+				name = a
+			}
+		}
 	}
 	if err := os.MkdirAll(name, 0o755); err != nil {
 		fatal("cannot create %s: %v", name, err)
@@ -556,6 +566,9 @@ func cmdInit(args []string) {
 		}
 	}
 	fmt.Printf("%s✓%s scaffolded %s/\n", cGreen, cReset, name)
+	if initGit {
+		initGitRepo(name)
+	}
 	fmt.Printf("\n  cd %s\n  mx run app.mx\n\n", name)
 }
 

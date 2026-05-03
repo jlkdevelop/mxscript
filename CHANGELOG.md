@@ -4,6 +4,18 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.70.0] — 2026-05-03
+
+### Improved — `mx init --git` + cleaned-up `mx help` banner
+
+- `mx init [name] --git` now mirrors `mx new <template> --git` —
+  scaffolds the minimal project plus an initial git commit.
+- The `mx` (no-args) banner showed a stale six-template list
+  (`todo|chat|ai|blog|api`) and missed `tutorial` entirely. Now lists
+  all nine templates plus the tutorial command on the second line.
+
+[1.70.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.70.0
+
 ## [1.69.0] — 2026-05-03
 
 ### Added — `mx new <template> --git` initializes a git repo
