@@ -1,220 +1,168 @@
-# API reference
+# API reference — cheat sheet
 
-Every built-in function in MX Script.
+The complete surface lives in `mx help` and `mx help <name>`. This is
+the working set for one-file web APIs — what you'll actually reach for.
 
-## Output
-
-### `print(...args)`
-### `println(...args)`
-Print arguments to stdout, space-separated, with a trailing newline.
+## Routing
 
 ```mx
-print("Hello,", "world")     // Hello, world
-print({ a: 1 })              // {"a":1}
+get /path { ... }
+post /users/:id { ... }
+group /api { use auth; get /me { ... } }
+ws /chat { ... }       // WebSocket
+sse /events { ... }    // server-sent events
 ```
 
-## HTTP responses
+`request` is in scope inside every handler:
 
-### `json(value)`
-Wraps `value` as a JSON response (`Content-Type: application/json`).
+| Field | Type | Notes |
+|---|---|---|
+| `request.method` | string | `"GET"`, `"POST"`, ... |
+| `request.path` | string | `/users/42` |
+| `request.params` | object | path params from `:id` etc. |
+| `request.query` | object | parsed query string |
+| `request.headers` | object | lowercased keys |
+| `request.body` | any | auto-parsed JSON / form / multipart |
+| `request.files` | object | multipart files keyed by field name |
+| `request.cookies` | object | parsed cookies |
+| `request.bearer_token` | string | `Authorization: Bearer ...` extracted |
+| `request.is_json` | bool | `Content-Type` is `application/json` |
+| `request.ip` | string | client IP (honors `X-Forwarded-For`) |
+| `request.id` | string | trace ID (auto-generated or honors `X-Request-ID`) |
 
-### `text(value)`
-Returns a plain text response.
-
-### `html(value)`
-Returns an HTML response.
-
-### `status(code, body?)`
-Sets the HTTP status. Body defaults to JSON if not a string.
+## Responses
 
 ```mx
-return status(404, { error: "not found" })
+return json(value, opts?)        // application/json
+return text(string, opts?)       // text/plain
+return html(string, opts?)       // text/html
+return status(code, body?, opts?)
+return redirect(url, code?)
+return not_modified()            // 304
+return problem(status, title, detail?, ext?)  // RFC 7807 application/problem+json
+return csv(items, opts?)         // text/csv  (opts.filename = download)
+return ndjson(items)             // application/x-ndjson
+return static_file(path)         // serve a file from disk
+return proxy("http://upstream", request)
 ```
 
-### `redirect(url, code?)`
-302 redirect (or whatever code you pass).
+`opts` carries `headers`, `cookies`, etc.
 
-## HTTP requests
-
-### `fetch(url, opts?)`
-Outbound HTTP request. `opts` is an optional object:
-
-| Key        | Type    | Default |
-|------------|---------|---------|
-| `method`   | string  | `"GET"` |
-| `body`     | any     | none    |
-| `headers`  | object  | none    |
-
-If `body` is an object/array it's JSON-encoded automatically.
-
-Returns an object: `{ status, headers, body, text }`. `body` is auto-decoded JSON when applicable.
+## API helpers
 
 ```mx
-let res = fetch("https://api.github.com/users/jlkdevelop")
-print(res.body.name)
+let p = paginate(request)                    // { page, per_page, limit, offset }
+let r = page_response(items, p, total)       // standard list envelope
+
+let v = body_validate(request, schema)       // { ok: true, body } | { ok: false, response }
+return problem(400, "Validation failed", "", { errors: [...] })
+
+let tag = etag(value)
+if (request.headers["if-none-match"] == tag) { return not_modified() }
+return json(value, { headers: { "ETag": tag, "Cache-Control": cache_control({ public: true, max_age: 300 }) } })
+
+let img = request.files?.image
+let saved = save_upload(img, "./uploads/" + uuid() + img.ext)
+
+if (!api_key_auth(request, env("API_KEYS"))) { return status(401, ...) }
 ```
 
-## Environment
-
-### `env(name, default?)`
-Reads an environment variable. Returns the default if unset.
+## Object-driven SQL
 
 ```mx
-let port = num(env("PORT", "8080"))
+let db = sql.open("./app.db")          // sqlite — also "postgres://..." or "mysql://..."
+sql.migrate(db, ["CREATE TABLE ..."])
+
+sql.find(db, "users", { active: 1 }, { order: "id DESC", limit: 10 })
+sql.find_one(db, "users", { id: 1 })
+sql.count(db, "users", { role: "admin" })
+sql.exists(db, "users", { email: e })
+sql.insert(db, "users", { name: "Ada" })                       // single
+sql.insert(db, "users", [{ ... }, { ... }])                    // batched
+sql.upsert(db, "users", { id: 1, ... }, ["id"])                // ON CONFLICT
+sql.update(db, "users", { active: 0 }, { id: 1 })
+sql.delete(db, "users", { id: 1 })
+
+// Drop down to raw when needed:
+sql.exec(db, "UPDATE ...", args)
+sql.query(db, "SELECT ...", args)
+sql.transaction(db, fn(tx) { ... })
 ```
 
-## Strings
-
-| Function                    | Description                                |
-|-----------------------------|--------------------------------------------|
-| `len(s)`                    | Character count                            |
-| `upper(s)`                  | Uppercase                                  |
-| `lower(s)`                  | Lowercase                                  |
-| `trim(s)`                   | Remove leading/trailing whitespace         |
-| `split(s, sep)`             | Split into array                           |
-| `contains(s, sub)`          | Substring check (also works on arrays)     |
-| `replace(s, old, new)`      | Replace all occurrences                    |
-| `starts_with(s, prefix)`    | Boolean prefix check                       |
-| `ends_with(s, suffix)`      | Boolean suffix check                       |
-| `str(x)`                    | Coerce to string                           |
-| `num(s)`                    | Parse to number                            |
-
-## Arrays
-
-| Function              | Description                                |
-|-----------------------|--------------------------------------------|
-| `len(a)`              | Element count                              |
-| `push(a, ...vals)`    | Returns a new array with values appended   |
-| `pop(a)`              | Returns the last element (or null)         |
-| `map(a, fn)`          | Transform each element                     |
-| `filter(a, fn)`       | Keep elements where fn returns truthy      |
-| `find(a, fn)`         | First element matching fn (or null)        |
-| `join(a, sep?)`       | Concatenate as string                      |
-| `reverse(a)`          | Reversed copy                              |
-| `range(end)`          | `[0, 1, ..., end-1]`                       |
-| `range(start, end)`   | Inclusive start, exclusive end             |
-| `contains(a, val)`    | Membership check                           |
-
-## Objects
-
-| Function          | Description                                    |
-|-------------------|------------------------------------------------|
-| `len(o)`          | Number of keys                                 |
-| `keys(o)`         | Array of keys (insertion order)                |
-| `values(o)`       | Array of values                                |
-
-## Math
-
-| Function              | Description                                |
-|-----------------------|--------------------------------------------|
-| `round(n)`            | Nearest integer                            |
-| `floor(n)`            | Round toward -infinity                     |
-| `ceil(n)`             | Round toward +infinity                     |
-| `abs(n)`              | Absolute value                             |
-| `min(...nums)`        | Smallest                                   |
-| `max(...nums)`        | Largest                                    |
-| `random()`            | Float in [0, 1)                            |
-| `random(n)`           | Integer in [0, n)                          |
-| `random(lo, hi)`      | Integer in [lo, hi)                        |
-
-## Types
-
-| Function              | Returns                                    |
-|-----------------------|--------------------------------------------|
-| `typeof(x)`           | `"null"`, `"bool"`, `"number"`, `"string"`, `"array"`, `"object"`, `"function"` |
-| `isString(x)`         | bool                                       |
-| `isNumber(x)`         | bool                                       |
-| `isBool(x)`           | bool                                       |
-| `isNull(x)`           | bool                                       |
-| `isArray(x)`          | bool                                       |
-| `isObject(x)`         | bool                                       |
-| `isFunction(x)`       | bool                                       |
-
-## JSON
-
-### `json_parse(s)`
-Parse a JSON string into an MX value.
-
-### `json_stringify(v)`
-Serialize a value to a JSON string.
-
-## File I/O
-
-### `read_file(path)`
-Returns the file contents as a string.
-
-### `write_file(path, content)`
-Writes a string to disk. Creates the file if it doesn't exist; overwrites otherwise.
-
-### `file_exists(path)`
-Boolean check.
-
-### `list_files(dir)`
-Returns an array of paths in `dir`.
-
-### `delete_file(path)`
-Removes the file at `path`.
-
-## Crypto / encoding
-
-### `hash_sha256(s)`
-Returns the SHA-256 hex digest of a string.
-
-### `base64_encode(s)` / `base64_decode(s)`
-Standard base64 encode and decode.
-
-### `uuid()`
-Returns an RFC 4122 v4 UUID using `crypto/rand`.
-
-## Time
-
-### `now()`
-Current Unix time in milliseconds.
-
-### `now_iso()`
-Current UTC time as an RFC 3339 / ISO 8601 string.
-
-### `sleep(ms)`
-Block for `ms` milliseconds.
-
-## Errors
-
-### `error(msg)`
-Throw a runtime error. Catch with `try` / `catch`.
+## Auth
 
 ```mx
-try {
-  if (request.body.amount < 0) {
-    error("amount must be non-negative")
-  }
-} catch (e) {
-  return status(400, { error: e.message })
-}
+// JWT
+let token = jwt.sign({ sub: user.id, exp: now()/1000 + 3600 }, env("JWT_SECRET"))
+let claims = jwt.verify(request.bearer_token, env("JWT_SECRET"))
+
+// Cookie sessions
+return session.create({ user_id: 1 }, { secret: SECRET, max_age: 86400 })
+let claims = session.read(request, SECRET)
+return session.destroy()
+
+// Service-to-service
+if (!api_key_auth(request, env("API_KEYS"))) { return problem(401, ...) }
+
+// OAuth (Google / GitHub / Discord / LinkedIn / Microsoft)
+oauth.authorize_url({ provider: "google" })
+oauth.exchange({ provider: "google", code: code })
+
+// Passwordless
+magic_link.send(email)
+totp.verify(code, secret)
+
+// Webhook signature verification
+webhooks.verify_stripe(body, sig, secret)
+webhooks.verify_github(body, sig, secret)
 ```
 
 ## AI
 
-### `ai.complete(prompt, opts?)`
-
-Calls an OpenAI-compatible chat API. Requires `OPENAI_API_KEY` in the environment.
-
-`opts` (optional):
-
-| Key          | Default          |
-|--------------|------------------|
-| `model`      | `gpt-4o-mini`    |
-| `max_tokens` | `256`            |
-
 ```mx
-let answer = ai.complete("In one sentence, what is MX Script?")
-print(answer)
+// 13 providers + custom — provider: "openai" (default) or "anthropic" / "gemini"
+// / "groq" / "mistral" / "together" / "openrouter" / "ollama" / "perplexity" /
+// "fireworks" / "cerebras" / "deepseek" / "grok" / "custom"
+ai.complete(prompt, { provider: "anthropic", max_tokens: 200 })
+ai.stream(prompt, fn(chunk) { ... })
+ai.embed(text)
+ai.vision(prompt, [image_bytes_or_url])
+
+// Tool calling
+ai.complete("", {
+  messages: [{ role: "user", content: "What time is it?" }],
+  tools: [{ name: "now", description: "...", params: {...}, handler: fn(_) { return now_iso() } }]
+})
+
+// Custom OpenAI-compatible endpoint
+ai.complete("hi", { provider: "custom", base_url: "https://my-vllm/v1/chat/completions", api_key_env: "VLLM_KEY" })
 ```
 
-### `ai.embed(text)`
-
-Returns a `text-embedding-3-small` vector as an array of floats.
+## Common patterns
 
 ```mx
-let vec = ai.embed("hello world")
-print(len(vec))   // 1536
+// Pagination
+let p     = paginate(request)
+let total = sql.count(db, "users", {})
+let items = sql.find(db, "users", {}, { order: "id DESC", limit: p.limit, offset: p.offset })
+return json(page_response(items, p, total))
+
+// Validate-then-create
+let r = body_validate(request, schema)
+if (!r.ok) { return r.response }
+let id = sql.insert(db, "users", r.body).last_insert_id
+return status(201, { id: id })
+
+// Cached detail
+let user = sql.find_one(db, "users", { id: num(request.params.id) })
+if (user == null) { return problem(404, "User not found") }
+let tag = etag(user)
+if (request.headers["if-none-match"] == tag) { return not_modified() }
+return json(user, { headers: { "ETag": tag, "Cache-Control": cache_control({ private: true, max_age: 60 }) } })
 ```
+
+## Beyond this page
+
+`mx help` lists every builtin grouped by namespace. `mx help <name>`
+shows the signature + summary for any one. `mx docs <name>` does the
+same for any documented user fn (anything with a `///` doc comment).
