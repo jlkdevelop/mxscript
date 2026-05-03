@@ -4,6 +4,45 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.87.0] — 2026-05-03
+
+### Added — `ws.connect(url)` outbound WebSocket client
+
+Server-side WS routes (`ws /chat { ... }`) have been around since
+v0.30; this release adds the missing other half — an outbound
+client for consuming remote WebSocket feeds:
+
+```mx
+let stream = ws.connect("wss://api.example.com/events", {
+  headers: { authorization: "Bearer " + env("API_TOKEN") }
+})
+
+spawn {
+  while true {
+    let msg = stream.recv()
+    pubsub.publish("events", msg)
+  }
+}
+```
+
+- **Supports `ws://` and `wss://`** — TLS dial uses `crypto/tls`
+  with auto-detected SNI from the host portion.
+- **RFC 6455–correct masking.** Client frames are masked per spec
+  (server frames must NOT be); the existing `WSConn` was extended
+  with a `clientSide` flag that flips `writeFrame`'s behavior.
+- **The accept-header math is verified** against the RFC's worked
+  example: key `dGhlIHNhbXBsZSBub25jZQ==` →
+  `s3pPLMBiTxaQ9kYGzzhZRbK+xOo=`. Strongest possible cross-check.
+- **Reuses the existing `ReadMessage` reader** so the same code
+  path handles both server-side and client-side incoming frames,
+  including ping/pong, close, and continuation frames.
+- **3 tests** including a real end-to-end roundtrip: an httptest
+  server upgrades through the existing `upgradeWebSocket`, the
+  outbound `DialWebSocket` connects, sends a text frame, and reads
+  the echoed reply.
+
+[0.87.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.87.0
+
 ## [0.86.0] — 2026-05-03
 
 ### Improved — README feature matrix reflects v0.52 → v0.85

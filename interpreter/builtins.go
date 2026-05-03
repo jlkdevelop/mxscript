@@ -154,6 +154,13 @@ func registerBuiltins(i *Interpreter) {
 	def("random", builtinRandom)
 	def("rate_limit", builtinRateLimit)
 	def("rate_limit_reset", builtinRateLimitReset)
+
+	// ws.* — outbound WebSocket client. Server-side `ws /chat` blocks
+	// already exist; this is for connecting to remote feeds.
+	wsNS := NewOrderedMap()
+	wsNS.Set("connect", FunctionValue(&Function{Name: "ws.connect", Native: builtinWSConnect}))
+	g.Set("ws", ObjectValue(wsNS))
+	builtinNames["ws"] = true
 	def("random_string", builtinRandomString)
 	def("random_bytes", builtinRandomBytes)
 	def("base32_encode", builtinBase32Encode)

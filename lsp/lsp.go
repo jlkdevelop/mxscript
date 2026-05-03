@@ -528,6 +528,7 @@ var builtinDocs = map[string]builtinDoc{
 	"verify_webhook":           {"verify_webhook(secret, body, sig, scheme?) -> bool", "scheme: hex/base64/github/stripe."},
 	"rate_limit":               {"rate_limit(key, max, window_seconds) -> bool", "Application-level token-bucket rate limit. Returns true if allowed."},
 	"rate_limit_reset":         {"rate_limit_reset(key?)", "Reset one bucket (or all if key omitted). Test-only."},
+	"ws.connect":              {"ws.connect(url, opts?) -> { send, recv, close }", "Outbound WebSocket client. Supports ws:// and wss://."},
 	"cron":                     {"cron(spec, fn) -> stop_fn", "Vixie cron schedule. 5 fields: minute hour dom month dow. Returns a function that cancels the schedule."},
 	"notify.slack":             {"notify.slack(webhook_url, message) -> { ok, status, error }", "Post to a Slack incoming webhook. Message can be a string or a full Slack payload object."},
 	"notify.discord":           {"notify.discord(webhook_url, message) -> { ok, status, error }", "Post to a Discord webhook. String → content; object passes through (content, embeds, etc.)."},

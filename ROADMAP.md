@@ -8,6 +8,11 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.87.0** (2026-05-03)
+  - `ws.connect(url, opts?)` — outbound WebSocket client (ws:// + wss://) with RFC 6455-correct masking
+  - End-to-end roundtrip test: httptest upgrade → DialWebSocket → echo
+- **v0.86.0** (2026-05-03)
+  - README "What ships" matrix updated to reflect v0.52–v0.85 surface
 - **v0.85.0** (2026-05-03)
   - `mx examples list/show/copy` — every bundled example embedded into the binary, browseable from any installed mx
 - **v0.84.0** (2026-05-03)
