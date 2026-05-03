@@ -4,6 +4,21 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.73.0] — 2026-05-03
+
+### Fixed — TextMate grammar didn't highlight v1.35-v1.37 operators
+
+The `operator` rule's regex was last updated before pipe / range /
+compound-assign shipped, so editors using the bundled grammar
+(`extras/syntax/mxscript.tmLanguage.json`) showed `|>`, `..`, `..=`,
+`+=`, `-=`, `*=`, `/=`, `??=` in the default text color.
+
+Updated the regex to include all of them. Affects VS Code (when the
+extension reloads its grammar), GitHub Linguist (next sync), and any
+TextMate-aware editor pulling the grammar fresh.
+
+[1.73.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.73.0
+
 ## [1.72.0] — 2026-05-03
 
 ### Fixed — Release CI was broken since v0.50, blocking GitHub Releases
