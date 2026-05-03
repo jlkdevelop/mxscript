@@ -4,6 +4,30 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.14.0] — 2026-05-03
+
+### Added — `avg` / `count_by` / `partition` aggregations
+
+```mx
+let users = [
+  { name: "ada", role: "admin", visits: 12 },
+  { name: "bob", role: "user",  visits: 5 },
+  { name: "cyd", role: "admin", visits: 8 }
+]
+
+avg(users, fn(u) { return u.visits })            // 8.33
+count_by(users, fn(u) { return u.role })         // { admin: 2, user: 1 }
+partition(users, fn(u) { return u.role == "admin" })
+// → [ [ada, cyd], [bob] ]
+```
+
+Three new aggregation primitives that complete the dashboard-friendly
+set alongside the existing `sum`, `min`, `max`, `group_by`, `unique`,
+`flatten`. All four are also exposed under `arr.*` for libraries that
+prefer namespacing.
+
+[1.14.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.14.0
+
 ## [1.13.0] — 2026-05-03
 
 ### Added — `time.in_zone()` + `time.relative()`

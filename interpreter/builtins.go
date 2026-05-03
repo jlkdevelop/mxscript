@@ -165,6 +165,13 @@ func registerBuiltins(i *Interpreter) {
 	arrNS.Set("flatten", FunctionValue(&Function{Name: "arr.flatten", Native: builtinFlatten}))
 	arrNS.Set("zip", FunctionValue(&Function{Name: "arr.zip", Native: builtinZip}))
 	arrNS.Set("range", FunctionValue(&Function{Name: "arr.range", Native: builtinRange}))
+	arrNS.Set("sum", FunctionValue(&Function{Name: "arr.sum", Native: builtinSum}))
+	arrNS.Set("avg", FunctionValue(&Function{Name: "arr.avg", Native: builtinAvg}))
+	arrNS.Set("min", FunctionValue(&Function{Name: "arr.min", Native: builtinMin}))
+	arrNS.Set("max", FunctionValue(&Function{Name: "arr.max", Native: builtinMax}))
+	arrNS.Set("group_by", FunctionValue(&Function{Name: "arr.group_by", Native: builtinGroupBy}))
+	arrNS.Set("count_by", FunctionValue(&Function{Name: "arr.count_by", Native: builtinCountBy}))
+	arrNS.Set("partition", FunctionValue(&Function{Name: "arr.partition", Native: builtinPartition}))
 	g.Set("arr", ObjectValue(arrNS))
 	builtinNames["arr"] = true
 
@@ -226,7 +233,10 @@ func registerBuiltins(i *Interpreter) {
 	def("sort_by", builtinSortBy)
 	def("reduce", builtinReduce)
 	def("sum", builtinSum)
+	def("avg", builtinAvg)
 	def("group_by", builtinGroupBy)
+	def("count_by", builtinCountBy)
+	def("partition", builtinPartition)
 	def("unique", builtinUnique)
 	def("flatten", builtinFlatten)
 	def("zip", builtinZip)
@@ -2048,6 +2058,78 @@ func builtinSum(i *Interpreter, args []Value) (Value, error) {
 		total += v.Number
 	}
 	return NumberValue(total), nil
+}
+
+// avg(arr, fn?) -> average of arr or fn(arr[i]). Returns 0 for an
+// empty array (matches what dashboards usually want).
+func builtinAvg(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 1 || args[0].Kind != KindArray {
+		return Value{}, fmt.Errorf("avg(arr, fn?) requires an array")
+	}
+	if len(args[0].Array) == 0 {
+		return NumberValue(0), nil
+	}
+	total := 0.0
+	for _, v := range args[0].Array {
+		val := v
+		if len(args) > 1 && args[1].Kind == KindFunction {
+			r, err := i.callFunction(nil, args[1].Function, []Value{v})
+			if err != nil {
+				return Value{}, err
+			}
+			val = r
+		}
+		if val.Kind != KindNumber {
+			return Value{}, fmt.Errorf("avg: non-numeric value %s", val.typeName())
+		}
+		total += val.Number
+	}
+	return NumberValue(total / float64(len(args[0].Array))), nil
+}
+
+// count_by(arr, key_fn) -> object mapping key -> count. Like
+// group_by but pre-collapses each bucket to its size — what
+// dashboards usually want.
+func builtinCountBy(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 2 || args[0].Kind != KindArray || args[1].Kind != KindFunction {
+		return Value{}, fmt.Errorf("count_by(arr, key_fn) requires (array, function)")
+	}
+	out := NewOrderedMap()
+	for _, v := range args[0].Array {
+		key, err := i.callFunction(nil, args[1].Function, []Value{v})
+		if err != nil {
+			return Value{}, err
+		}
+		k := key.Display()
+		existing, _ := out.Get(k)
+		n := 0.0
+		if existing.Kind == KindNumber {
+			n = existing.Number
+		}
+		out.Set(k, NumberValue(n+1))
+	}
+	return ObjectValue(out), nil
+}
+
+// partition(arr, pred) -> [matching, non_matching]. Single pass over
+// the source; preserves order within each bucket.
+func builtinPartition(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 2 || args[0].Kind != KindArray || args[1].Kind != KindFunction {
+		return Value{}, fmt.Errorf("partition(arr, pred) requires (array, function)")
+	}
+	var match, rest []Value
+	for _, v := range args[0].Array {
+		ok, err := i.callFunction(nil, args[1].Function, []Value{v})
+		if err != nil {
+			return Value{}, err
+		}
+		if ok.IsTruthy() {
+			match = append(match, v)
+		} else {
+			rest = append(rest, v)
+		}
+	}
+	return ArrayValue([]Value{ArrayValue(match), ArrayValue(rest)}), nil
 }
 
 // group_by(arr, key_fn) -> object mapping key -> array of items.
