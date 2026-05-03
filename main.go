@@ -57,7 +57,7 @@ func (rr *replReader) ReadLine() (string, bool) {
 // Version is bumped at release time. Override at build with:
 //
 //	go build -ldflags "-X main.Version=v0.2.0"
-var Version = "v0.75.0"
+var Version = "v0.76.0"
 
 const (
 	cReset  = "\033[0m"
@@ -115,6 +115,8 @@ func main() {
 		cmdCheck(args)
 	case "pkg":
 		cmdPkg(args)
+	case "serve":
+		cmdServe(args)
 	case "version", "-v", "--version":
 		fmt.Println("MX Script", Version)
 	case "help", "-h", "--help":
@@ -151,6 +153,7 @@ func printHelp() {
 	fmt.Println("  routes <file.mx>      List every route the program registers (no server boot)")
 	fmt.Println("  check <file.mx>       Static analysis: undefined idents, wrong arity, unused lets")
 	fmt.Println("  pkg <init|add|list|update|remove|install> [args]")
+	fmt.Println("  serve [dir] [--port N]  Static file server (defaults to . on :8080)")
 	fmt.Println("  version               Print version and exit")
 	fmt.Println("  help                  Show this help")
 	fmt.Println()
@@ -1642,6 +1645,87 @@ func mustAbs(p string) string {
 		return p
 	}
 	return abs
+}
+
+// ===== mx serve =====
+
+// cmdServe starts a tiny static-file server rooted at the given
+// directory (default `.`). Uses Go's http.FileServer so range
+// requests, content-type sniffing, and ETag/If-Modified-Since
+// handling all come for free.
+//
+//	mx serve                      # serve current dir on :8080
+//	mx serve dist                 # serve dist/ on :8080
+//	mx serve site/playground --port 4000
+//
+// Logs each request to stdout in a Caddy-flavoured format
+// (timestamp + method + path + status + duration) so previews
+// double as a load-test surface.
+func cmdServe(args []string) {
+	dir := "."
+	port := 8080
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--port":
+			if i+1 >= len(args) {
+				fatal("--port requires a number")
+			}
+			p, err := strconv.Atoi(args[i+1])
+			if err != nil {
+				fatal("--port must be a number")
+			}
+			port = p
+			i++
+		case strings.HasPrefix(a, "--port="):
+			p, err := strconv.Atoi(strings.TrimPrefix(a, "--port="))
+			if err != nil {
+				fatal("--port must be a number")
+			}
+			port = p
+		case strings.HasPrefix(a, "--"):
+			fatal("unknown flag %q", a)
+		default:
+			dir = a
+		}
+	}
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		fatal("cannot resolve %s: %v", dir, err)
+	}
+	if info, err := os.Stat(abs); err != nil {
+		fatal("cannot read %s: %v", dir, err)
+	} else if !info.IsDir() {
+		fatal("%s is not a directory", dir)
+	}
+
+	fs := http.FileServer(http.Dir(abs))
+	wrapper := func(w http.ResponseWriter, r *http.Request) {
+		t0 := time.Now()
+		// Capture the status by wrapping the response writer.
+		sw := &statusWriter{ResponseWriter: w, status: 200}
+		fs.ServeHTTP(sw, r)
+		fmt.Printf("%s %3d %-6s %s  %s\n",
+			t0.Format("15:04:05"), sw.status, r.Method, r.URL.Path, time.Since(t0))
+	}
+
+	addr := fmt.Sprintf(":%d", port)
+	fmt.Printf("%sserving %s%s on http://localhost%s\n", cGreen, abs, cReset, addr)
+	if err := http.ListenAndServe(addr, http.HandlerFunc(wrapper)); err != nil {
+		fatal("server error: %v", err)
+	}
+}
+
+// statusWriter wraps http.ResponseWriter to capture the status code
+// for the access-log line.
+type statusWriter struct {
+	http.ResponseWriter
+	status int
+}
+
+func (sw *statusWriter) WriteHeader(code int) {
+	sw.status = code
+	sw.ResponseWriter.WriteHeader(code)
 }
 
 // ===== mx routes =====

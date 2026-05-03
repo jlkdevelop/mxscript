@@ -4,6 +4,29 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.76.0] — 2026-05-03
+
+### Added — `mx serve [dir] [--port N]` static file server
+
+```bash
+mx serve                        # serve cwd on :8080
+mx serve dist                   # serve dist/ on :8080
+mx serve site/playground --port 4000
+```
+
+- **Built on Go's `http.FileServer`** so range requests, content-type
+  sniffing, ETag / If-Modified-Since handling all come for free.
+- **Caddy-flavoured access log** to stdout: timestamp + status +
+  method + path + duration. Doubles as a load-test surface during
+  preview.
+- **Defensive arg handling.** Validates the directory exists and is
+  actually a directory before binding the port. Unknown flags fail
+  fast.
+- Pairs naturally with `mx build --wasm` — the playground is two
+  commands now: `mx build --wasm && mx serve site/playground`.
+
+[0.76.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.76.0
+
 ## [0.75.0] — 2026-05-03
 
 ### Added — `search.*` namespace (SQLite FTS5)
