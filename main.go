@@ -57,7 +57,7 @@ func (rr *replReader) ReadLine() (string, bool) {
 // Version is bumped at release time. Override at build with:
 //
 //	go build -ldflags "-X main.Version=v0.2.0"
-var Version = "v0.62.0"
+var Version = "v0.63.0"
 
 const (
 	cReset  = "\033[0m"
@@ -137,6 +137,7 @@ func printHelp() {
 	fmt.Println("  new <template> [name] Scaffold from template: todo|chat|ai|blog|api")
 	fmt.Println("  build <file.mx>       Type-check & validate an MX Script file")
 	fmt.Println("  build --vercel        Generate a Vercel-deployable Go project from app.mx")
+	fmt.Println("  build --wasm          Compile the interpreter to dist/mx.wasm + JS shim (browser playground)")
 	fmt.Println("  repl                  Start an interactive REPL")
 	fmt.Println("  test [path]           Run *_test.mx files (default: current dir)")
 	fmt.Println("  bench [path]          Run *_bench.mx benchmarks (each fn bench_*)")
@@ -1340,6 +1341,79 @@ func cmdCheck(args []string) {
 	}
 }
 
+// ===== mx build --wasm =====
+
+// cmdBuildWasm shells out to `go build` with GOOS=js GOARCH=wasm to
+// produce a browser-runnable copy of the MX interpreter, then copies
+// the matching wasm_exec.js shim from $GOROOT into dist/. The caller
+// can serve dist/ from any static host and call window.mxRun(source).
+//
+//	$ mx build --wasm
+//	dist/mx.wasm           15M  (interpreter compiled to wasm)
+//	dist/wasm_exec.js      26K  (Go's standard JS host shim)
+//
+// The wasm build excludes SQLite, Redis, and the durable-jobs queue
+// (see interpreter/sql_wasm.go etc.) — those depend on TCP and
+// libc-style shims the browser doesn't provide. Routes still parse
+// and register, they just never serve traffic.
+func cmdBuildWasm() {
+	if err := os.MkdirAll("dist", 0o755); err != nil {
+		fatal("cannot create dist/: %v", err)
+	}
+	out := filepath.Join("dist", "mx.wasm")
+
+	// Locate cmd/mxwasm relative to the executable's source tree. We
+	// resolve via `go env GOMOD` so this works from any working dir
+	// inside the repo.
+	cmd := exec.Command("go", "build", "-o", out, "./cmd/mxwasm/")
+	cmd.Env = append(os.Environ(), "GOOS=js", "GOARCH=wasm")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	fmt.Printf("%scompiling%s mx.wasm (this takes 10-15s)...\n", cYellow, cReset)
+	if err := cmd.Run(); err != nil {
+		fatal("go build --wasm failed: %v", err)
+	}
+
+	// Copy the matching wasm_exec.js. Go ships it with the toolchain;
+	// the path moved between Go versions, so probe both locations.
+	gorootCmd := exec.Command("go", "env", "GOROOT")
+	gorootRaw, err := gorootCmd.Output()
+	if err != nil {
+		fatal("cannot resolve GOROOT: %v", err)
+	}
+	goroot := strings.TrimSpace(string(gorootRaw))
+	candidates := []string{
+		filepath.Join(goroot, "lib", "wasm", "wasm_exec.js"),
+		filepath.Join(goroot, "misc", "wasm", "wasm_exec.js"),
+	}
+	var src string
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			src = c
+			break
+		}
+	}
+	if src == "" {
+		fatal("could not find wasm_exec.js in %s", goroot)
+	}
+	raw, err := os.ReadFile(src)
+	if err != nil {
+		fatal("cannot read wasm_exec.js: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join("dist", "wasm_exec.js"), raw, 0o644); err != nil {
+		fatal("cannot write dist/wasm_exec.js: %v", err)
+	}
+
+	info, _ := os.Stat(out)
+	size := "?"
+	if info != nil {
+		size = fmt.Sprintf("%.1f MB", float64(info.Size())/(1024*1024))
+	}
+	fmt.Printf("%s✓%s wrote dist/mx.wasm (%s) and dist/wasm_exec.js\n", cGreen, cReset, size)
+	fmt.Println("\nServe dist/ and load both files in an HTML page that calls window.mxRun(source).")
+	fmt.Println("See site/playground/index.html for a working example.")
+}
+
 // ===== mx pkg =====
 
 // cmdPkg dispatches to one of the package-manager subcommands. The
@@ -1829,16 +1903,23 @@ get /status      { return status_page({ app: "Users API" }) }
 
 func cmdBuild(args []string) {
 	vercel := false
+	wasm := false
 	var file string
 	for _, a := range args {
 		switch a {
 		case "--vercel":
 			vercel = true
+		case "--wasm":
+			wasm = true
 		default:
 			if file == "" {
 				file = a
 			}
 		}
+	}
+	if wasm {
+		cmdBuildWasm()
+		return
 	}
 	if file == "" {
 		file = "app.mx"

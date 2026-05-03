@@ -4,6 +4,42 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.63.0] — 2026-05-02
+
+### Added — `mx build --wasm` (run MX in the browser)
+
+- **The interpreter compiles to WebAssembly.** A new `cmd/mxwasm`
+  entry point exposes a single JS function:
+
+  ```js
+  const { stdout, stderr, error } = window.mxRun(`
+    let xs = [1, 2, 3]
+    println(map(xs, fn(n) { return n * 2 }))
+  `)
+  ```
+
+  Programs lex, parse, and execute in the browser exactly the same
+  way they do natively. Routes register but never serve traffic
+  (there's no http.Server in the wasm sandbox) — the playground
+  intentionally focuses on language semantics, not network IO.
+
+- **`mx build --wasm` ships everything users need.** Produces
+  `dist/mx.wasm` (~14 MB) plus the matching `dist/wasm_exec.js` from
+  the Go toolchain. Drop both into any static-hosting setup and load
+  them from a page.
+
+- **Build-tag isolation for non-browser features.** `sql.go`,
+  `redis.go`, and `jobs.go` are gated behind `//go:build !js`;
+  `sql_wasm.go`, `redis_wasm.go`, and `jobs_wasm.go` provide stub
+  builtins that return clear errors at runtime. Same source tree,
+  one `go build` flag — no fork.
+
+- **Stdout/stderr capture** runs through the existing `Out`/`Err`
+  fields on `Interpreter`, so the wasm host gets a clean string back
+  instead of writing to a console the page can't read.
+
+[0.63.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.63.0
+
 ## [0.62.0] — 2026-05-02
 
 ### Added — VM lowers function bodies + calls + return + member access

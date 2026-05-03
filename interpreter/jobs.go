@@ -1,3 +1,5 @@
+//go:build !js
+
 // jobs.go — durable background job queue backed by SQLite.
 //
 // Two-line worker:
@@ -230,4 +232,89 @@ var _stderrWrite = func(p []byte) (int, error) { return len(p), nil }
 type jobsControl struct {
 	stop chan struct{}
 	wg   sync.WaitGroup
+}
+
+// ===== Job-queue builtins (production impl) =====
+
+func builtinJobsCreate(i *Interpreter, args []Value) (Value, error) {
+	opts := NewOrderedMap()
+	if len(args) > 0 && args[0].Kind == KindObject {
+		opts = args[0].Object
+	}
+	h, err := jobsCreate(opts)
+	if err != nil {
+		return Value{}, err
+	}
+
+	q := NewOrderedMap()
+	q.Set("enqueue", FunctionValue(&Function{Name: "queue.enqueue", Native: func(_ *Interpreter, a []Value) (Value, error) {
+		if len(a) < 1 {
+			return Value{}, fmt.Errorf("enqueue(payload, opts?) requires a payload")
+		}
+		delay := 0.0
+		if len(a) > 1 && a[1].Kind == KindObject {
+			if v, ok := a[1].Object.Get("delay_seconds"); ok && v.Kind == KindNumber {
+				delay = v.Number
+			}
+		}
+		id, err := jobsEnqueue(h, a[0], delay)
+		if err != nil {
+			return Value{}, err
+		}
+		return NumberValue(float64(id)), nil
+	}}))
+	q.Set("process", FunctionValue(&Function{Name: "queue.process", Native: func(interp *Interpreter, a []Value) (Value, error) {
+		workers := 1
+		var fn *Function
+		if len(a) == 1 && a[0].Kind == KindFunction {
+			fn = a[0].Function
+		} else if len(a) >= 2 && a[0].Kind == KindNumber && a[1].Kind == KindFunction {
+			workers = int(a[0].Number)
+			fn = a[1].Function
+		} else {
+			return Value{}, fmt.Errorf("process(workers?, fn) requires a function")
+		}
+		ctrl := &jobsControl{stop: make(chan struct{})}
+		for w := 0; w < workers; w++ {
+			ctrl.wg.Add(1)
+			go func() {
+				defer ctrl.wg.Done()
+				h.startWorker(ctrl.stop, func(payload string) error {
+					decoded, decErr := jsonDecode([]byte(payload))
+					if decErr != nil {
+						decoded = StringValue(payload)
+					}
+					if _, err := interp.callFunction(nil, fn, []Value{decoded}); err != nil {
+						return err
+					}
+					return nil
+				})
+			}()
+		}
+		stop := &Function{Name: "queue.stop", Native: func(_ *Interpreter, _ []Value) (Value, error) {
+			select {
+			case <-ctrl.stop:
+			default:
+				close(ctrl.stop)
+			}
+			ctrl.wg.Wait()
+			return NullValue(), nil
+		}}
+		return FunctionValue(stop), nil
+	}}))
+	q.Set("close", FunctionValue(&Function{Name: "queue.close", Native: func(_ *Interpreter, _ []Value) (Value, error) {
+		return NullValue(), h.db.Close()
+	}}))
+	q.Set("stats", FunctionValue(&Function{Name: "queue.stats", Native: func(_ *Interpreter, _ []Value) (Value, error) {
+		out := NewOrderedMap()
+		for _, status := range []string{"pending", "running", "done", "failed"} {
+			row := h.db.QueryRow(`SELECT COUNT(*) FROM mx_jobs WHERE queue = ? AND status = ?`, h.queue, status)
+			var n int
+			if err := row.Scan(&n); err == nil {
+				out.Set(status, NumberValue(float64(n)))
+			}
+		}
+		return ObjectValue(out), nil
+	}}))
+	return ObjectValue(q), nil
 }

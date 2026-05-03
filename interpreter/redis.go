@@ -1,3 +1,5 @@
+//go:build !js
+
 // redis.go — thin wrapper around go-redis/redis/v9. Exposed as the
 // `redis` namespace:
 //

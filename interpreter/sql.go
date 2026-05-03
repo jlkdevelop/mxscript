@@ -1,3 +1,5 @@
+//go:build !js
+
 // sql.go — SQLite via the pure-Go modernc.org/sqlite driver. Exposed
 // through the `sql` namespace:
 //
@@ -8,12 +10,17 @@
 //	loop rows as u { print(u.name) }
 //	let one = sql.query_one(db, "SELECT * FROM users WHERE id = ?", 1)
 //	sql.close(db)
+//
+// Disabled under js/wasm — the sqlite driver depends on cgo-style
+// libc shims that don't build for the browser. sql_wasm.go provides
+// stubs that return clear errors at runtime.
 package interpreter
 
 import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 
 	_ "github.com/go-sql-driver/mysql" // MySQL driver, registered as "mysql"
 	_ "github.com/lib/pq"              // Postgres driver, registered as "postgres"
@@ -165,4 +172,161 @@ func sqlValueToMX(v any) Value {
 		return StringValue(string(x))
 	}
 	return StringValue(fmt.Sprintf("%v", v))
+}
+
+// ===== SQL builtins (production impl) =====
+
+func builtinSQLOpen(i *Interpreter, args []Value) (Value, error) {
+	path, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	h, err := sqlOpen(path)
+	if err != nil {
+		return Value{}, err
+	}
+	return HandleValue(h), nil
+}
+
+func mustDBHandle(args []Value) (*dbHandle, error) {
+	if len(args) < 1 || args[0].Kind != KindHandle {
+		return nil, fmt.Errorf("expected a sql.open handle as first argument")
+	}
+	h, ok := args[0].Handle.(*dbHandle)
+	if !ok {
+		return nil, fmt.Errorf("argument is not a SQL handle")
+	}
+	return h, nil
+}
+
+func builtinSQLExec(i *Interpreter, args []Value) (Value, error) {
+	h, err := mustDBHandle(args)
+	if err != nil {
+		return Value{}, err
+	}
+	query, err := stringArg(args, 1)
+	if err != nil {
+		return Value{}, err
+	}
+	return sqlExec(h, query, args[2:])
+}
+
+func builtinSQLQuery(i *Interpreter, args []Value) (Value, error) {
+	h, err := mustDBHandle(args)
+	if err != nil {
+		return Value{}, err
+	}
+	query, err := stringArg(args, 1)
+	if err != nil {
+		return Value{}, err
+	}
+	return sqlQuery(h, query, args[2:])
+}
+
+func builtinSQLQueryOne(i *Interpreter, args []Value) (Value, error) {
+	v, err := builtinSQLQuery(i, args)
+	if err != nil {
+		return Value{}, err
+	}
+	if v.Kind != KindArray || len(v.Array) == 0 {
+		return NullValue(), nil
+	}
+	return v.Array[0], nil
+}
+
+func builtinSQLClose(i *Interpreter, args []Value) (Value, error) {
+	h, err := mustDBHandle(args)
+	if err != nil {
+		return Value{}, err
+	}
+	return NullValue(), h.db.Close()
+}
+
+func builtinSQLMigrate(i *Interpreter, args []Value) (Value, error) {
+	h, err := mustDBHandle(args)
+	if err != nil {
+		return Value{}, err
+	}
+	if len(args) < 2 || args[1].Kind != KindArray {
+		return Value{}, fmt.Errorf("sql.migrate(db, migrations) requires an array of SQL strings")
+	}
+	migrations := args[1].Array
+
+	if _, err := h.runner().Exec(`CREATE TABLE IF NOT EXISTS mx_migrations (
+		id INTEGER PRIMARY KEY,
+		applied_at TEXT NOT NULL,
+		hash TEXT NOT NULL
+	)`); err != nil {
+		return Value{}, err
+	}
+
+	rows, err := h.runner().Query("SELECT id, hash FROM mx_migrations ORDER BY id")
+	if err != nil {
+		return Value{}, err
+	}
+	applied := map[int]string{}
+	for rows.Next() {
+		var id int
+		var hash string
+		if err := rows.Scan(&id, &hash); err != nil {
+			rows.Close()
+			return Value{}, err
+		}
+		applied[id] = hash
+	}
+	rows.Close()
+
+	var ranList, skippedList []Value
+	for k, m := range migrations {
+		if m.Kind != KindString {
+			return Value{}, fmt.Errorf("sql.migrate: each migration must be a string (got %s)", m.typeName())
+		}
+		hsh := computeHMACHex("mx-migrations", m.String)
+		if existing, ok := applied[k+1]; ok {
+			if existing != hsh {
+				return Value{}, fmt.Errorf("sql.migrate: migration #%d has been edited since it was applied (hash mismatch)", k+1)
+			}
+			skippedList = append(skippedList, NumberValue(float64(k+1)))
+			continue
+		}
+		if _, err := h.runner().Exec(m.String); err != nil {
+			return Value{}, fmt.Errorf("sql.migrate #%d failed: %w", k+1, err)
+		}
+		if _, err := h.runner().Exec(
+			"INSERT INTO mx_migrations (id, applied_at, hash) VALUES (?, ?, ?)",
+			k+1, time.Now().UTC().Format(time.RFC3339), hsh,
+		); err != nil {
+			return Value{}, err
+		}
+		ranList = append(ranList, NumberValue(float64(k+1)))
+	}
+
+	out := NewOrderedMap()
+	out.Set("applied", ArrayValue(ranList))
+	out.Set("skipped", ArrayValue(skippedList))
+	return ObjectValue(out), nil
+}
+
+func builtinSQLTransaction(i *Interpreter, args []Value) (Value, error) {
+	h, err := mustDBHandle(args)
+	if err != nil {
+		return Value{}, err
+	}
+	if len(args) < 2 || args[1].Kind != KindFunction {
+		return Value{}, fmt.Errorf("sql.transaction(db, fn) requires a function")
+	}
+	tx, err := h.db.Begin()
+	if err != nil {
+		return Value{}, err
+	}
+	txHandle := &dbHandle{db: nil, tx: tx}
+	v, callErr := i.callFunction(nil, args[1].Function, []Value{HandleValue(txHandle)})
+	if callErr != nil {
+		_ = tx.Rollback()
+		return Value{}, callErr
+	}
+	if err := tx.Commit(); err != nil {
+		return Value{}, err
+	}
+	return v, nil
 }

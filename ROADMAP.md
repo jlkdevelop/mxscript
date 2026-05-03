@@ -8,6 +8,10 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.63.0** (2026-05-02)
+  - `mx build --wasm` compiles the interpreter to WebAssembly with `dist/mx.wasm` + `dist/wasm_exec.js`
+  - Browser-exposed `window.mxRun(source)` returns `{ stdout, stderr, error }`
+  - Build-tag isolation: SQLite / Redis / jobs gated to `!js`, with stub builtins on wasm
 - **v0.62.0** (2026-05-02)
   - VM lowers function bodies, `CallExpr`, `ReturnStmt`, and `MemberExpr` — tight loops inside functions now run ~2× faster on `--bytecode`
   - `OpCall` dispatches native and user functions; `OpGetField` reads object fields; per-Function compile cache with mutex
