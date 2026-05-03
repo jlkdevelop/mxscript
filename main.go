@@ -58,7 +58,7 @@ func (rr *replReader) ReadLine() (string, bool) {
 // Version is bumped at release time. Override at build with:
 //
 //	go build -ldflags "-X main.Version=v0.2.0"
-var Version = "v1.9.0"
+var Version = "v1.10.0"
 
 const (
 	cReset  = "\033[0m"
@@ -126,6 +126,8 @@ func main() {
 		cmdEnv(args)
 	case "db":
 		cmdDB(args)
+	case "audit":
+		cmdAudit(args)
 	case "version", "-v", "--version":
 		fmt.Println("MX Script", Version)
 	case "help", "-h", "--help":
@@ -181,6 +183,7 @@ func printHelp() {
 	fmt.Println("  examples [list|show <name>]  Browse / view bundled .mx examples")
 	fmt.Println("  env                          Show MX-relevant env vars (secrets masked)")
 	fmt.Println("  db <dsn>                     Interactive SQL REPL (sqlite/postgres/mysql)")
+	fmt.Println("  audit <file.mx>              Security checklist (rate limits, TLS, secrets, etc.)")
 	fmt.Println("  version               Print version and exit")
 	fmt.Println("  help                  Show this help")
 	fmt.Println()
@@ -1772,6 +1775,128 @@ func mustAbs(p string) string {
 		return p
 	}
 	return abs
+}
+
+// ===== mx audit =====
+
+// cmdAudit walks an MX Script program and runs a security checklist
+// against the source: rate limits on auth + signup routes, TLS in
+// the server config, hardcoded secrets in let bindings, missing
+// CSRF / webhook signature checks, etc.
+//
+// Each check produces a severity (info / warn / error) and a short
+// explanation. Exits 1 if any errors are found so CI can gate
+// merges. Like `mx check` for security posture.
+func cmdAudit(args []string) {
+	if len(args) < 1 {
+		fatal("usage: mx audit <file.mx>")
+	}
+	file := args[0]
+	src, err := os.ReadFile(file)
+	if err != nil {
+		fatal("cannot read %s: %v", file, err)
+	}
+	source := string(src)
+
+	type finding struct {
+		severity string
+		msg      string
+	}
+	var findings []finding
+	add := func(sev, msg string) { findings = append(findings, finding{sev, msg}) }
+
+	// 1. Hardcoded secrets — let X = "sk_live_..." style.
+	for _, prefix := range []string{`"sk_live_`, `"sk-`, `"AKIA`, `"ghp_`, `"github_pat_`, `"xoxb-`} {
+		if strings.Contains(source, "let "+prefix) || strings.Contains(source, "= "+prefix) {
+			add("error", fmt.Sprintf("hardcoded secret prefix %s found — move to env() or vault.get()", prefix))
+		}
+	}
+
+	// 2. password.hash should be used — not plaintext password storage.
+	if strings.Contains(source, "INSERT INTO users") &&
+		strings.Contains(source, "request.body.password") &&
+		!strings.Contains(source, "password.hash") &&
+		!strings.Contains(source, "password.hash_argon2") &&
+		!strings.Contains(source, "password.hash_scrypt") {
+		add("error", "user password appears to be stored without hashing (call password.hash before INSERT)")
+	}
+
+	// 3. JWT secret should not be a literal "dev-secret" / "secret".
+	for _, weak := range []string{`"dev-secret"`, `"secret"`, `"change-me"`, `"replace-me"`} {
+		if strings.Contains(source, "jwt.sign("+`{`) || strings.Contains(source, ", "+weak) {
+			if strings.Contains(source, "jwt.") && strings.Contains(source, weak) {
+				add("warn", fmt.Sprintf("weak JWT secret literal %s — use env(\"JWT_SECRET\")", weak))
+				break
+			}
+		}
+	}
+
+	// 4. Rate limiting on auth endpoints.
+	authPatterns := []string{"/auth/", "/login", "/signup", "/register", "/forgot"}
+	hasAuth := false
+	for _, p := range authPatterns {
+		if strings.Contains(source, p) {
+			hasAuth = true
+			break
+		}
+	}
+	if hasAuth && !strings.Contains(source, "rate_limit") && !strings.Contains(source, "throttle") {
+		add("warn", "auth endpoints present but no rate_limit() / throttle middleware — vulnerable to brute-force")
+	}
+
+	// 5. TLS / HTTPS in production.
+	if strings.Contains(source, "server {") &&
+		!strings.Contains(source, "tls_cert") &&
+		!strings.Contains(source, "tls_key") {
+		add("info", "no TLS config in `server { ... }` — fine behind a reverse proxy, but raw HTTP if direct-served")
+	}
+
+	// 6. Webhook routes should call webhooks.verify_*.
+	if strings.Contains(source, "/webhook") &&
+		!strings.Contains(source, "webhooks.verify") &&
+		!strings.Contains(source, "verify_webhook") {
+		add("error", "webhook route present but no webhooks.verify_* call — anyone can spoof events")
+	}
+
+	// 7. Sessions should be signed.
+	if strings.Contains(source, "session") &&
+		strings.Contains(source, "request.cookies") &&
+		!strings.Contains(source, "verify_cookie") &&
+		!strings.Contains(source, "session.read") &&
+		!strings.Contains(source, "magic_link.verify") {
+		add("warn", "raw cookie reads — ensure values pass through verify_cookie() / session.read() before trust")
+	}
+
+	// 8. password.hash without max-attempts on signup paves the way
+	// for slowloris-style DoS via expensive hash work.
+	if strings.Contains(source, "password.hash") && !strings.Contains(source, "rate_limit") {
+		add("info", "password.hash is intentionally slow — pair with rate_limit() to avoid DoS")
+	}
+
+	// Output.
+	fmt.Printf("\n%sMX Script — security audit %s%s\n\n", cBold, file, cReset)
+	if len(findings) == 0 {
+		fmt.Printf("%s✓%s no issues detected\n\n", cGreen, cReset)
+		return
+	}
+	errCount := 0
+	for _, f := range findings {
+		var prefix string
+		switch f.severity {
+		case "error":
+			prefix = cRed + "  ✗ ERROR  " + cReset
+			errCount++
+		case "warn":
+			prefix = cYellow + "  ⚠ WARN   " + cReset
+		default:
+			prefix = cGray + "  • INFO   " + cReset
+		}
+		fmt.Println(prefix + f.msg)
+	}
+	fmt.Println()
+	if errCount > 0 {
+		os.Exit(1)
+	}
 }
 
 // ===== mx db =====

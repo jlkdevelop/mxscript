@@ -4,6 +4,48 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.10.0] — 2026-05-03
+
+### Added — `mx audit <file.mx>` (security checklist)
+
+A static security check for the most common SaaS misconfigurations:
+
+```
+$ mx audit app.mx
+MX Script — security audit app.mx
+
+  ✗ ERROR  hardcoded secret prefix "sk_live_ found — move to env() or vault.get()
+  ⚠ WARN   auth endpoints present but no rate_limit() / throttle middleware — vulnerable to brute-force
+  • INFO   no TLS config in `server { ... }` — fine behind a reverse proxy, but raw HTTP if direct-served
+  ✗ ERROR  webhook route present but no webhooks.verify_* call — anyone can spoof events
+
+$ echo $?
+1
+```
+
+Eight checks today:
+
+1. **Hardcoded secret literals** — `sk_live_…` / `sk-…` / `AKIA…` /
+   `ghp_…` / `xoxb-…` prefixes
+2. **Plaintext password storage** — `INSERT INTO users` with
+   `request.body.password` and no `password.hash` call
+3. **Weak JWT secret** — `"dev-secret"`, `"secret"`, `"change-me"`
+   used with `jwt.sign`
+4. **Auth endpoints without rate limit** — `/login`, `/signup`,
+   `/auth/*` routes that don't reach `rate_limit()` or a throttle
+   middleware
+5. **Server config without TLS** (info — fine behind a proxy)
+6. **Webhook route without signature verification** — any
+   `/webhook*` route that doesn't call `webhooks.verify_*`
+7. **Raw cookie reads without verification**
+8. **`password.hash` without rate limiting** (DoS warning — slow
+   hash without throttling is a DoS vector)
+
+Errors fail the command with exit 1 so CI can gate merges. Warnings
+and infos still print but don't fail.
+
+[1.10.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.10.0
+
 ## [1.9.0] — 2026-05-03
 
 ### Added — `mx fmt --diff`
