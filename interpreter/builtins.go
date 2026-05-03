@@ -450,6 +450,19 @@ func registerBuiltins(i *Interpreter) {
 	g.Set("metrics", ObjectValue(metricsNS))
 	builtinNames["metrics"] = true
 
+	// --- S3 namespace ---
+	// Pure-Go AWS Signature V4 over the standard S3 wire format.
+	// Works with AWS S3, Cloudflare R2, Backblaze B2, DigitalOcean
+	// Spaces, MinIO, Wasabi — anything that speaks the protocol.
+	s3NS := NewOrderedMap()
+	s3NS.Set("put", FunctionValue(&Function{Name: "s3.put", Native: builtinS3Put}))
+	s3NS.Set("get", FunctionValue(&Function{Name: "s3.get", Native: builtinS3Get}))
+	s3NS.Set("delete", FunctionValue(&Function{Name: "s3.delete", Native: builtinS3Delete}))
+	s3NS.Set("list", FunctionValue(&Function{Name: "s3.list", Native: builtinS3List}))
+	s3NS.Set("presign", FunctionValue(&Function{Name: "s3.presign", Native: builtinS3Presign}))
+	g.Set("s3", ObjectValue(s3NS))
+	builtinNames["s3"] = true
+
 	// --- Search namespace (SQLite FTS5) ---
 	searchNS := NewOrderedMap()
 	searchNS.Set("create", FunctionValue(&Function{Name: "search.create", Native: builtinSearchCreate}))

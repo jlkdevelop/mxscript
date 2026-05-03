@@ -8,6 +8,9 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.79.0** (2026-05-03)
+  - `s3.*` namespace — pure-Go AWS Signature V4; works with AWS S3, Cloudflare R2, Backblaze B2, DigitalOcean Spaces, MinIO, Wasabi
+  - SigV4 verified against AWS's published canonical example byte-for-byte
 - **v0.78.0** (2026-05-03)
   - `pp(value)` pretty-print builtin (colored, indented, smart inline-vs-multiline arrays)
   - REPL auto-uses `PrettyDisplay` so result objects render readable

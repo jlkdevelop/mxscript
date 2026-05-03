@@ -4,6 +4,58 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.79.0] — 2026-05-03
+
+### Added — `s3.*` (pure-Go AWS Signature V4)
+
+Five-call S3 namespace that works with **every S3-compatible store**:
+AWS S3, Cloudflare R2, Backblaze B2, DigitalOcean Spaces, MinIO,
+Wasabi, anything else that speaks the protocol. No external SDK —
+SigV4 is implemented directly so the deploy artifact stays small.
+
+```mx
+s3.put("my-bucket", "users/123/avatar.png", file_bytes, {
+  content_type: "image/png"
+})
+
+let body = s3.get("my-bucket", "users/123/avatar.png")
+let keys = s3.list("my-bucket", "users/123/")
+s3.delete("my-bucket", "users/123/avatar.png")
+
+// Presigned GET URL — hand to a browser to let users download
+// private objects without exposing credentials.
+let url = s3.presign("my-bucket", "users/123/avatar.png", { expires: 600 })
+```
+
+- **AWS S3 by default.** Reads `AWS_ACCESS_KEY_ID` /
+  `AWS_SECRET_ACCESS_KEY` / `AWS_REGION` (defaults to `us-east-1`).
+- **Non-AWS providers via `endpoint`** opt:
+
+  ```mx
+  let r2 = { endpoint: "https://<account>.r2.cloudflarestorage.com", region: "auto" }
+  s3.put("media", "x.jpg", body, merge(r2, { content_type: "image/jpeg" }))
+
+  let minio = { endpoint: "http://localhost:9000" }
+  s3.put("test", "x.txt", "hello", minio)
+  ```
+
+- **AWS canonical-example test passes.** The signing-key
+  derivation is byte-for-byte verified against AWS's published
+  `c4afb1cc5771d871763a393e44b703571b55cc28424d1a5e86da6ed3c154a4b9`
+  reference value — strongest possible cross-check that the SigV4
+  math is right.
+
+- **Path-style addressing** so the same code works across providers
+  without per-region cert gymnastics. Nested keys
+  (`users/123/avatar.png`) preserve their structure; only individual
+  segments get URL-escaped.
+
+- **5 tests** cover the AWS canonical signing-key derivation, host
+  resolution (default + R2 + MinIO), key escaping, sorted canonical
+  query strings, missing-credentials error, and presign URL shape.
+
+[0.79.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.79.0
+
 ## [0.78.0] — 2026-05-03
 
 ### Added — `pp()` pretty-printer + REPL auto-formatting
