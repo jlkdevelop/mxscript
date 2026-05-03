@@ -58,7 +58,7 @@ func (rr *replReader) ReadLine() (string, bool) {
 // Version is bumped at release time. Override at build with:
 //
 //	go build -ldflags "-X main.Version=v0.2.0"
-var Version = "v1.22.0"
+var Version = "v1.23.0"
 
 const (
 	cReset  = "\033[0m"
@@ -134,6 +134,8 @@ func main() {
 		cmdShip(args)
 	case "open":
 		cmdOpen(args)
+	case "logs":
+		cmdLogs(args)
 	case "version", "-v", "--version":
 		check := false
 		for _, a := range args {
@@ -202,6 +204,7 @@ func printHelp() {
 	fmt.Println("  stats <file.mx>              Code metrics (routes, fns, middleware, namespaces used)")
 	fmt.Println("  ship                         Run fmt --check + check + audit + test (CI-friendly preflight)")
 	fmt.Println("  open <url-or-port>           Open a URL (or http://localhost:PORT) in the default browser")
+	fmt.Println("  logs [path] [--level=info]   Pretty-print JSON log lines (stdin if no path)")
 	fmt.Println("  version               Print version and exit")
 	fmt.Println("  help                  Show this help")
 	fmt.Println()
@@ -1871,6 +1874,121 @@ func parseSemver(tag string) [3]int {
 		out[i] = n
 	}
 	return out
+}
+
+// ===== mx logs =====
+
+// cmdLogs reads JSON lines from a file (or stdin) and renders them
+// with colour-coded level + ISO timestamp + the message, with the
+// remaining fields hung off the right. Optional --level= filter
+// shows only entries at or above the named severity.
+//
+//   mx logs prod.log
+//   mx logs prod.log --level=warn
+//   tail -f app.log | mx logs        # live mode
+func cmdLogs(args []string) {
+	var path string
+	minLevel := "trace"
+	for _, a := range args {
+		switch {
+		case strings.HasPrefix(a, "--level="):
+			minLevel = strings.TrimPrefix(a, "--level=")
+		case strings.HasPrefix(a, "-"):
+			// unknown flags ignored — let `mx logs --help` someday
+		default:
+			path = a
+		}
+	}
+	var src io.Reader = os.Stdin
+	if path != "" {
+		f, err := os.Open(path)
+		if err != nil {
+			fatal("cannot open %s: %v", path, err)
+		}
+		defer f.Close()
+		src = f
+	}
+	severity := map[string]int{
+		"trace": 0, "debug": 1, "info": 2,
+		"warn": 3, "warning": 3, "error": 4, "fatal": 5,
+	}
+	threshold := severity[strings.ToLower(minLevel)]
+
+	scanner := bufio.NewScanner(src)
+	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		var entry map[string]any
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			// Not JSON — pass through unchanged.
+			fmt.Println(line)
+			continue
+		}
+		level, _ := entry["level"].(string)
+		if level == "" {
+			level, _ = entry["severity"].(string)
+		}
+		if severity[strings.ToLower(level)] < threshold {
+			continue
+		}
+		ts := pickTimestamp(entry)
+		msg, _ := entry["msg"].(string)
+		if msg == "" {
+			msg, _ = entry["message"].(string)
+		}
+		// Render extra fields (everything but the well-known ones).
+		known := map[string]bool{
+			"level": true, "severity": true, "msg": true, "message": true,
+			"time": true, "timestamp": true, "ts": true, "@timestamp": true,
+		}
+		var extras []string
+		for k, v := range entry {
+			if known[k] {
+				continue
+			}
+			extras = append(extras, fmt.Sprintf("%s=%v", k, v))
+		}
+		sort.Strings(extras)
+		extraStr := ""
+		if len(extras) > 0 {
+			extraStr = " " + cGray + strings.Join(extras, " ") + cReset
+		}
+		levelColor := cGray
+		levelLabel := strings.ToUpper(level)
+		if levelLabel == "" {
+			levelLabel = "----"
+		}
+		switch strings.ToLower(level) {
+		case "info":
+			levelColor = cCyan
+		case "warn", "warning":
+			levelColor = cYellow
+		case "error", "fatal":
+			levelColor = cRed
+		case "debug":
+			levelColor = cGray
+		}
+		fmt.Printf("%s%s%s %s%-5s%s %s%s\n",
+			cGray, ts, cReset, levelColor, levelLabel, cReset, msg, extraStr)
+	}
+	if err := scanner.Err(); err != nil && err != io.EOF {
+		fmt.Fprintf(os.Stderr, "%sread error:%s %v\n", cRed, cReset, err)
+		os.Exit(1)
+	}
+}
+
+// pickTimestamp pulls the first present timestamp field. Apps name
+// it `time` / `ts` / `timestamp` / `@timestamp` — try them all.
+func pickTimestamp(entry map[string]any) string {
+	for _, key := range []string{"time", "ts", "timestamp", "@timestamp"} {
+		if v, ok := entry[key]; ok {
+			return fmt.Sprintf("%v", v)
+		}
+	}
+	return ""
 }
 
 // ===== mx open =====

@@ -4,6 +4,34 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.23.0] — 2026-05-03
+
+### Added — `mx logs <path>` (pretty-print JSON log lines)
+
+```
+$ mx logs prod.log
+2026-05-03T12:00:00Z INFO  server started        port=8080
+2026-05-03T12:00:01Z WARN  slow query             duration_ms=340 sql=SELECT *
+2026-05-03T12:00:02Z ERROR db connection lost
+2026-05-03T12:00:03Z DEBUG cache hit              key=users:42
+
+$ mx logs prod.log --level=warn         # only warn + above
+$ tail -f app.log | mx logs              # live mode, reads stdin
+```
+
+- **Colourised by level** — INFO cyan, WARN yellow, ERROR / FATAL
+  red, DEBUG / TRACE gray.
+- **Smart timestamp pickup** — looks for `time`, `ts`, `timestamp`,
+  or `@timestamp`. Smart message pickup — `msg` or `message`.
+- **Extras hung on the right** as `key=value` pairs, alphabetised.
+- **`--level=` filter** drops entries below the threshold.
+- **Plaintext passes through** unchanged so mixed log formats
+  still flow.
+- **Reads stdin** when no path is given so `tail -f | mx logs`
+  works as a live tailer.
+
+[1.23.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.23.0
+
 ## [1.22.0] — 2026-05-03
 
 ### Added — `proxy(target_url, request)` (reverse-proxy helper)
