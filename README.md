@@ -28,24 +28,34 @@ sql.migrate(db, [
   "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT, email TEXT)"
 ])
 
+let SCHEMA = {
+  type: "object",
+  required: ["name", "email"],
+  properties: {
+    name:  { type: "string", min_length: 2 },
+    email: { type: "string", format: "email" }
+  }
+}
+
 group /api/v1 {
   get /users {
-    return json(sql.query(db, "SELECT * FROM users"))
+    let p     = paginate(request)
+    let total = sql.count(db, "users", {})
+    let items = sql.find(db, "users", {}, { order: "id DESC", limit: p.limit, offset: p.offset })
+    return json(page_response(items, p, total))
+  }
+
+  get /users/:id {
+    let u = sql.find_one(db, "users", { id: num(request.params.id) })
+    if (u == null) { return problem(404, "User not found") }
+    return json(u)
   }
 
   post /users {
-    let r = validate(request.body, {
-      type: "object",
-      required: ["name", "email"],
-      properties: {
-        name:  { type: "string", min_length: 2 },
-        email: { type: "string", format: "email" }
-      }
-    })
-    if (!r.valid) { return status(400, { errors: r.errors }) }
-    let res = sql.exec(db, "INSERT INTO users (name, email) VALUES (?, ?)",
-                       request.body.name, request.body.email)
-    return status(201, { id: res.last_insert_id })
+    let r = body_validate(request, SCHEMA)
+    if (!r.ok) { return r.response }
+    let id = sql.insert(db, "users", r.body).last_insert_id
+    return status(201, { id: id })
   }
 }
 
@@ -53,7 +63,7 @@ get /openapi.json { return json(openapi({ title: "Users API" })) }
 get /docs        { return swagger_ui("/openapi.json") }
 ```
 
-That's a real validated REST API with persistence and auto-generated docs. `mx run app.mx` and you're done.
+That's a paginated, validated REST API with RFC 7807 error responses, auto-generated OpenAPI docs, and SQLite persistence — in 30 lines. `mx run app.mx` and you're done.
 
 ---
 
