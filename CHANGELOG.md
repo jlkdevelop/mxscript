@@ -4,6 +4,20 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.61.0] — 2026-05-03
+
+### Improved — `mx new chat` ships a working browser client out of the box
+
+The chat template used to print "Wire your own client". Now `mx run
+app.mx` → open localhost:8080 in two tabs → real-time chat with
+sessions and broadcast — no extra setup, no separate JS bundle.
+
+The embedded HTML is ~50 lines: a login form, a message log with
+join/leave events, a send box. Validates input via `body_validate`,
+broadcasts via the existing WebSocket fan-out pattern.
+
+[1.61.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.61.0
+
 ## [1.60.0] — 2026-05-03
 
 ### Improved — `mx open` shortcuts + help banner aligned to positioning
