@@ -58,7 +58,7 @@ func (rr *replReader) ReadLine() (string, bool) {
 // Version is bumped at release time. Override at build with:
 //
 //	go build -ldflags "-X main.Version=v0.2.0"
-var Version = "v1.23.0"
+var Version = "v1.24.0"
 
 const (
 	cReset  = "\033[0m"
@@ -136,6 +136,8 @@ func main() {
 		cmdOpen(args)
 	case "logs":
 		cmdLogs(args)
+	case "parse":
+		cmdParse(args)
 	case "version", "-v", "--version":
 		check := false
 		for _, a := range args {
@@ -205,6 +207,7 @@ func printHelp() {
 	fmt.Println("  ship                         Run fmt --check + check + audit + test (CI-friendly preflight)")
 	fmt.Println("  open <url-or-port>           Open a URL (or http://localhost:PORT) in the default browser")
 	fmt.Println("  logs [path] [--level=info]   Pretty-print JSON log lines (stdin if no path)")
+	fmt.Println("  parse <file.mx>              Print the parsed AST as JSON (for tooling)")
 	fmt.Println("  version               Print version and exit")
 	fmt.Println("  help                  Show this help")
 	fmt.Println()
@@ -1874,6 +1877,44 @@ func parseSemver(tag string) [3]int {
 		out[i] = n
 	}
 	return out
+}
+
+// ===== mx parse =====
+
+// cmdParse lexes + parses an .mx file and emits the AST as JSON
+// to stdout. Useful for users building tooling on top of MX —
+// linters, refactor scripts, codemods, custom analysers.
+//
+// The AST shape is what Go's encoding/json gives us via reflection:
+// each node carries its concrete type's fields, including the
+// embedded position info. Stable enough for scripts to parse.
+//
+//	$ mx parse app.mx | jq '.Stmts[] | select(.Method) | "\(.Method) \(.Path)"'
+//	"GET /users"
+//	"POST /users"
+func cmdParse(args []string) {
+	if len(args) < 1 {
+		fatal("usage: mx parse <file.mx>")
+	}
+	src, err := os.ReadFile(args[0])
+	if err != nil {
+		fatal("cannot read %s: %v", args[0], err)
+	}
+	tokens, err := lexer.New(string(src)).Tokenize()
+	if err != nil {
+		printError(args[0], err)
+		os.Exit(1)
+	}
+	prog, err := parser.New(tokens).Parse()
+	if err != nil {
+		printError(args[0], err)
+		os.Exit(1)
+	}
+	raw, err := json.MarshalIndent(prog, "", "  ")
+	if err != nil {
+		fatal("encode AST: %v", err)
+	}
+	fmt.Println(string(raw))
 }
 
 // ===== mx logs =====

@@ -4,6 +4,27 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.24.0] — 2026-05-03
+
+### Added — `mx parse <file.mx>` (AST as JSON)
+
+```
+$ mx parse app.mx | jq '.Stmts[] | select(.Method) | "\(.Method) \(.Path)"'
+"GET /users"
+"POST /users"
+```
+
+Lexes + parses an `.mx` file and emits the parsed AST as
+indented JSON to stdout. Useful for users building tooling on top
+of MX — linters, refactor scripts, codemods, custom analysers,
+documentation generators.
+
+The shape is whatever Go's encoding/json reflects out of the AST
+node types, including embedded position info on each node. Stable
+enough for scripts to depend on within the 1.x line.
+
+[1.24.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.24.0
+
 ## [1.23.0] — 2026-05-03
 
 ### Added — `mx logs <path>` (pretty-print JSON log lines)
