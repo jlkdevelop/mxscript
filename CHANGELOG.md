@@ -4,6 +4,31 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.15.0] — 2026-05-03
+
+### Added — `mx ship` (preflight before merge)
+
+```
+$ mx ship
+MX Script — preflight
+
+  fmt    ✓
+  check  ✓
+  test   ✓
+
+✓ ready to ship
+```
+
+Runs `mx fmt --check .` + `mx check **/*.mx` + `mx test` in order
+and prints a tidy pass/fail summary. Stops at the first failure
+unless `--keep-going`. Exits 1 on any failure so CI gates merges
+on the same checks contributors run locally.
+
+A single command answers "am I ready to push?" without remembering
+three flag combinations.
+
+[1.15.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.15.0
+
 ## [1.14.0] — 2026-05-03
 
 ### Added — `avg` / `count_by` / `partition` aggregations

@@ -58,7 +58,7 @@ func (rr *replReader) ReadLine() (string, bool) {
 // Version is bumped at release time. Override at build with:
 //
 //	go build -ldflags "-X main.Version=v0.2.0"
-var Version = "v1.14.0"
+var Version = "v1.15.0"
 
 const (
 	cReset  = "\033[0m"
@@ -130,6 +130,8 @@ func main() {
 		cmdAudit(args)
 	case "stats":
 		cmdStats(args)
+	case "ship":
+		cmdShip(args)
 	case "version", "-v", "--version":
 		fmt.Println("MX Script", Version)
 	case "help", "-h", "--help":
@@ -187,6 +189,7 @@ func printHelp() {
 	fmt.Println("  db <dsn>                     Interactive SQL REPL (sqlite/postgres/mysql)")
 	fmt.Println("  audit <file.mx>              Security checklist (rate limits, TLS, secrets, etc.)")
 	fmt.Println("  stats <file.mx>              Code metrics (routes, fns, middleware, namespaces used)")
+	fmt.Println("  ship                         Run fmt --check + check + audit + test (CI-friendly preflight)")
 	fmt.Println("  version               Print version and exit")
 	fmt.Println("  help                  Show this help")
 	fmt.Println()
@@ -1778,6 +1781,109 @@ func mustAbs(p string) string {
 		return p
 	}
 	return abs
+}
+
+// ===== mx ship =====
+
+// cmdShip runs the four "preflight before merge" checks in order
+// and prints a tidy pass/fail summary. Designed for both
+// interactive use ("am I ready to push?") and CI ("did this PR
+// drift from main's quality bar?").
+//
+// Steps: mx fmt --check . / mx check */*.mx / mx audit (best-effort
+// per file) / mx test. Stops at the first failure unless --keep-going.
+func cmdShip(args []string) {
+	keepGoing := false
+	for _, a := range args {
+		if a == "--keep-going" {
+			keepGoing = true
+		}
+	}
+
+	bin, _ := os.Executable()
+	type step struct {
+		name string
+		args []string
+	}
+	steps := []step{
+		{"fmt", []string{"fmt", "--check", "."}},
+		{"check", []string{"check", "."}},
+		{"test", []string{"test"}},
+	}
+
+	fmt.Printf("\n%sMX Script — preflight%s\n\n", cBold, cReset)
+	failed := 0
+	for _, s := range steps {
+		fmt.Printf("  %s%s%s ", cCyan, s.name, cReset)
+		// `mx check .` — but cmdCheck only handles single files. Walk
+		// .mx files and invoke per-file when we hit the check step.
+		if s.name == "check" {
+			ok := runCheckAll(bin, ".")
+			if !ok {
+				fmt.Printf(" %s✗%s\n", cRed, cReset)
+				failed++
+				if !keepGoing {
+					break
+				}
+			} else {
+				fmt.Printf(" %s✓%s\n", cGreen, cReset)
+			}
+			continue
+		}
+		cmd := exec.Command(bin, s.args...)
+		cmd.Stdout = io.Discard
+		cmd.Stderr = io.Discard
+		if err := cmd.Run(); err != nil {
+			fmt.Printf(" %s✗%s\n", cRed, cReset)
+			failed++
+			if !keepGoing {
+				// Re-run with output so the user sees the failure.
+				replay := exec.Command(bin, s.args...)
+				replay.Stdout = os.Stdout
+				replay.Stderr = os.Stderr
+				_ = replay.Run()
+				break
+			}
+		} else {
+			fmt.Printf(" %s✓%s\n", cGreen, cReset)
+		}
+	}
+
+	fmt.Println()
+	if failed == 0 {
+		fmt.Printf("%s✓ ready to ship%s\n\n", cGreen, cReset)
+		return
+	}
+	fmt.Printf("%s%d step(s) failed%s\n\n", cRed, failed, cReset)
+	os.Exit(1)
+}
+
+// runCheckAll walks `dir` for *.mx files (skipping mx_modules and
+// dotdirs) and invokes `mx check` on each. Returns true if all pass.
+func runCheckAll(bin, dir string) bool {
+	all := true
+	_ = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			if info != nil && info.IsDir() {
+				name := info.Name()
+				if name == "mx_modules" || (strings.HasPrefix(name, ".") && path != dir) {
+					return filepath.SkipDir
+				}
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".mx") {
+			return nil
+		}
+		cmd := exec.Command(bin, "check", path)
+		cmd.Stdout = io.Discard
+		cmd.Stderr = io.Discard
+		if err := cmd.Run(); err != nil {
+			all = false
+		}
+		return nil
+	})
+	return all
 }
 
 // ===== mx stats =====
