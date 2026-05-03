@@ -58,7 +58,7 @@ func (rr *replReader) ReadLine() (string, bool) {
 // Version is bumped at release time. Override at build with:
 //
 //	go build -ldflags "-X main.Version=v0.2.0"
-var Version = "v1.0.1"
+var Version = "v1.1.0"
 
 const (
 	cReset  = "\033[0m"
@@ -161,7 +161,7 @@ func printHelp() {
 	fmt.Println("  build --fly           Write Dockerfile + fly.toml for Fly.io deploys")
 	fmt.Println("  build --railway       Write Dockerfile + railway.toml for Railway deploys")
 	fmt.Println("  repl                  Start an interactive REPL")
-	fmt.Println("  test [path]           Run *_test.mx files (default: current dir)")
+	fmt.Println("  test [path] [--cover] [--watch]  Run *_test.mx files (current dir by default)")
 	fmt.Println("  bench [path]          Run *_bench.mx benchmarks (each fn bench_*)")
 	fmt.Println("  fmt [paths]           Format .mx files (-w writes, --check exits 1 on diffs)")
 	fmt.Println("  lsp                   Run the Language Server (JSON-RPC over stdio)")
@@ -908,13 +908,21 @@ func prettyBenchName(name string) string {
 func cmdTest(args []string) {
 	root := "."
 	cover := false
+	watch := false
 	for _, a := range args {
 		switch {
 		case a == "--cover":
 			cover = true
+		case a == "--watch":
+			watch = true
 		case !strings.HasPrefix(a, "-"):
 			root = a
 		}
+	}
+
+	if watch {
+		runTestWatched(root, cover)
+		return
 	}
 
 	files, err := findTestFiles(root)
@@ -1030,6 +1038,42 @@ func cmdTest(args []string) {
 
 // runProgramQuietly executes top-level statements (let/fn/etc) but skips
 // route registration and HTTP server startup — tests don't need a server.
+// runTestWatched re-runs `mx test` whenever any .mx file under
+// `root` changes. Uses the same dirHash polling loop as runWatched
+// so dependencies are zero. Each iteration spawns a child `mx test`
+// (via os.Executable) so a hung test or panic in interpreter state
+// doesn't poison the watcher.
+func runTestWatched(root string, cover bool) {
+	bin, err := os.Executable()
+	if err != nil {
+		fatal("cannot resolve executable: %v", err)
+	}
+	abs, err := filepath.Abs(root)
+	if err != nil {
+		fatal("cannot resolve test root: %v", err)
+	}
+
+	fmt.Printf("%s[mx test --watch]%s watching %s — press Ctrl+C to stop\n", cYellow, cReset, abs)
+
+	var lastHash [32]byte
+	for {
+		hash, err := dirHash(abs)
+		if err == nil && hash != lastHash {
+			lastHash = hash
+			fmt.Printf("\n%s[mx test --watch]%s change detected — running tests\n", cYellow, cReset)
+			args := []string{"test", abs}
+			if cover {
+				args = append(args, "--cover")
+			}
+			cmd := exec.Command(bin, args...)
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			cmd.Run() // exit code: ignored; the next change triggers another run
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+}
+
 func runProgramQuietly(interp *interpreter.Interpreter, prog *parser.Program) error {
 	_, err := interp.Exec(prog)
 	return err

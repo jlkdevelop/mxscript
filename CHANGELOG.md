@@ -4,6 +4,22 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.0] — 2026-05-03
+
+### Added — `mx test --watch` (TDD-friendly test runner)
+
+```bash
+mx test --watch                  # rerun tests on every .mx change
+mx test src --watch --cover      # cover + scoped to src/
+```
+
+Polls the test directory for `.mx` changes (same approach as
+`mx run --watch`) and re-executes `mx test` in a fresh child
+process on each save. The child boundary means a hung or panicking
+test can't poison the watcher.
+
+[1.1.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.1.0
+
 ## [1.0.1] — 2026-05-03
 
 ### Added — `crypto.*` namespace
