@@ -449,6 +449,15 @@ func registerBuiltins(i *Interpreter) {
 	g.Set("metrics", ObjectValue(metricsNS))
 	builtinNames["metrics"] = true
 
+	// --- Search namespace (SQLite FTS5) ---
+	searchNS := NewOrderedMap()
+	searchNS.Set("create", FunctionValue(&Function{Name: "search.create", Native: builtinSearchCreate}))
+	searchNS.Set("index", FunctionValue(&Function{Name: "search.index", Native: builtinSearchIndex}))
+	searchNS.Set("query", FunctionValue(&Function{Name: "search.query", Native: builtinSearchQuery}))
+	searchNS.Set("delete", FunctionValue(&Function{Name: "search.delete", Native: builtinSearchDelete}))
+	g.Set("search", ObjectValue(searchNS))
+	builtinNames["search"] = true
+
 	// --- Stripe namespace ---
 	// Thin wrappers over the four Stripe API calls SaaS apps actually
 	// need: checkout sessions, customers, the billing portal, and

@@ -8,6 +8,8 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.75.0** (2026-05-03)
+  - `search.*` namespace — SQLite FTS5 wrapper with BM25 ranking, column-scoped queries, idempotent re-indexing
 - **v0.74.0** (2026-05-03)
   - `id.*` namespace: `uuid` / `ulid` / `nanoid` / `short` / `snowflake`
   - `pick`, `omit`, `merge`, `deep_merge` object helpers

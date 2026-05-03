@@ -4,6 +4,57 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.75.0] — 2026-05-03
+
+### Added — `search.*` namespace (SQLite FTS5)
+
+Production-quality full-text search backed by SQLite's built-in FTS5
+engine. Zero extra dependencies — the engine ships with the
+`modernc.org/sqlite` driver MX already depends on.
+
+```mx
+let db = sql.open("./app.db")
+
+// Create the index once.
+search.create(db, "posts_fts", ["title", "body"])
+
+// Index documents (idempotent — re-indexing the same id replaces).
+search.index(db, "posts_fts", post.id, {
+  title: post.title,
+  body:  post.body
+})
+
+// Search. BM25-ranked, supports AND/OR/NOT, NEAR proximity,
+// `column:term` scoping, prefix queries — all of FTS5's surface.
+let hits = search.query(db, "posts_fts", "lang AND fast", {
+  limit: 20, offset: 0
+})
+loop hits as h { print(h.id, h.title, h.rank) }
+
+search.delete(db, "posts_fts", post.id)
+```
+
+- **BM25 ranking out of the box.** Results come back ordered by
+  relevance (lower rank = more relevant per FTS5 conventions),
+  with the rank exposed as a numeric column for callers that want
+  to tune.
+- **Column-scoped queries** like `title:lang` only match in the
+  named column — the wrapper passes user queries through unchanged
+  so every FTS5 syntax feature works.
+- **Re-indexing is idempotent** — `search.index` deletes the
+  existing rowid before inserting, so calling it repeatedly on the
+  same id doesn't duplicate the document.
+- **Identifier quoting** — table names get double-quoted with
+  embedded quotes doubled, so user-supplied table names can't
+  break out of the SQL we control.
+- **WASM stub.** Like the rest of the SQL surface, this falls back
+  to a clear error in the browser build.
+- **4 tests** cover create + index + ranked query, column-scoped
+  queries, delete, and re-index idempotency. All run against a
+  real on-disk SQLite database in a tempdir.
+
+[0.75.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.75.0
+
 ## [0.74.0] — 2026-05-03
 
 ### Added — `id.*` namespace + object helpers
