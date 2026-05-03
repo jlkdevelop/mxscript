@@ -1,0 +1,81 @@
+// url_shortener.mx — a complete URL shortener in ~50 lines.
+//
+// Demonstrates the v1.41-v1.56 one-file API toolkit working together:
+//   • body_validate()        — single-call schema check + 400 problem+json
+//   • sql.insert / sql.find_one / sql.update / sql.find / sql.count
+//   • paginate() + page_response()  — standard list shape
+//   • problem()              — RFC 7807 error responses
+//   • request.id             — distributed tracing for free
+//   • etag()/cache_control() — CDN-friendly stats endpoint
+//
+// Run:    mx run examples/url_shortener.mx
+// Try it:
+//   curl -X POST -H 'Content-Type: application/json' \
+//        -d '{"url":"https://mxscript.com"}' :8080/shorten
+//   curl -i :8080/<code>          # 302 to the original URL
+//   curl :8080/api/links          # paginated list with hit counts
+
+server { port: 8080, log: true }
+
+let db = sql.open("./shortener.db")
+sql.migrate(db, [
+  "CREATE TABLE IF NOT EXISTS links (
+     code TEXT PRIMARY KEY,
+     url TEXT NOT NULL,
+     hits INTEGER NOT NULL DEFAULT 0,
+     created_at TEXT NOT NULL
+   )"
+])
+
+let SCHEMA = {
+  type: "object",
+  required: ["url"],
+  properties: { url: { type: "string", min_length: 8 } }
+}
+
+post /shorten {
+  let r = body_validate(request, SCHEMA)
+  if (!r.ok) { return r.response }
+
+  let code = id.nanoid(7)
+  sql.insert(db, "links", {
+    code:       code,
+    url:        r.body.url,
+    hits:       0,
+    created_at: now_iso()
+  })
+  return status(201, {
+    code:      code,
+    short_url: "http://localhost:8080/" + code,
+    target:    r.body.url
+  })
+}
+
+get /:code {
+  let link = sql.find_one(db, "links", { code: request.params.code })
+  if (link == null) { return problem(404, "Short link not found") }
+  sql.update(db, "links", { hits: link.hits + 1 }, { code: link.code })
+  return redirect(link.url)
+}
+
+get /api/links {
+  let p     = paginate(request)
+  let total = sql.count(db, "links", {})
+  let items = sql.find(db, "links", {}, { order: "created_at DESC", limit: p.limit, offset: p.offset })
+  return json(page_response(items, p, total))
+}
+
+get /api/links/:code {
+  let link = sql.find_one(db, "links", { code: request.params.code })
+  if (link == null) { return problem(404, "Short link not found", "", { trace_id: request.id }) }
+  let tag = etag(link)
+  if (request.headers["if-none-match"] == tag) { return not_modified() }
+  return json(link, {
+    headers: {
+      "ETag":          tag,
+      "Cache-Control": cache_control({ private: true, max_age: 30 })
+    }
+  })
+}
+
+println("URL shortener at http://localhost:8080 — POST /shorten with { url } to start")

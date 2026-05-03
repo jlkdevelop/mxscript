@@ -4,6 +4,36 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.57.0] — 2026-05-03
+
+### Added — `mx new shortener` + `examples/url_shortener.mx`
+
+A complete URL shortener in ~50 lines — the canonical "how short can it
+be?" demo, suitable for Show HN screenshots and the README.
+
+```bash
+mx new shortener my-shortener
+cd my-shortener
+mx run app.mx
+```
+
+```bash
+curl -X POST :8080/shorten \
+  -H 'Content-Type: application/json' \
+  -d '{"url":"https://mxscript.com"}'
+# → {"code":"abc1234","short_url":"http://localhost:8080/abc1234",...}
+
+curl -i :8080/abc1234            # 302 redirect, increments hit count
+curl :8080/api/links             # paginated list with stats
+curl -i :8080/api/links/abc1234  # ETag-cached detail
+```
+
+Exercises every helper shipped in v1.41-v1.56:
+`body_validate` + `sql.insert/find_one/update/find/count` + `paginate` +
+`page_response` + `problem` + `etag/cache_control` + `request.id`.
+
+[1.57.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.57.0
+
 ## [1.56.0] — 2026-05-03
 
 ### Added — `body_validate(request, schema)` — single-call body validation
