@@ -4,6 +4,36 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.0] — 2026-05-03
+
+### Added — LSP go-to-definition + find-references + document symbols
+
+Three new LSP capabilities so MX feels like a first-class editor
+experience in VS Code (and any other LSP client):
+
+- **`textDocument/definition`** — Cmd-click any name to jump to its
+  `let` / `fn` / `middleware` declaration. Whole-word matching so
+  `foo` doesn't navigate to `foobar`.
+- **`textDocument/references`** — list every site that uses the name
+  under the cursor. Naive lexical scan (no scope modeling) but
+  whole-word filtered, which catches the common "where is this
+  used" question.
+- **`textDocument/documentSymbol`** — outline panel populates with
+  every top-level binding. Routes show as `get /users`, `post /users`
+  so the panel reads like the route table; `let`s become Variable
+  symbols, `fn`s Function, `middleware`s Constructor.
+
+Wired through the existing initialize handler — the `capabilities`
+response now advertises `definitionProvider`, `referencesProvider`,
+and `documentSymbolProvider`.
+
+8 new tests in `lsp/navigation_test.go` cover go-to-def for fn / let
+/ middleware, prefix-safety (`foo` ≠ `foobar`), missing-name miss,
+references across all sites, whole-word filtering (`user` ≠
+`username`), and the document-symbols outline including routes.
+
+[1.3.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.3.0
+
 ## [1.2.0] — 2026-05-03
 
 ### Added — three more AI providers (13 total)

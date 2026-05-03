@@ -121,6 +121,9 @@ func (s *server) handle(body []byte) error {
 				"textDocumentSync":           1, // full sync
 				"documentFormattingProvider": true,
 				"hoverProvider":              true,
+				"definitionProvider":         true,
+				"referencesProvider":         true,
+				"documentSymbolProvider":     true,
 				"completionProvider": map[string]any{
 					"triggerCharacters": []string{".", " "},
 				},
@@ -239,6 +242,71 @@ func (s *server) handle(body []byte) error {
 			})
 		}
 		return s.respond(req.ID, nil)
+
+	case "textDocument/definition":
+		var p struct {
+			TextDocument struct {
+				URI string `json:"uri"`
+			} `json:"textDocument"`
+			Position struct {
+				Line      int `json:"line"`
+				Character int `json:"character"`
+			} `json:"position"`
+		}
+		if err := json.Unmarshal(req.Params, &p); err != nil {
+			return err
+		}
+		text := s.getDoc(p.TextDocument.URI)
+		word := wordAt(text, p.Position.Line, p.Position.Character)
+		if word == "" {
+			return s.respond(req.ID, nil)
+		}
+		// Walk the source for a top-level `let <word>` / `fn <word>` /
+		// `middleware <word>`. Returns the first match.
+		line, col, found := findDefinition(text, word)
+		if !found {
+			return s.respond(req.ID, nil)
+		}
+		return s.respond(req.ID, map[string]any{
+			"uri": p.TextDocument.URI,
+			"range": map[string]any{
+				"start": map[string]int{"line": line, "character": col},
+				"end":   map[string]int{"line": line, "character": col + len(word)},
+			},
+		})
+
+	case "textDocument/references":
+		var p struct {
+			TextDocument struct {
+				URI string `json:"uri"`
+			} `json:"textDocument"`
+			Position struct {
+				Line      int `json:"line"`
+				Character int `json:"character"`
+			} `json:"position"`
+		}
+		if err := json.Unmarshal(req.Params, &p); err != nil {
+			return err
+		}
+		text := s.getDoc(p.TextDocument.URI)
+		word := wordAt(text, p.Position.Line, p.Position.Character)
+		if word == "" {
+			return s.respond(req.ID, []any{})
+		}
+		locations := findReferences(text, word, p.TextDocument.URI)
+		return s.respond(req.ID, locations)
+
+	case "textDocument/documentSymbol":
+		var p struct {
+			TextDocument struct {
+				URI string `json:"uri"`
+			} `json:"textDocument"`
+		}
+		if err := json.Unmarshal(req.Params, &p); err != nil {
+			return err
+		}
+		text := s.getDoc(p.TextDocument.URI)
+		return s.respond(req.ID, documentSymbols(text))
 
 	case "textDocument/completion":
 		// Lazy completion: every builtin name + every keyword + curated snippets.
@@ -783,6 +851,141 @@ func wordAt(text string, line, col int) string {
 		return ""
 	}
 	return row[start:end]
+}
+
+// findDefinition scans the source for a top-level binding of `name` —
+// any of `let name = ...`, `fn name(...) { ... }`, or `middleware name`.
+// Returns line / column of the *name* itself (not the keyword) so the
+// editor's go-to-def lands on the binding's identifier.
+func findDefinition(text, name string) (int, int, bool) {
+	lines := strings.Split(text, "\n")
+	patterns := []string{"let ", "fn ", "middleware "}
+	for i, line := range lines {
+		trimmed := strings.TrimLeft(line, " \t")
+		indent := len(line) - len(trimmed)
+		for _, prefix := range patterns {
+			if !strings.HasPrefix(trimmed, prefix) {
+				continue
+			}
+			rest := strings.TrimLeft(trimmed[len(prefix):], " \t")
+			if strings.HasPrefix(rest, name) {
+				// Check the next char is a non-identifier (so "let foo"
+				// doesn't match "let foobar").
+				if len(rest) == len(name) || !isIdentByte(rest[len(name)]) {
+					col := indent + len(prefix) + (len(trimmed[len(prefix):]) - len(rest))
+					return i, col, true
+				}
+			}
+		}
+	}
+	return 0, 0, false
+}
+
+// findReferences returns every Location matching the bare identifier
+// `name`. Naive lexical search — we don't model scope, so a local
+// variable that shadows a global gets the same matches as the global.
+// Good enough for the common "where is this used" case.
+func findReferences(text, name, uri string) []any {
+	var out []any
+	lines := strings.Split(text, "\n")
+	for i, line := range lines {
+		col := 0
+		for {
+			idx := strings.Index(line[col:], name)
+			if idx < 0 {
+				break
+			}
+			matchStart := col + idx
+			matchEnd := matchStart + len(name)
+			// Whole-word check: surrounding chars must not be ident chars.
+			beforeOK := matchStart == 0 || !isIdentByte(line[matchStart-1])
+			afterOK := matchEnd == len(line) || !isIdentByte(line[matchEnd])
+			if beforeOK && afterOK {
+				out = append(out, map[string]any{
+					"uri": uri,
+					"range": map[string]any{
+						"start": map[string]int{"line": i, "character": matchStart},
+						"end":   map[string]int{"line": i, "character": matchEnd},
+					},
+				})
+			}
+			col = matchEnd
+		}
+	}
+	return out
+}
+
+// documentSymbols extracts every top-level let / fn / middleware /
+// route declaration into a flat outline the editor's symbol panel
+// renders. We label routes with `<METHOD> <path>` so the outline
+// reads like the route table.
+func documentSymbols(text string) []any {
+	var out []any
+	lines := strings.Split(text, "\n")
+	for i, line := range lines {
+		trimmed := strings.TrimLeft(line, " \t")
+		indent := len(line) - len(trimmed)
+		var name string
+		var kind int // LSP SymbolKind
+		switch {
+		case strings.HasPrefix(trimmed, "fn "):
+			rest := strings.TrimLeft(trimmed[len("fn "):], " \t")
+			name = identPrefix(rest)
+			kind = 12 // Function
+		case strings.HasPrefix(trimmed, "let "):
+			rest := strings.TrimLeft(trimmed[len("let "):], " \t")
+			name = identPrefix(rest)
+			kind = 13 // Variable
+		case strings.HasPrefix(trimmed, "middleware "):
+			rest := strings.TrimLeft(trimmed[len("middleware "):], " \t")
+			name = identPrefix(rest)
+			kind = 9 // Constructor (close enough)
+		case strings.HasPrefix(trimmed, "route "):
+			// `route GET /users { ... }`
+			name = strings.TrimSuffix(strings.TrimSpace(strings.SplitN(trimmed, "{", 2)[0]), "")
+			kind = 14 // Constant — used as a generic "block"
+		default:
+			// Shorthand verb form: `get /users { ... }`.
+			for _, verb := range []string{"get ", "post ", "put ", "delete ", "patch ", "head ", "options ", "sse ", "ws "} {
+				if strings.HasPrefix(trimmed, verb) {
+					name = strings.TrimSuffix(strings.TrimSpace(strings.SplitN(trimmed, "{", 2)[0]), "")
+					kind = 14
+					break
+				}
+			}
+		}
+		if name == "" {
+			continue
+		}
+		out = append(out, map[string]any{
+			"name": name,
+			"kind": kind,
+			"location": map[string]any{
+				"uri": "", // filled in by the editor
+				"range": map[string]any{
+					"start": map[string]int{"line": i, "character": indent},
+					"end":   map[string]int{"line": i, "character": len(line)},
+				},
+			},
+		})
+	}
+	return out
+}
+
+// identPrefix returns the leading identifier from `s` — the chars up
+// to the first non-identifier byte. Used to extract names from
+// declaration headers.
+func identPrefix(s string) string {
+	for i := 0; i < len(s); i++ {
+		if !isIdentByte(s[i]) {
+			return s[:i]
+		}
+	}
+	return s
+}
+
+func isIdentByte(b byte) bool {
+	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9') || b == '_'
 }
 
 // ===== Helpers =====
