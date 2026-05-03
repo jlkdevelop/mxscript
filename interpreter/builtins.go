@@ -664,6 +664,7 @@ func registerBuiltins(i *Interpreter) {
 	notifyNS.Set("slack", FunctionValue(&Function{Name: "notify.slack", Native: builtinNotifySlack}))
 	notifyNS.Set("discord", FunctionValue(&Function{Name: "notify.discord", Native: builtinNotifyDiscord}))
 	notifyNS.Set("email", FunctionValue(&Function{Name: "notify.email", Native: builtinNotifyEmail}))
+	notifyNS.Set("sms", FunctionValue(&Function{Name: "notify.sms", Native: builtinNotifySMS}))
 	g.Set("notify", ObjectValue(notifyNS))
 	builtinNames["notify"] = true
 

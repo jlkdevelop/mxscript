@@ -19,9 +19,14 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	neturl "net/url"
 	"os"
 	"time"
 )
+
+// notifyURLPathEscape wraps net/url.QueryEscape so the test file
+// keeps a stable name for monkey-patching if needed.
+func notifyURLPathEscape(s string) string { return neturl.QueryEscape(s) }
 
 // notifyResult builds the standard response object every notify.*
 // function returns: { ok, status, error }. Centralised so the shape
@@ -185,6 +190,62 @@ func builtinNotifyEmail(i *Interpreter, args []Value) (Value, error) {
 		return notifyResult(status, err.Error()), nil
 	}
 	return notifyResult(status, ""), nil
+}
+
+// notify.sms(to, body, opts?) — send an SMS via Twilio. Reads
+// TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN + TWILIO_FROM_NUMBER from
+// the environment.
+//
+//	notify.sms("+15555550100", "Your code is " + code)
+//	notify.sms(user.phone, "Order shipped!", { from: env("TWILIO_FROM_NUMBER") })
+func builtinNotifySMS(_ *Interpreter, args []Value) (Value, error) {
+	if len(args) < 2 {
+		return Value{}, fmt.Errorf("notify.sms(to, body, opts?)")
+	}
+	to, _ := stringArg(args, 0)
+	body, _ := stringArg(args, 1)
+
+	sid := os.Getenv("TWILIO_ACCOUNT_SID")
+	token := os.Getenv("TWILIO_AUTH_TOKEN")
+	from := os.Getenv("TWILIO_FROM_NUMBER")
+	if len(args) > 2 && args[2].Kind == KindObject {
+		if v, ok := args[2].Object.Get("from"); ok && v.Kind == KindString {
+			from = v.String
+		}
+	}
+	if sid == "" || token == "" {
+		return notifyResult(0, "notify.sms requires TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN"), nil
+	}
+	if from == "" {
+		return notifyResult(0, "notify.sms requires TWILIO_FROM_NUMBER (or opts.from)"), nil
+	}
+
+	form := []byte("To=" + urlEscape(to) + "&From=" + urlEscape(from) + "&Body=" + urlEscape(body))
+	url := "https://api.twilio.com/2010-04-01/Accounts/" + sid + "/Messages.json"
+	req, err := http.NewRequest("POST", url, bytes.NewReader(form))
+	if err != nil {
+		return Value{}, err
+	}
+	req.SetBasicAuth(sid, token)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return notifyResult(0, err.Error()), nil
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		raw, _ := io.ReadAll(resp.Body)
+		return notifyResult(resp.StatusCode, string(raw)), nil
+	}
+	return notifyResult(resp.StatusCode, ""), nil
+}
+
+// urlEscape is a tiny percent-encoder for SMS form fields. We only
+// need to handle the chars Twilio's docs flag — net/url's PathEscape
+// does the heavy lifting.
+func urlEscape(s string) string {
+	return notifyURLPathEscape(s)
 }
 
 // slackOrDiscordBody picks the right payload shape: strings become

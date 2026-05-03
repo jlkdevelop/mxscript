@@ -4,6 +4,26 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.17.0] — 2026-05-03
+
+### Added — `notify.sms` (Twilio)
+
+```mx
+notify.sms("+15555550100", "Your code is " + code)
+notify.sms(user.phone, "Order shipped!", { from: env("TWILIO_FROM_NUMBER") })
+```
+
+Reads `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`.
+Same `{ ok, status, error }` result shape as the rest of the
+`notify.*` namespace so handlers stay declarative:
+
+```mx
+let r = notify.sms(user.phone, "OTP: " + code)
+if (!r.ok) { metrics.counter("sms_failures") }
+```
+
+[1.17.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.17.0
+
 ## [1.16.0] — 2026-05-03
 
 ### Added — `xml.parse` + `xml.stringify`

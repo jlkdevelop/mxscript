@@ -648,6 +648,7 @@ var builtinDocs = map[string]builtinDoc{
 	"notify.slack":             {"notify.slack(webhook_url, message) -> { ok, status, error }", "Post to a Slack incoming webhook. Message can be a string or a full Slack payload object."},
 	"notify.discord":           {"notify.discord(webhook_url, message) -> { ok, status, error }", "Post to a Discord webhook. String → content; object passes through (content, embeds, etc.)."},
 	"notify.email":             {"notify.email(to, subject, body, opts?) -> { ok, status, error }", "Transactional email via Resend. Reads RESEND_API_KEY. opts: from, html, reply_to, cc, bcc."},
+	"notify.sms":               {"notify.sms(to, body, opts?) -> { ok, status, error }", "Send SMS via Twilio. Reads TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER."},
 	"stripe.checkout":            {"stripe.checkout(price_id, opts?) -> { url, id }", "Create a Stripe Checkout Session. opts: mode, success_url, cancel_url, customer_email, customer, quantity."},
 	"stripe.customer_create":     {"stripe.customer_create(email, opts?) -> { id, email }", "Create a Stripe Customer. opts: name, metadata."},
 	"stripe.customer_portal":     {"stripe.customer_portal(customer_id, return_url) -> { url, id }", "Create a Customer Portal session URL."},
