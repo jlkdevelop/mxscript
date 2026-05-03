@@ -58,7 +58,7 @@ func (rr *replReader) ReadLine() (string, bool) {
 // Version is bumped at release time. Override at build with:
 //
 //	go build -ldflags "-X main.Version=v0.2.0"
-var Version = "v1.68.0"
+var Version = "v1.69.0"
 
 const (
 	cReset  = "\033[0m"
@@ -3770,15 +3770,33 @@ func cmdNew(args []string) {
 			if !ok {
 				continue
 			}
-			fmt.Printf("  %s%-6s%s  %s\n", cCyan, name, cReset, tpl.Description)
+			fmt.Printf("  %s%-9s%s  %s\n", cCyan, name, cReset, tpl.Description)
 		}
-		fmt.Printf("\nUse: %smx new <name> [project-dir]%s\n\n", cGreen, cReset)
+		fmt.Printf("\nUse: %smx new <name> [project-dir] [--git]%s\n\n", cGreen, cReset)
 		return
 	}
-	template := args[0]
+
+	// Pull off `--git` (and aliases) wherever they appear. Default off
+	// so users on machines without git get a clean scaffold.
+	initGit := false
+	var positional []string
+	for _, a := range args {
+		switch a {
+		case "--git", "-g":
+			initGit = true
+		case "--no-git":
+			initGit = false
+		default:
+			positional = append(positional, a)
+		}
+	}
+	if len(positional) == 0 {
+		fatal("usage: mx new <template> [project-dir] [--git]")
+	}
+	template := positional[0]
 	name := template + "-app"
-	if len(args) > 1 && args[1] != "" {
-		name = args[1]
+	if len(positional) > 1 && positional[1] != "" {
+		name = positional[1]
 	}
 
 	tpl, ok := projectTemplates[template]
@@ -3801,8 +3819,44 @@ func cmdNew(args []string) {
 
 	fmt.Printf("\n%s✓%s scaffolded %s%s/%s%s using template %s%s%s\n\n",
 		cGreen, cReset, cBold, name, cReset, cGray, cBold, template, cReset)
+
+	// Optional git init — useful for getting a clean baseline before
+	// poking at the template. Best-effort: a missing git CLI just prints
+	// a skip note rather than failing the whole scaffold.
+	if initGit {
+		initGitRepo(name)
+	}
+
 	fmt.Println(tpl.Hint)
 	fmt.Printf("\n  cd %s\n  mx run app.mx\n\n", name)
+}
+
+// initGitRepo runs `git init` + first commit inside the freshly-scaffolded
+// project directory. Stays quiet about everything except "did it work?"
+// so the scaffold output keeps the tidy ✓ / hint format.
+func initGitRepo(dir string) {
+	gitBin, err := exec.LookPath("git")
+	if err != nil {
+		fmt.Printf("  %sgit not found in PATH — skipping git init%s\n", cYellow, cReset)
+		return
+	}
+	steps := [][]string{
+		{"init", "-q"},
+		{"add", "."},
+		{"-c", "user.name=mx", "-c", "user.email=mx@scaffold.local",
+			"commit", "-q", "-m", "Initial scaffold via mx new"},
+	}
+	for _, s := range steps {
+		cmd := exec.Command(gitBin, s...)
+		cmd.Dir = dir
+		cmd.Stdout = io.Discard
+		cmd.Stderr = io.Discard
+		if err := cmd.Run(); err != nil {
+			fmt.Printf("  %sgit %s failed — left as plain directory%s\n", cYellow, s[0], cReset)
+			return
+		}
+	}
+	fmt.Printf("  %s✓%s git initialized with first commit\n", cGreen, cReset)
 }
 
 type projectTemplate struct {

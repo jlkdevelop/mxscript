@@ -4,6 +4,28 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.69.0] — 2026-05-03
+
+### Added — `mx new <template> --git` initializes a git repo
+
+```
+$ mx new shortener my-app --git
+
+  ✓ scaffolded my-app/ using template shortener
+  ✓ git initialized with first commit
+
+  POST /shorten with { url } to create a short link.
+
+  cd my-app
+  mx run app.mx
+```
+
+Optional. Default is the same plain scaffold as before so users on
+machines without git aren't surprised. If `git` isn't on PATH the
+flag prints a one-line skip note instead of failing.
+
+[1.69.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.69.0
+
 ## [1.68.0] — 2026-05-03
 
 ### Improved — every template + example honors `DATABASE_URL`
