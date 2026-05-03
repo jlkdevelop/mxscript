@@ -99,15 +99,18 @@ It's intentionally small and opinionated — built for the 80% case where you wa
 | **Distribution** | GoReleaser binaries on every tag, Homebrew tap, `mx build --vercel` / `--docker` / `--fly` / `--railway` / `--wasm` for one-command deploys |
 | **Browser** | `mx build --wasm` produces `dist/mx.wasm` + JS shim. Full interpreter runs client-side. Live playground at [`site/playground/`](site/playground/) |
 
-### Six starter projects, one command
+### Nine starter projects, one command
 
 ```bash
-mx new api my-api         # REST API + OpenAPI + Swagger UI + status page
-mx new todo my-todos      # JWT auth + SQLite + groups + validate
-mx new chat realtime      # WebSockets + sessions + broadcast
-mx new ai my-bot          # Tool-calling agent (5-turn loop)
-mx new blog my-blog       # SSR markdown blog with admin
-mx new saas my-saas       # Magic-link auth + Stripe + /metrics + cron + admin
+mx new api my-api          # REST showcase: paginate + uploads + api-key auth + OpenAPI
+mx new shortener my-short  # URL shortener in 50 lines (the canonical demo)
+mx new todo my-todos       # JWT-authenticated SQLite todo with sql.find/insert/update
+mx new chat realtime       # WebSocket chat with a built-in browser client
+mx new ai my-bot           # Tool-calling agent exposed as POST /chat
+mx new blog my-blog        # SSR markdown blog with admin + JSON twin
+mx new saas my-saas        # Magic-link auth + Stripe + /metrics + cron + admin
+mx new dashboard my-admin  # Admin dashboard with WebSocket live charts
+mx new react my-app        # Vite + React frontend with an MX backend at /api/*
 ```
 
 Each scaffolds a complete, runnable app. Read the source, change the bits you don't like, ship.
