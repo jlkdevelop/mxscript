@@ -4,6 +4,58 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.68.0] — 2026-05-03
+
+### Added — `time.*`, `path.*`, `fs.glob` stdlib expansion
+
+The constantly-needed builtins every modern language ships. ~20
+new functions across three namespaces.
+
+#### `time.*`
+
+```mx
+let t = time.parse("2026-05-03T12:00:00Z")
+let tomorrow = time.add(t, "24h")
+let elapsed  = time.diff(t, time.now())            // seconds
+let weekday  = time.weekday(t)                     // "Sunday"
+
+println(time.format(t, "2006-01-02 15:04:05"))     // Go layout strings
+println(time.year(t), time.month(t), time.day(t))  // 2026 5 3
+```
+
+`time.parse` accepts RFC 3339, ISO 8601, common date forms, RFC 1123,
+RFC 822 — returns `null` (not throws) on garbage so you can compose
+with `if (time.parse(s) == null)`. `time.add` takes Go-format
+duration strings (`"1h"`, `"24h"`, `"1500ms"`).
+
+#### `path.*`
+
+```mx
+path.join("/a", "b", "c.txt")  // "/a/b/c.txt"
+path.dir("/a/b/c.txt")         // "/a/b"
+path.base("/a/b/c.txt")        // "c.txt"
+path.ext("/a/b/c.txt")         // ".txt"
+path.absolute("./x")           // "/cwd/x"
+```
+
+#### `fs.glob`
+
+```mx
+fs.glob("*.mx")            // flat — current dir
+fs.glob("src/**/*.go")     // recursive (depth-walking the tree)
+```
+
+`**` is supported as a glob token even though Go's stdlib
+`filepath.Glob` doesn't — we walk the prefix manually so users get
+the ergonomic recursive form they expect.
+
+- 14 tests cover RFC parsing, garbage rejection, format roundtrips,
+  custom layouts, `add` with durations, `diff`, weekday, six
+  component extractors, path join/dir/base/ext, flat + recursive
+  glob, current-time sanity, and number-required errors.
+
+[0.68.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.68.0
+
 ## [0.67.0] — 2026-05-03
 
 ### Added — `mx new saas` template

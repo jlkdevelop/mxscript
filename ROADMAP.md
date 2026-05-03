@@ -8,6 +8,8 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.68.0** (2026-05-03)
+  - `time.*` (parse, format, add, diff, weekday, components), `path.*` (join, dir, base, ext, absolute), `fs.glob` with `**` recursive support
 - **v0.67.0** (2026-05-03)
   - `mx new saas` — full SaaS starter: magic-link auth + Stripe checkout + customer portal + webhooks + metrics + cron + admin dashboard, in one file
 - **v0.66.0** (2026-05-03)

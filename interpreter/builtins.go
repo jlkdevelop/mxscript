@@ -380,6 +380,44 @@ func registerBuiltins(i *Interpreter) {
 	def("close_chan", builtinChanClose)
 	def("wait_group", builtinWaitGroup)
 
+	// --- time / path / fs namespaces ---
+	timeNS := NewOrderedMap()
+	timeNS.Set("now", FunctionValue(&Function{Name: "time.now", Native: builtinTimeNow}))
+	timeNS.Set("parse", FunctionValue(&Function{Name: "time.parse", Native: builtinTimeParse}))
+	timeNS.Set("unix", FunctionValue(&Function{Name: "time.unix", Native: builtinTimeUnix}))
+	timeNS.Set("format", FunctionValue(&Function{Name: "time.format", Native: builtinTimeFormat}))
+	timeNS.Set("iso", FunctionValue(&Function{Name: "time.iso", Native: builtinTimeISO}))
+	timeNS.Set("add", FunctionValue(&Function{Name: "time.add", Native: builtinTimeAdd}))
+	timeNS.Set("diff", FunctionValue(&Function{Name: "time.diff", Native: builtinTimeDiff}))
+	timeNS.Set("weekday", FunctionValue(&Function{Name: "time.weekday", Native: builtinTimeWeekday}))
+	timeNS.Set("year", FunctionValue(&Function{Name: "time.year", Native: builtinTimeYear}))
+	timeNS.Set("month", FunctionValue(&Function{Name: "time.month", Native: builtinTimeMonth}))
+	timeNS.Set("day", FunctionValue(&Function{Name: "time.day", Native: builtinTimeDay}))
+	timeNS.Set("hour", FunctionValue(&Function{Name: "time.hour", Native: builtinTimeHour}))
+	timeNS.Set("minute", FunctionValue(&Function{Name: "time.minute", Native: builtinTimeMinute}))
+	timeNS.Set("second", FunctionValue(&Function{Name: "time.second", Native: builtinTimeSecond}))
+	g.Set("time", ObjectValue(timeNS))
+	builtinNames["time"] = true
+
+	pathNS := NewOrderedMap()
+	pathNS.Set("join", FunctionValue(&Function{Name: "path.join", Native: builtinPathJoin}))
+	pathNS.Set("dir", FunctionValue(&Function{Name: "path.dir", Native: builtinPathDir}))
+	pathNS.Set("base", FunctionValue(&Function{Name: "path.base", Native: builtinPathBase}))
+	pathNS.Set("ext", FunctionValue(&Function{Name: "path.ext", Native: builtinPathExt}))
+	pathNS.Set("absolute", FunctionValue(&Function{Name: "path.absolute", Native: builtinPathAbsolute}))
+	g.Set("path", ObjectValue(pathNS))
+	builtinNames["path"] = true
+
+	// fs.glob lives next to the existing fs.watch.
+	if existingFS, ok := g.Get("fs"); ok && existingFS.Kind == KindObject {
+		existingFS.Object.Set("glob", FunctionValue(&Function{Name: "fs.glob", Native: builtinFSGlob}))
+	} else {
+		fsNS := NewOrderedMap()
+		fsNS.Set("glob", FunctionValue(&Function{Name: "fs.glob", Native: builtinFSGlob}))
+		g.Set("fs", ObjectValue(fsNS))
+		builtinNames["fs"] = true
+	}
+
 	// --- Metrics namespace ---
 	// Prometheus-compatible counters / gauges / histograms with an
 	// auto-rendered exposition handler. Drop into any monitoring
