@@ -4,6 +4,28 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.27.0] — 2026-05-03
+
+### Added — `mx build --compose` (self-hosted Postgres + Redis stack)
+
+```bash
+mx build --compose
+docker compose up -d
+docker compose logs -f app
+```
+
+Writes a three-file stack: `Dockerfile` (the existing builder), a
+`.dockerignore`, and a `docker-compose.yml` wiring the app to
+`postgres:16-alpine` + `redis:7-alpine`. `DATABASE_URL` and `REDIS_URL`
+are pre-set so apps that use `sql.open(env("DATABASE_URL"))` or
+`redis.open(env("REDIS_URL"))` connect with zero further config.
+
+The volume `db-data` is named so `docker compose down` does not wipe
+your local data, and the inner ports for db/cache are commented out
+by default so nothing leaks to the host network.
+
+[1.27.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.27.0
+
 ## [1.26.0] — 2026-05-03
 
 ### Added — `mx watch <path> -- <cmd>` (generic file watcher)
