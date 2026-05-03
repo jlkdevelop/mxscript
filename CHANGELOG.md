@@ -4,6 +4,46 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.45.0] — 2026-05-03
+
+### Improved — `mx new api` is now the canonical one-file API showcase
+### Added — automatic `.env` loading on `mx run`
+
+The `api` template was a sketch — list and detail handlers, validation,
+OpenAPI. It now demonstrates every recently-shipped one-file API helper
+in one cohesive ~80-line app:
+
+```mx
+group /api/v1 {
+  use require_api_key                            // api_key_auth() in middleware
+
+  get /users {                                   // paginate() + page_response()
+    let p = paginate(request)
+    ...
+    return json(page_response(items, p, total))
+  }
+
+  get /users/:id {                               // etag() + not_modified()
+    let tag = etag(u)
+    if (request.headers["if-none-match"] == tag) { return not_modified() }
+    return json(u, { headers: { "ETag": tag, "Cache-Control": cache_control({...}) } })
+  }
+
+  post /users/:id/avatar {                       // save_upload() + .ext + size guard
+    let img = request.files?.image
+    let saved = save_upload(img, "./uploads/" + uuid() + img.ext)
+    return json({ url: saved.path, size: saved.size })
+  }
+}
+```
+
+**`mx run` now auto-loads `.env`.** `cp .env.example .env && mx run app.mx`
+just works — no more `set -a; source .env; set +a` shell incantation.
+Real env vars always win, so production deploys aren't surprised. Also
+loads `.env.local` (Next.js convention) for personal overrides.
+
+[1.45.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.45.0
+
 ## [1.44.0] — 2026-05-03
 
 ### Added — `paginate()` + `page_response()` for list endpoints
