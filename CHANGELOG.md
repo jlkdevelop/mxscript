@@ -4,6 +4,51 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.66.0] — 2026-05-03
+
+### Added — `metrics.*` namespace + Prometheus `/metrics` endpoint
+
+- **Three primitives covering 99% of observability needs:**
+
+  ```mx
+  metrics.counter("http_requests_total", 1, { method: "GET", path: "/users" })
+  metrics.gauge("active_connections", connections.length)
+  metrics.histogram("request_latency_seconds", elapsed_seconds, { path: "/users" })
+  ```
+
+- **One-line Prometheus endpoint:**
+
+  ```mx
+  route GET /metrics { return metrics.handler() }
+  ```
+
+  Output is the standard Prometheus text exposition format
+  (openmetrics) — drops into Prometheus, Grafana Cloud,
+  VictoriaMetrics, the Datadog Agent's openmetrics check, Honeycomb's
+  OTel collector, anything else that scrapes.
+
+- **Fixed-bucket histograms** (latency-shaped: 1ms..10s) with
+  cumulative-count emission per Prometheus convention. Each
+  observation also feeds `_sum` and `_count` so quantiles, average
+  latency, and rates work out of the box.
+
+- **Label sets are stable.** Two calls with `{a:1, b:2}` and
+  `{b:2, a:1}` share the same time series (sorted-key fingerprint).
+  Label values are escaped properly for the wire format.
+
+- **Mismatched-kind protection.** Reusing a name as a different type
+  is a programmer error — the original kind is preserved so the
+  `/metrics` output stays valid even when code drifts.
+
+- **9 tests** cover counter accumulation, value override, labels,
+  gauges, histogram bucket math, type lines, response shape, label
+  ordering determinism, and the kind-clash safeguard.
+
+- **`examples/metrics.mx`** — one route per metric type plus the
+  scrape endpoint, in 30 lines. Live-tested end-to-end.
+
+[0.66.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.66.0
+
 ## [0.65.0] — 2026-05-03
 
 ### Added — `stripe.*` payments namespace

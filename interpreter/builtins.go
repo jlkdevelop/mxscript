@@ -380,6 +380,20 @@ func registerBuiltins(i *Interpreter) {
 	def("close_chan", builtinChanClose)
 	def("wait_group", builtinWaitGroup)
 
+	// --- Metrics namespace ---
+	// Prometheus-compatible counters / gauges / histograms with an
+	// auto-rendered exposition handler. Drop into any monitoring
+	// stack that scrapes openmetrics text.
+	metricsNS := NewOrderedMap()
+	metricsNS.Set("counter", FunctionValue(&Function{Name: "metrics.counter", Native: builtinMetricsCounter}))
+	metricsNS.Set("gauge", FunctionValue(&Function{Name: "metrics.gauge", Native: builtinMetricsGauge}))
+	metricsNS.Set("histogram", FunctionValue(&Function{Name: "metrics.histogram", Native: builtinMetricsHistogram}))
+	metricsNS.Set("text", FunctionValue(&Function{Name: "metrics.text", Native: builtinMetricsText}))
+	metricsNS.Set("handler", FunctionValue(&Function{Name: "metrics.handler", Native: builtinMetricsHandler}))
+	metricsNS.Set("reset", FunctionValue(&Function{Name: "metrics.reset", Native: builtinMetricsReset}))
+	g.Set("metrics", ObjectValue(metricsNS))
+	builtinNames["metrics"] = true
+
 	// --- Stripe namespace ---
 	// Thin wrappers over the four Stripe API calls SaaS apps actually
 	// need: checkout sessions, customers, the billing portal, and

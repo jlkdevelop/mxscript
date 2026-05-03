@@ -8,6 +8,9 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.66.0** (2026-05-03)
+  - `metrics.counter` / `gauge` / `histogram` with labels; `metrics.handler()` mounts a Prometheus exposition `/metrics` endpoint
+  - Stable label fingerprinting (insertion-order independent); cumulative-count histograms
 - **v0.65.0** (2026-05-03)
   - `stripe.*` namespace: `checkout`, `customer_create`, `customer_portal`, `subscription_create`
   - `STRIPE_SECRET_KEY` auth, 30s timeouts, `stripeBaseURLFn` test hook

@@ -1,0 +1,44 @@
+// metrics.mx — Prometheus-compatible observability in 30 lines.
+// Run: mx run examples/metrics.mx
+// Visit:  curl http://localhost:8080/metrics
+//
+// Drops into Prometheus, Grafana Cloud, VictoriaMetrics, the Datadog
+// agent's openmetrics check, or anything else that scrapes the
+// standard text exposition format.
+
+server { port: 8080 }
+
+middleware count_request {
+  metrics.counter("http_requests_total", 1, {
+    method: request.method,
+    path: request.path
+  })
+}
+
+route GET / {
+  use count_request
+  return text("hello — see /metrics for stats")
+}
+
+route GET /slow {
+  use count_request
+  let start = now()
+  sleep(50)  // ms
+  let elapsed = (now() - start) / 1000   // seconds
+  metrics.histogram("request_latency_seconds", elapsed, { path: "/slow" })
+  return text("ok")
+}
+
+route GET /active {
+  use count_request
+  metrics.gauge("active_connections", 42)
+  return text("set gauge")
+}
+
+// The /metrics endpoint Prometheus scrapes:
+route GET /metrics {
+  return metrics.handler()
+}
+
+println("metrics demo at http://localhost:8080/")
+println("hit /, /slow, /active, then curl /metrics to see stats")
