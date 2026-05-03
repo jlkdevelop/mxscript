@@ -58,7 +58,7 @@ func (rr *replReader) ReadLine() (string, bool) {
 // Version is bumped at release time. Override at build with:
 //
 //	go build -ldflags "-X main.Version=v0.2.0"
-var Version = "v1.73.0"
+var Version = "v1.74.0"
 
 const (
 	cReset  = "\033[0m"
@@ -5535,6 +5535,25 @@ func cmdBuildVercel(file string) {
 	fmt.Println("  3. git push  (Vercel autodeploys on push)")
 	fmt.Println()
 	fmt.Printf("%sOr deploy directly:%s  vercel deploy --prod\n", cGray, cReset)
+
+	// Heads-up if the user's app reads SQLite at a local-default path.
+	// Vercel functions are stateless, so a `./*.db` file gets discarded
+	// on every cold start. Nudge them toward DATABASE_URL + Postgres.
+	// Catches both the old `sql.open("./app.db")` shape and the new
+	// `sql.open(env("DATABASE_URL") || "./app.db")` shape from v1.68+.
+	if src, err := os.ReadFile(file); err == nil {
+		s := string(src)
+		usesSQLite := strings.Contains(s, `sql.open("./`) ||
+			strings.Contains(s, `sql.open(":memory:`) ||
+			(strings.Contains(s, `sql.open(`) && strings.Contains(s, `"./`) && strings.Contains(s, `.db"`))
+		if usesSQLite {
+			fmt.Println()
+			fmt.Printf("%s⚠%s  Your app reads a local SQLite file. Vercel functions are stateless —\n", cYellow, cReset)
+			fmt.Printf("    point at managed Postgres in production by setting:\n")
+			fmt.Printf("    %sDATABASE_URL%s=postgres://...  in Vercel's project env vars.\n", cCyan, cReset)
+			fmt.Printf("    %sNeon, Supabase, or Vercel Postgres all work — sql.open auto-detects the DSN.%s\n", cGray, cReset)
+		}
+	}
 }
 
 // vercelMainTemplate is the generated Go entrypoint. It embeds the .mx source

@@ -4,6 +4,26 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.74.0] — 2026-05-03
+
+### Improved — `mx build --vercel` warns about SQLite-on-stateless-Vercel
+
+After scaffolding the Vercel project, if the app reads a local
+`./*.db` file (the default in every SQLite-using template), the
+output now ends with:
+
+```
+⚠  Your app reads a local SQLite file. Vercel functions are stateless —
+   point at managed Postgres in production by setting:
+   DATABASE_URL=postgres://...  in Vercel's project env vars.
+   Neon, Supabase, or Vercel Postgres all work — sql.open auto-detects the DSN.
+```
+
+Closes the silent foot-gun where users `mx build --vercel && git push`
+and then can't figure out why their data keeps disappearing.
+
+[1.74.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.74.0
+
 ## [1.73.0] — 2026-05-03
 
 ### Fixed — TextMate grammar didn't highlight v1.35-v1.37 operators
