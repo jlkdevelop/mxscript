@@ -165,6 +165,17 @@ func registerBuiltins(i *Interpreter) {
 	arrNS.Set("range", FunctionValue(&Function{Name: "arr.range", Native: builtinRange}))
 	g.Set("arr", ObjectValue(arrNS))
 	builtinNames["arr"] = true
+
+	// vault.* — encrypted secrets store backed by .vault.json.
+	// AES-256-GCM with a master key from MX_VAULT_KEY env. Lets users
+	// commit secrets to source control without leaking values.
+	vaultNS := NewOrderedMap()
+	vaultNS.Set("get", FunctionValue(&Function{Name: "vault.get", Native: builtinVaultGet}))
+	vaultNS.Set("set", FunctionValue(&Function{Name: "vault.set", Native: builtinVaultSet}))
+	vaultNS.Set("list", FunctionValue(&Function{Name: "vault.list", Native: builtinVaultList}))
+	vaultNS.Set("delete", FunctionValue(&Function{Name: "vault.delete", Native: builtinVaultDelete}))
+	g.Set("vault", ObjectValue(vaultNS))
+	builtinNames["vault"] = true
 	def("slug", builtinSlug)
 	def("markdown", builtinMarkdown)
 

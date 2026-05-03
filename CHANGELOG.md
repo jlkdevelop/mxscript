@@ -4,6 +4,43 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.97.0] — 2026-05-03
+
+### Added — `vault.*` (encrypted secrets store)
+
+Lets users keep per-environment secrets out of the binary + out of
+plaintext `.env` files. Secrets are AES-256-GCM encrypted at rest
+with a single master key from `MX_VAULT_KEY`, so the resulting
+`.vault.json` is safe to commit to source control.
+
+```bash
+# bootstrap once
+export MX_VAULT_KEY=$(openssl rand -hex 32)
+mx run --eval 'vault.set("stripe_key", "sk_test_xyz")'
+mx run --eval 'vault.set("openai_key", env("OPENAI_API_KEY"))'
+git add .vault.json && git commit
+```
+
+```mx
+// app.mx — read at runtime, decrypted on access
+let stripe = vault.get("stripe_key")
+let openai = vault.get("openai_key")
+```
+
+- **`vault.get(key)`** — decrypt + return. GCM auth-tag failure
+  produces a clear "wrong key?" error instead of returning garbage.
+- **`vault.set(key, value)`** — encrypt + persist. Each value is its
+  own ciphertext so adding a new secret doesn't re-encrypt the
+  whole file.
+- **`vault.list()`** — keys only; values never touch the response.
+- **`vault.delete(key)`** — remove + re-save.
+- **6 tests** including: round trip, encrypted-at-rest assertion
+  (plaintext value must NOT appear in the on-disk file), missing
+  master-key error, wrong-key decrypt failure, list+delete, and
+  the 32-byte master-key validation.
+
+[0.97.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.97.0
+
 ## [0.96.0] — 2026-05-03
 
 ### Added — `arr.*` namespace (mirrors `str.*`)
