@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -384,6 +385,31 @@ func diagnosticFor(line, col int, msg string) map[string]any {
 
 // ===== Builtin signatures (for hover + completion) =====
 
+// LookupDoc returns the signature and summary for a known builtin
+// or namespace key (e.g. "json_stringify", "ai.complete"). Returns
+// "", "", false when the name isn't in the curated docs table —
+// callers can then decide whether to suggest something close or to
+// print a generic "no docs" message.
+func LookupDoc(name string) (sig, summary string, ok bool) {
+	d, found := builtinDocs[name]
+	if !found {
+		return "", "", false
+	}
+	return d.Signature, d.Summary, true
+}
+
+// AllDocNames returns every name in the curated docs table, sorted.
+// Used by `mx help` listing mode and `mx help <topic>`'s "did you
+// mean" hint when the topic isn't found exactly.
+func AllDocNames() []string {
+	names := make([]string, 0, len(builtinDocs))
+	for k := range builtinDocs {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	return names
+}
+
 type builtinDoc struct {
 	Signature string
 	Summary   string
@@ -516,8 +542,41 @@ var builtinDocs = map[string]builtinDoc{
 	"metrics.handler":            {"metrics.handler() -> response", "Returns a Response for /metrics in Prometheus exposition format."},
 	"metrics.text":               {"metrics.text() -> string", "Render the registry as Prometheus exposition text."},
 	"metrics.reset":              {"metrics.reset()", "Clear every metric. Test-only."},
+	"ai.complete":                {"ai.complete(prompt, opts?) -> string|object", "LLM completion across 10 providers. opts: provider, model, max_tokens, tools, messages."},
+	"ai.stream":                  {"ai.stream(prompt, on_chunk, opts?) -> string", "Stream tokens to a callback. Same providers as ai.complete."},
+	"ai.embed":                   {"ai.embed(text) -> array", "OpenAI text-embedding-3-small (vector of 1536 floats)."},
+	"ai.similarity":              {"ai.similarity(a, b) -> number", "Cosine similarity between two embedding vectors."},
+	"ai.vision":                  {"ai.vision(prompt, images, opts?) -> string", "Multimodal image+text. images: array of URLs or data: base64."},
 	"ai.image":                   {"ai.image(prompt, opts?) -> { url, b64 }", "DALL-E image generation. opts: model, size, quality, format."},
 	"ai.transcribe":              {"ai.transcribe(audio_path, opts?) -> string", "OpenAI Whisper speech-to-text. opts: model, language."},
+	"jwt.sign":                   {"jwt.sign(claims, secret) -> string", "HS256-signed JWT."},
+	"jwt.verify":                 {"jwt.verify(token, secret) -> object|null", "Returns claims, or null if signature/expiry invalid."},
+	"sql.open":                   {"sql.open(dsn) -> handle", "Open SQLite/Postgres/MySQL by DSN scheme detection."},
+	"sql.exec":                   {"sql.exec(db, query, ...args) -> { rows_affected, last_insert_id }", "INSERT / UPDATE / DELETE / DDL."},
+	"sql.query":                  {"sql.query(db, query, ...args) -> array", "SELECT — array of objects keyed by column name."},
+	"sql.query_one":              {"sql.query_one(db, query, ...args) -> object|null", "First row, or null."},
+	"sql.transaction":            {"sql.transaction(db, fn(tx) { ... })", "Auto-commit on return; auto-rollback on throw."},
+	"sql.migrate":                {"sql.migrate(db, [migrations]) -> { applied, skipped }", "Hash-tracked schema migrations."},
+	"redis.connect":              {"redis.connect(dsn) -> handle", "Open a Redis connection (e.g. redis://localhost:6379/0)."},
+	"redis.get":                  {"redis.get(r, key) -> string|null", ""},
+	"redis.set":                  {"redis.set(r, key, value, opts?)", "opts.ttl_seconds for expiring keys."},
+	"redis.incr":                 {"redis.incr(r, key) -> number", "Atomic increment by 1."},
+	"redis.publish":              {"redis.publish(r, channel, message)", ""},
+	"oauth.authorize_url":        {"oauth.authorize_url(opts) -> string", "Build the consent URL for one of: google, github, discord, linkedin, microsoft."},
+	"oauth.exchange":             {"oauth.exchange(code, opts) -> object", "Trade an auth code for an access token."},
+	"oauth.userinfo":             {"oauth.userinfo(token, opts) -> object", "Profile lookup at the provider's userinfo endpoint."},
+	"password.hash":              {"password.hash(plain) -> string", "PBKDF2-SHA256 hash with salt baked in."},
+	"password.verify":            {"password.verify(plain, hashed) -> bool", "Constant-time comparison."},
+	"password.hash_argon2":       {"password.hash_argon2(plain) -> string", "Argon2id (RFC 9106) — recommended for new apps."},
+	"password.verify_argon2":     {"password.verify_argon2(plain, hashed) -> bool", ""},
+	"session.create":             {"session.create(secret, claims, opts?) -> response", "Set-Cookie with a signed session value. opts: max_age_seconds, http_only, secure, same_site."},
+	"session.read":               {"session.read(request, secret) -> object|null", ""},
+	"session.clear":              {"session.clear() -> response", "Set-Cookie with Max-Age=0 to remove the session."},
+	"queue.enqueue":              {"queue.enqueue(payload, opts?)", "Enqueue a durable job. opts: delay_seconds."},
+	"queue.process":              {"queue.process(workers?, fn(payload))", "Start N workers; fn runs per job."},
+	"queue.close":                {"queue.close()", ""},
+	"queue.stats":                {"queue.stats() -> object", "{ pending, running, done, failed } counts."},
+	"pubsub.topic":                {"pubsub.topic() -> { subscribe, publish, count }", "In-process pub/sub channel."},
 	"id.uuid":                    {"id.uuid() -> string", "RFC 4122 v4 UUID."},
 	"id.ulid":                    {"id.ulid() -> string", "ULID — Crockford-base32, 26 chars, time-sortable."},
 	"id.nanoid":                  {"id.nanoid(n?) -> string", "URL-safe random string. Default 21 chars."},

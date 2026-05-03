@@ -4,6 +4,56 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.84.0] — 2026-05-03
+
+### Added — `mx help <topic>` and `mx docs` (built-in docs viewer)
+
+```
+$ mx help ai.complete
+
+  ai.complete(prompt, opts?) -> string|object
+
+  LLM completion across 10 providers. opts: provider, model, max_tokens, tools, messages.
+
+$ mx help json_strngify
+no docs for "json_strngify" (did you mean "json_stringify"?)
+
+$ mx docs
+Builtins (201):
+
+  ai.*
+    ai.complete(prompt, opts?) -> string|object
+    ai.embed(text) -> array
+    ai.image(prompt, opts?) -> { url, b64 }
+    ...
+
+  stripe.*
+    stripe.checkout(price_id, opts?) -> { url, id }
+    stripe.customer_create(email, opts?) -> { id, email }
+    ...
+
+  (top-level)
+    fetch(url, opts?) -> { status, headers, body, text }
+    json_stringify(value, pretty?) -> string
+    ...
+```
+
+- **`mx help <topic>`** prints the curated signature + summary for
+  any builtin or namespace key. Powered by the same description
+  table the LSP uses for hover, so docs stay in sync.
+- **`mx docs`** (alias `mx help` with no args) lists everything
+  grouped by namespace prefix — `ai.*`, `stripe.*`, `time.*`, etc. —
+  so you can scan the whole stdlib in one screen.
+- **Typo suggestions.** `mx help json_strngify` triggers a
+  Levenshtein-2 close-match probe and suggests the right name.
+- **35 new namespace doc entries** filled in: `ai.complete`,
+  `ai.stream`, `ai.embed`, `ai.vision`, `ai.similarity`, `jwt.*`,
+  `sql.*`, `redis.*`, `oauth.*`, `password.*`, `session.*`,
+  `queue.*`, `pubsub.*`. Round trips through `mx help` for every
+  major namespace.
+
+[0.84.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.84.0
+
 ## [0.83.0] — 2026-05-03
 
 ### Added — `image.thumbnail` + `image.crop` + `mx new --list`

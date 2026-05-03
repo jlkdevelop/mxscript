@@ -57,7 +57,7 @@ func (rr *replReader) ReadLine() (string, bool) {
 // Version is bumped at release time. Override at build with:
 //
 //	go build -ldflags "-X main.Version=v0.2.0"
-var Version = "v0.83.0"
+var Version = "v0.84.0"
 
 const (
 	cReset  = "\033[0m"
@@ -122,7 +122,19 @@ func main() {
 	case "version", "-v", "--version":
 		fmt.Println("MX Script", Version)
 	case "help", "-h", "--help":
+		if len(args) > 0 {
+			cmdHelpTopic(args[0])
+			return
+		}
 		printHelp()
+	case "docs":
+		// `mx docs` lists all builtins by namespace; `mx docs <topic>`
+		// shows the entry for one. Easier to remember than `help`.
+		topic := ""
+		if len(args) > 0 {
+			topic = args[0]
+		}
+		cmdHelpTopic(topic)
 	default:
 		fmt.Fprintf(os.Stderr, "%sunknown command:%s %s\n\n", cRed, cReset, cmd)
 		printHelp()
@@ -157,6 +169,8 @@ func printHelp() {
 	fmt.Println("  pkg <init|add|list|update|remove|install> [args]")
 	fmt.Println("  serve [dir] [--port N]  Static file server (defaults to . on :8080)")
 	fmt.Println("  ci init [github|gitlab]  Scaffold a CI workflow that lints, checks, and tests")
+	fmt.Println("  help [topic]            Show built-in docs for a function (e.g. mx help ai.complete)")
+	fmt.Println("  docs [topic]            Alias for `help`")
 	fmt.Println("  version               Print version and exit")
 	fmt.Println("  help                  Show this help")
 	fmt.Println()
@@ -1648,6 +1662,118 @@ func mustAbs(p string) string {
 		return p
 	}
 	return abs
+}
+
+// ===== mx help <topic> / mx docs <topic> =====
+
+// cmdHelpTopic prints the curated doc entry for a single builtin.
+// Usage:
+//
+//	mx help json_stringify
+//	mx help ai.complete
+//	mx help              # listing mode
+//
+// Listing mode (no topic / empty string) groups by namespace prefix
+// so `ai.*`, `stripe.*`, etc. are easy to scan.
+func cmdHelpTopic(topic string) {
+	if topic == "" {
+		names := lsp.AllDocNames()
+		fmt.Printf("\n%sBuiltins (%d):%s\n\n", cBold, len(names), cReset)
+		// Group by `<namespace>.*` prefix so the output reads like a
+		// table of contents.
+		groups := map[string][]string{}
+		for _, n := range names {
+			ns := "(top-level)"
+			if dot := strings.IndexByte(n, '.'); dot >= 0 {
+				ns = n[:dot] + ".*"
+			}
+			groups[ns] = append(groups[ns], n)
+		}
+		keys := make([]string, 0, len(groups))
+		for k := range groups {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		// Push "(top-level)" to the bottom so namespaces show first.
+		for k := range keys {
+			if keys[k] == "(top-level)" {
+				keys = append(keys[:k], keys[k+1:]...)
+				keys = append(keys, "(top-level)")
+				break
+			}
+		}
+		for _, ns := range keys {
+			fmt.Printf("  %s%s%s\n", cCyan, ns, cReset)
+			for _, n := range groups[ns] {
+				sig, _, _ := lsp.LookupDoc(n)
+				fmt.Printf("    %s\n", sig)
+			}
+			fmt.Println()
+		}
+		fmt.Printf("Use: %smx help <name>%s for details on any one.\n\n", cGreen, cReset)
+		return
+	}
+	if sig, summary, ok := lsp.LookupDoc(topic); ok {
+		fmt.Printf("\n  %s%s%s\n\n  %s\n\n", cBold, sig, cReset, summary)
+		return
+	}
+	// Topic not found — try to suggest a close one.
+	hint := ""
+	bestDist := 3
+	for _, n := range lsp.AllDocNames() {
+		d := levenshteinHelp(topic, n)
+		if d < bestDist {
+			bestDist = d
+			hint = n
+		}
+	}
+	if hint != "" {
+		fmt.Fprintf(os.Stderr, "%sno docs for %q (did you mean %q?)%s\n", cRed, topic, hint, cReset)
+	} else {
+		fmt.Fprintf(os.Stderr, "%sno docs for %q%s — try 'mx help' for the full list\n", cRed, topic, cReset)
+	}
+	os.Exit(1)
+}
+
+// levenshteinHelp is a tiny edit-distance helper used to suggest
+// near-matches in `mx help <topic>`. Doesn't need to be fast — we
+// only run it on the doc-table miss path.
+func levenshteinHelp(a, b string) int {
+	if a == b {
+		return 0
+	}
+	la := []rune(strings.ToLower(a))
+	lb := []rune(strings.ToLower(b))
+	prev := make([]int, len(lb)+1)
+	cur := make([]int, len(lb)+1)
+	for j := range prev {
+		prev[j] = j
+	}
+	for i := 1; i <= len(la); i++ {
+		cur[0] = i
+		for j := 1; j <= len(lb); j++ {
+			cost := 1
+			if la[i-1] == lb[j-1] {
+				cost = 0
+			}
+			cur[j] = min3(cur[j-1]+1, prev[j]+1, prev[j-1]+cost)
+		}
+		prev, cur = cur, prev
+	}
+	return prev[len(lb)]
+}
+
+func min3(a, b, c int) int {
+	if a < b {
+		if a < c {
+			return a
+		}
+		return c
+	}
+	if b < c {
+		return b
+	}
+	return c
 }
 
 // ===== mx ci =====

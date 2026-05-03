@@ -8,6 +8,9 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.84.0** (2026-05-03)
+  - `mx help <topic>` and `mx docs` — terminal-native docs viewer for all 201 builtins
+  - 35+ namespace doc entries filled in (`ai.complete`, `sql.*`, `redis.*`, `oauth.*`, `password.*`, `session.*`, `queue.*`, etc.)
 - **v0.83.0** (2026-05-03)
   - `image.thumbnail(bytes, max_size)` — aspect-preserving fit into a square; `image.crop(bytes, x, y, w, h)`
   - `mx new --list` enumerates templates with their descriptions
