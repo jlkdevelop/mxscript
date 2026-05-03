@@ -4,6 +4,33 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.4.0] — 2026-05-03
+
+### Added — `sh.*` shell helpers
+
+```mx
+// Just want the exit code?
+if (sh.run("git", ["diff", "--quiet"]) != 0) { ... }
+
+// Just want stdout? Throws on non-zero exit.
+let count = sh.output("git", ["log", "--oneline"])
+
+// Pipelines and conditionals via bash:
+let py_files = sh.bash("find . -name '*.py' | wc -l").stdout
+
+// Capability check: is ffmpeg installed?
+if (sh.which("ffmpeg") == null) {
+  return error("ffmpeg required for video processing")
+}
+```
+
+Three thin wrappers + one path lookup, all delegating to the
+existing `shell()` builtin so they share env / dir / timeout / stdin
+opts. Picked `sh.*` instead of `shell.*` because the bare callable
+`shell()` stays for back-compat.
+
+[1.4.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.4.0
+
 ## [1.3.0] — 2026-05-03
 
 ### Added — LSP go-to-definition + find-references + document symbols

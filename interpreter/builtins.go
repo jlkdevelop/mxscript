@@ -195,6 +195,17 @@ func registerBuiltins(i *Interpreter) {
 	cryptoNS.Set("verify_cookie", FunctionValue(&Function{Name: "crypto.verify_cookie", Native: builtinVerifyCookie}))
 	g.Set("crypto", ObjectValue(cryptoNS))
 	builtinNames["crypto"] = true
+
+	// sh.* — ergonomic wrappers around the bare shell() builtin.
+	// We use sh.* (not shell.*) because shell() itself stays a
+	// top-level callable for back-compat.
+	shNS := NewOrderedMap()
+	shNS.Set("run", FunctionValue(&Function{Name: "sh.run", Native: builtinShellRun}))
+	shNS.Set("output", FunctionValue(&Function{Name: "sh.output", Native: builtinShellOutput}))
+	shNS.Set("bash", FunctionValue(&Function{Name: "sh.bash", Native: builtinShellBash}))
+	shNS.Set("which", FunctionValue(&Function{Name: "sh.which", Native: builtinShellWhich}))
+	g.Set("sh", ObjectValue(shNS))
+	builtinNames["sh"] = true
 	def("slug", builtinSlug)
 	def("markdown", builtinMarkdown)
 
