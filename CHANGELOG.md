@@ -4,6 +4,64 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.89.0] — 2026-05-03
+
+### Added — `graphql.handler(resolvers)` (minimal GraphQL)
+
+Hand-rolled GraphQL parser + executor. Apollo / urql / Relay clients
+that POST `{ query, variables }` to a route handler get the standard
+`{ data, errors }` envelope back.
+
+```mx
+let handler = graphql.handler({
+  Query: {
+    user: fn(args, ctx) {
+      return sql.query_one(db, "SELECT * FROM users WHERE id = ?", args.id)
+    },
+    users: fn(args, ctx) {
+      return sql.query(db, "SELECT * FROM users LIMIT ?", args.limit ?? 50)
+    }
+  },
+  Mutation: {
+    create_user: fn(args, ctx) {
+      let r = sql.exec(db, "INSERT INTO users (name) VALUES (?)", args.name)
+      return { id: r.last_insert_id, name: args.name }
+    }
+  },
+  User: {
+    posts: fn(parent, args, ctx) {
+      return sql.query(db, "SELECT * FROM posts WHERE user_id = ?", parent.id)
+    }
+  }
+})
+
+post /graphql { return handler(request.body) }
+```
+
+Supported:
+- `query` and `mutation` operations
+- Fields with arguments (numbers, strings, bools, nulls, arrays, objects, enums)
+- Nested selection sets walked through resolvers per type
+- **Variables**: `query Q($id: Int!) { user(id: $id) { name } }` with the
+  `variables` payload bound at runtime
+- **Aliases**: `current: me { name }`
+- Type-keyed resolvers triggered by `__typename` on the parent value
+- Apollo-style `{ data, errors }` response envelope; parse errors land
+  in `errors[].message` so the client can display them
+
+Skipped (deliberate; "minimal" not "complete"):
+- Fragments, interfaces, unions, directives
+- Introspection (`__schema`, `__type`)
+- Subscriptions
+- Schema validation against an SDL — types are duck-typed
+
+7 tests cover query parsing (named + anonymous), mutation parsing,
+aliases, end-to-end execution including nested array-of-objects
+resolution, missing-resolver behavior (returns null per Apollo
+convention), variables substitution, and the parse-error envelope.
+
+[0.89.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.89.0
+
 ## [0.88.0] — 2026-05-03
 
 ### Added — `health.*` (k8s-flavoured liveness / readiness probes)

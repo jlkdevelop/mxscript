@@ -168,6 +168,13 @@ func registerBuiltins(i *Interpreter) {
 	healthNS.Set("ready", FunctionValue(&Function{Name: "health.ready", Native: builtinHealthReady}))
 	g.Set("health", ObjectValue(healthNS))
 	builtinNames["health"] = true
+
+	// graphql.* — minimal GraphQL handler. Take the resolvers object,
+	// dispatch incoming queries / mutations.
+	graphqlNS := NewOrderedMap()
+	graphqlNS.Set("handler", FunctionValue(&Function{Name: "graphql.handler", Native: builtinGraphQLHandler}))
+	g.Set("graphql", ObjectValue(graphqlNS))
+	builtinNames["graphql"] = true
 	def("random_string", builtinRandomString)
 	def("random_bytes", builtinRandomBytes)
 	def("base32_encode", builtinBase32Encode)
