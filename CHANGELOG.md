@@ -4,6 +4,40 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.90.0] — 2026-05-03
+
+### Added — `debug.*` (assert / invariant / unreachable / trace / dump)
+
+```mx
+debug.assert(user.subscribed, "user must be on the pro plan here")
+debug.invariant(claims.exp > now() / 1000, "JWT expired before validation")
+debug.unreachable("match arm should be exhaustive")
+
+let result = debug.trace("expensive_query", fn() {
+  return sql.query(db, "SELECT * FROM big_table")
+})
+// → [trace] expensive_query: 12.4ms
+
+debug.dump(user, "user before save")
+// → user before save = { id: 1, name: "Jassim", ... }
+```
+
+- **`assert` and `invariant` return the cond unchanged on success** so
+  they compose inside expressions: `let user = debug.assert(load(id))`
+  asserts the load returned non-null and binds the result.
+- **`unreachable` always throws** — use to mark match arms or
+  branches that should be impossible so future readers know they're
+  intentional dead-ends.
+- **`trace` is a throwaway profiler.** Wraps a fn(), logs elapsed
+  time to stderr, returns whatever fn returned.
+- **`dump` is `pp` with an optional label** so you can sprinkle it
+  through long pipelines without losing context.
+
+All five throw normal errors (not `os.Exit`) so try/catch around
+them works naturally.
+
+[0.90.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.90.0
+
 ## [0.89.0] — 2026-05-03
 
 ### Added — `graphql.handler(resolvers)` (minimal GraphQL)

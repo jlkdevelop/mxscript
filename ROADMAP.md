@@ -8,6 +8,8 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.90.0** (2026-05-03)
+  - `debug.*` — `assert` / `invariant` / `unreachable` / `trace` / `dump`
 - **v0.89.0** (2026-05-03)
   - `graphql.handler(resolvers)` — minimal GraphQL with queries, mutations, variables, aliases, type-keyed resolvers, Apollo `{ data, errors }` envelope
 - **v0.88.0** (2026-05-03)

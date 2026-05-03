@@ -175,6 +175,16 @@ func registerBuiltins(i *Interpreter) {
 	graphqlNS.Set("handler", FunctionValue(&Function{Name: "graphql.handler", Native: builtinGraphQLHandler}))
 	g.Set("graphql", ObjectValue(graphqlNS))
 	builtinNames["graphql"] = true
+
+	// debug.* — assertions, tracing, and quick inspection helpers.
+	debugNS := NewOrderedMap()
+	debugNS.Set("assert", FunctionValue(&Function{Name: "debug.assert", Native: builtinDebugAssert}))
+	debugNS.Set("invariant", FunctionValue(&Function{Name: "debug.invariant", Native: builtinDebugInvariant}))
+	debugNS.Set("unreachable", FunctionValue(&Function{Name: "debug.unreachable", Native: builtinDebugUnreachable}))
+	debugNS.Set("trace", FunctionValue(&Function{Name: "debug.trace", Native: builtinDebugTrace}))
+	debugNS.Set("dump", FunctionValue(&Function{Name: "debug.dump", Native: builtinDebugDump}))
+	g.Set("debug", ObjectValue(debugNS))
+	builtinNames["debug"] = true
 	def("random_string", builtinRandomString)
 	def("random_bytes", builtinRandomBytes)
 	def("base32_encode", builtinBase32Encode)
