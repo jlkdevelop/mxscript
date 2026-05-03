@@ -29,20 +29,21 @@ fn broadcast(msg) {
 }
 
 post /login {
-  let body = request.body
-  if (body == null || body.username == null || len(body.username) < 2) {
-    return status(400, { error: "username must be at least 2 chars" })
-  }
-  return session.create({ username: body.username }, {
-    secret: env("CHAT_SECRET", "dev-secret"),
+  let r = body_validate(request, {
+    type: "object", required: ["username"],
+    properties: { username: { type: "string", min_length: 2 } }
+  })
+  if (!r.ok) { return r.response }
+  return session.create({ username: r.body.username }, {
+    secret:  env("CHAT_SECRET") || "dev-secret",
     max_age: 86400
   })
 }
 
-post /logout { return session.clear() }
+post /logout { return session.destroy() }
 
 ws /chat {
-  let claims = session.read(request, env("CHAT_SECRET", "dev-secret"))
+  let claims = session.read(request, env("CHAT_SECRET") || "dev-secret")
   if (claims == null) {
     close(4001, "login first")
     return
@@ -50,7 +51,7 @@ ws /chat {
   let username = claims.username
 
   // Register this client's send fn so other routes can push to them.
-  clients = push(clients, send)
+  clients = arr.push(clients, send)
   broadcast(json_stringify({ type: "join", username: username, time: now_iso() }))
 
   while (true) {
@@ -67,7 +68,7 @@ ws /chat {
   }
 
   // De-register on disconnect.
-  clients = filter(clients, fn(c) { return c != send })
+  clients = arr.filter(clients, fn(c) { return c != send })
   broadcast(json_stringify({ type: "leave", username: username, time: now_iso() }))
 }
 

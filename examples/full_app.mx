@@ -1,150 +1,174 @@
-// full_app.mx — kitchen-sink showcase. Demonstrates roughly half the
-// language in one file. Use it as a reference, copy fragments, or
-// `mx run examples/full_app.mx` to see everything wired together.
+// full_app.mx — kitchen-sink showcase. One file. Real auth + DB + AI +
+// SSE + OpenAPI, written with the v1.41+ MX one-file-API toolkit so
+// every endpoint reads what it does.
+//
+// Run:    mx run examples/full_app.mx
+// Try:    curl -X POST :8080/auth/signup -H 'Content-Type: application/json' \
+//             -d '{"name":"Ada","email":"ada@example.com","password":"long-password"}'
 
 server {
-  port: num(env("PORT", "8080")),
-  log: true,
+  port:        num(env("PORT") || "8080"),
+  log:         true,
   compression: true,
-  rate_limit: { requests: 120, per: "1m" },
-  cors: { origins: ["*"], methods: ["GET", "POST", "PUT", "DELETE"] },
-  max_body: "5MB"
+  rate_limit:  { requests: 120, per: "1m" },
+  cors:        { origins: ["*"], methods: ["GET", "POST", "PUT", "DELETE"] },
+  max_body:    "5MB"
 }
 
-let db = sql.open(env("DATABASE_URL", "./full_app.db"))
+let JWT_SECRET = env("JWT_SECRET") || "dev-secret-please-replace"
+
+let db = sql.open(env("DATABASE_URL") || "./full_app.db")
 sql.migrate(db, [
-  "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, created_at TEXT NOT NULL)",
-  "CREATE TABLE IF NOT EXISTS posts (id INTEGER PRIMARY KEY, user_id INTEGER, title TEXT, body TEXT, created_at TEXT)"
+  "CREATE TABLE IF NOT EXISTS users (
+     id INTEGER PRIMARY KEY,
+     name TEXT NOT NULL,
+     email TEXT UNIQUE NOT NULL,
+     password_hash TEXT NOT NULL,
+     created_at TEXT NOT NULL
+   )",
+  "CREATE TABLE IF NOT EXISTS posts (
+     id INTEGER PRIMARY KEY,
+     user_id INTEGER NOT NULL,
+     title TEXT NOT NULL,
+     body TEXT NOT NULL,
+     created_at TEXT NOT NULL
+   )"
 ])
 
-let SESSION_SECRET = env("SESSION_SECRET", "dev-secret-please-replace")
-let JWT_SECRET     = env("JWT_SECRET",     "dev-secret-please-replace")
-
-// ===== Schemas (validate() inputs) =====
-
-let signup_schema = {
-  type: "object",
-  required: ["name", "email", "password"],
-  properties: {
-    name:     { type: "string", min_length: 2, max_length: 60 },
-    email:    { type: "string", format: "email" },
-    password: { type: "string", min_length: 8 }
-  }
-}
-
-let post_schema = {
-  type: "object",
-  required: ["title", "body"],
-  properties: {
-    title: { type: "string", min_length: 3, max_length: 120 },
-    body:  { type: "string", min_length: 1 }
-  }
-}
-
-// ===== Middlewares =====
+// ---------- Middlewares ----------
 
 middleware require_auth {
   let claims = jwt.verify(request.bearer_token, JWT_SECRET)
-  if (claims == null) { return status(401, { error: "unauthorized" }) }
+  if (claims == null) { return problem(401, "Unauthorized") }
 }
 
-// ===== Auth endpoints =====
+// ---------- Auth ----------
 
 post /auth/signup {
-  let r = validate(request.body, signup_schema)
-  if (!r.valid) { return status(400, { errors: r.errors }) }
-  let body = request.body
+  let r = body_validate(request, {
+    type: "object", required: ["name", "email", "password"],
+    properties: {
+      name:     { type: "string", min_length: 2, max_length: 60 },
+      email:    { type: "string", format: "email" },
+      password: { type: "string", min_length: 8 }
+    }
+  })
+  if (!r.ok) { return r.response }
 
-  let existing = sql.query_one(db, "SELECT id FROM users WHERE email = ?", body.email)
-  if (existing != null) { return status(409, { error: "email already taken" }) }
-
-  let res = sql.exec(db,
-    "INSERT INTO users (name, email, password_hash, created_at) VALUES (?, ?, ?, ?)",
-    body.name, body.email, password.hash(body.password), now_iso())
-
-  let token = jwt.sign({ sub: res.last_insert_id, exp: now() / 1000 + 86400 }, JWT_SECRET)
-  return json({ id: res.last_insert_id, token: token })
+  if (sql.exists(db, "users", { email: r.body.email })) {
+    return problem(409, "Email already in use")
+  }
+  let id = sql.insert(db, "users", {
+    name:          r.body.name,
+    email:         r.body.email,
+    password_hash: password.hash(r.body.password),
+    created_at:    now_iso()
+  }).last_insert_id
+  let token = jwt.sign({ sub: id, exp: now() / 1000 + 86400 }, JWT_SECRET)
+  return status(201, { id: id, token: token })
 }
 
 post /auth/login {
-  let body = request.body
-  if (body?.email == null || body?.password == null) {
-    return status(400, { error: "email and password required" })
-  }
-  let user = sql.query_one(db, "SELECT * FROM users WHERE email = ?", body.email)
-  if (user == null || !password.verify(body.password, user.password_hash)) {
-    return status(401, { error: "bad credentials" })
+  let r = body_validate(request, {
+    type: "object", required: ["email", "password"],
+    properties: {
+      email:    { type: "string", format: "email" },
+      password: { type: "string", min_length: 1 }
+    }
+  })
+  if (!r.ok) { return r.response }
+
+  let user = sql.find_one(db, "users", { email: r.body.email })
+  if (user == null || !password.verify(r.body.password, user.password_hash)) {
+    return problem(401, "Bad credentials")
   }
   let token = jwt.sign({ sub: user.id, exp: now() / 1000 + 86400 }, JWT_SECRET)
   return json({ id: user.id, name: user.name, token: token })
 }
 
-// ===== API v1, all auth-required =====
+// ---------- API v1 (auth-required, paginated, ETag-cached) ----------
 
 group /api/v1 {
   use require_auth
 
   get /me {
     let claims = jwt.verify(request.bearer_token, JWT_SECRET)
-    let user = sql.query_one(db, "SELECT id, name, email FROM users WHERE id = ?", claims.sub)
-    return json(user)
+    let user   = sql.find_one(db, "users", { id: claims.sub }, { columns: ["id", "name", "email"] })
+    let tag    = etag(user)
+    if (request.headers["if-none-match"] == tag) { return not_modified() }
+    return json(user, { headers: { "ETag": tag, "Cache-Control": cache_control({ private: true, max_age: 60 }) } })
   }
 
   get /posts {
-    let posts = sql.query(db,
-      "SELECT id, user_id, title, body, created_at FROM posts ORDER BY id DESC LIMIT 50")
-    return json(posts)
+    let p     = paginate(request)
+    let total = sql.count(db, "posts", {})
+    let items = sql.find(db, "posts", {}, { order: "id DESC", limit: p.limit, offset: p.offset })
+    return json(page_response(items, p, total))
   }
 
   post /posts {
-    let r = validate(request.body, post_schema)
-    if (!r.valid) { return status(400, { errors: r.errors }) }
+    let r = body_validate(request, {
+      type: "object", required: ["title", "body"],
+      properties: {
+        title: { type: "string", min_length: 3, max_length: 120 },
+        body:  { type: "string", min_length: 1 }
+      }
+    })
+    if (!r.ok) { return r.response }
     let claims = jwt.verify(request.bearer_token, JWT_SECRET)
-    let res = sql.exec(db,
-      "INSERT INTO posts (user_id, title, body, created_at) VALUES (?, ?, ?, ?)",
-      claims.sub, request.body.title, request.body.body, now_iso())
-    return status(201, { id: res.last_insert_id })
+    let id = sql.insert(db, "posts", {
+      user_id:    claims.sub,
+      title:      r.body.title,
+      body:       r.body.body,
+      created_at: now_iso()
+    }).last_insert_id
+    return status(201, { id: id })
   }
 
   delete /posts/:id {
     let claims = jwt.verify(request.bearer_token, JWT_SECRET)
-    let id = num(request.params.id)
-    sql.exec(db, "DELETE FROM posts WHERE id = ? AND user_id = ?", id, claims.sub)
-    return json({ deleted: id })
+    let res = sql.delete(db, "posts", { id: num(request.params.id), user_id: claims.sub })
+    if (res.rows_affected == 0) { return problem(404, "Post not found or not yours") }
+    return json({ deleted: request.params.id })
   }
-}
 
-// ===== AI: summarise the latest posts =====
+  post /ai/summarize {
+    let posts = sql.find(db, "posts", {}, { order: "id DESC", limit: 5 })
+    if (len(posts) == 0) { return json({ summary: "no posts yet" }) }
+    let prompt = "Summarize these blog posts in two sentences: " + json_stringify(posts)
+    return json({ summary: ai.complete(prompt, { max_tokens: 200 }) })
+  }
 
-post /api/v1/ai/summarise {
-  use require_auth
-  let posts = sql.query(db, "SELECT title, body FROM posts ORDER BY id DESC LIMIT 5")
-  if (len(posts) == 0) { return json({ summary: "no posts yet" }) }
-  let prompt = "Summarise these blog posts in two sentences: " + json_stringify(posts)
-  return json({ summary: ai.complete(prompt, { max_tokens: 200 }) })
-}
-
-// ===== Real-time: stream the live post feed via SSE =====
-
-sse /api/v1/feed {
-  use require_auth
-  let last = 0
-  while (true) {
-    let posts = sql.query(db, "SELECT * FROM posts WHERE id > ? ORDER BY id", last)
-    loop posts as p {
-      send(p)
-      last = p.id
+  // ---------- Real-time: stream the live post feed via SSE ----------
+  sse /feed {
+    let last = 0
+    while (true) {
+      let posts = sql.query(db, "SELECT * FROM posts WHERE id > ? ORDER BY id", last)
+      loop posts as p {
+        send(p)
+        last = p.id
+      }
+      sleep(2000)
     }
-    sleep(2000)
   }
 }
 
-// ===== Public docs / status =====
+// ---------- Public surface ----------
 
 get /openapi.json { return json(openapi({ title: "Full App API", version: "1.0.0" })) }
-get /docs        { return swagger_ui("/openapi.json") }
-get /status      { return status_page({ app: "Full App" }) }
+get /docs         { return swagger_ui("/openapi.json") }
+get /status       { return status_page({ app: "Full App" }) }
+get /metrics      { return metrics.handler() }
+get /healthz      { return health.live() }
 
 get / {
-  return html("<h1>Full App</h1><p>See <a href='/docs'>/docs</a> · <a href='/status'>/status</a></p>")
+  return html(
+    "<h1>Full App</h1>" +
+    "<ul>" +
+    "<li><a href=/docs>/docs</a> — Swagger UI</li>" +
+    "<li><a href=/status>/status</a> — status page</li>" +
+    "<li><a href=/metrics>/metrics</a> — Prometheus</li>" +
+    "<li><a href=/healthz>/healthz</a> — k8s liveness</li>" +
+    "</ul>"
+  )
 }

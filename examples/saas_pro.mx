@@ -1,42 +1,58 @@
 // saas_pro.mx — capstone showcase. One file. Real SaaS surface.
 // Auth + Stripe + AI + Search + S3 + Metrics + Cron + GraphQL + Health.
 //
-// Set the env vars and `mx run examples/saas_pro.mx`:
-//   APP_SECRET            random 32-byte hex
-//   RESEND_API_KEY        for the magic-link email
-//   STRIPE_SECRET_KEY     test sk_...
-//   STRIPE_PRICE_ID       a recurring price
-//   STRIPE_WEBHOOK_SECRET whsec_...
-//   OPENAI_API_KEY        for the /summarize endpoint
+// Set env vars (most are optional — the routes that need them throw cleanly):
+//   APP_SECRET             random 32-byte hex (required)
+//   RESEND_API_KEY         for the magic-link email
+//   STRIPE_SECRET_KEY      sk_test_...
+//   STRIPE_PRICE_ID        a recurring price ID
+//   STRIPE_WEBHOOK_SECRET  whsec_...
+//   OPENAI_API_KEY         for /summarize
 //   AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY  for /upload
 //
 // Routes:
 //   /                  pricing page
 //   /auth/request      magic-link sign-in
 //   /auth/click        verify + set session
-//   /dashboard         account state
-//   /checkout          Stripe Checkout redirect
-//   /portal            Stripe Customer Portal
+//   /dashboard         account state (logged-in)
+//   /checkout          Stripe Checkout redirect (logged-in)
+//   /portal            Stripe Customer Portal (logged-in)
 //   /webhooks/stripe   activate users on subscription
 //   /summarize         AI text summary (subscribers only)
-//   /search            full-text search across user notes
-//   /upload            presigned S3 URL for direct browser upload
+//   /notes             POST a note (logged-in)
+//   /search?q=...      full-text search across user notes (logged-in)
+//   /upload            presigned S3 URL for direct browser upload (subscribers)
 //   /graphql           query users + notes
 //   /metrics           Prometheus exposition
 //   /healthz, /readyz  k8s probes
 
-server { port: 8080 }
+server { port: 8080, log: true }
+
+let SECRET = env_required("APP_SECRET")
 
 let db = sql.open("./saas_pro.db")
 sql.migrate(db, [
-  "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, email TEXT UNIQUE, stripe_id TEXT, subscribed INTEGER DEFAULT 0, created_at TEXT)",
-  "CREATE TABLE IF NOT EXISTS notes (id INTEGER PRIMARY KEY, user_id INTEGER, title TEXT, body TEXT, created_at TEXT)"
+  "CREATE TABLE IF NOT EXISTS users (
+     id INTEGER PRIMARY KEY,
+     email TEXT UNIQUE,
+     stripe_id TEXT,
+     subscribed INTEGER NOT NULL DEFAULT 0,
+     created_at TEXT NOT NULL
+   )",
+  "CREATE TABLE IF NOT EXISTS notes (
+     id INTEGER PRIMARY KEY,
+     user_id INTEGER NOT NULL,
+     title TEXT,
+     body TEXT,
+     created_at TEXT NOT NULL
+   )"
 ])
 
 // FTS5 index over notes for /search.
 search.create(db, "notes_fts", ["title", "body"])
 
-// ---- Middleware ------------------------------------------------------
+// ---------- Middleware ----------
+
 middleware count_request {
   metrics.counter("http_requests_total", 1, {
     method: request.method,
@@ -45,65 +61,93 @@ middleware count_request {
 }
 
 middleware throttle {
-  let key = "ip:" + request.headers["x-forwarded-for"]
-  if (!rate_limit(key, 60, 60)) {
-    return status(429, { error: "rate limit exceeded — 60 req/min" })
+  // 60 req/min per IP. Easy to swap for per-user once you wire auth.
+  if (!rate_limit("ip:" + request.ip, 60, 60)) {
+    return problem(429, "Rate limit exceeded", "60 req/min per IP")
   }
+}
+
+middleware require_user {
+  let claims = session.read(request, SECRET)
+  if (claims?.email == null) { return problem(401, "Sign in required") }
 }
 
 middleware require_subscribed {
-  let email = magic_link.verify(request.headers["x-session"], env("APP_SECRET"))
-  if (email == null) { return status(401, { error: "sign in" }) }
-  let user = sql.query_one(db, "SELECT * FROM users WHERE email = ?", email)
-  if (user == null || !user.subscribed) {
-    return status(402, { error: "subscription required" })
+  let claims = session.read(request, SECRET)
+  if (claims?.email == null) { return problem(401, "Sign in required") }
+  let user = sql.find_one(db, "users", { email: claims.email })
+  if (user == null || user.subscribed != 1) {
+    return problem(402, "Subscription required", "Upgrade at /checkout to use this endpoint")
   }
 }
 
-// ---- Pricing + magic-link auth --------------------------------------
+// ---------- Pricing + magic-link auth ----------
+
 get / {
   use count_request
-  return html("<h1>SaaS Pro</h1><form method='POST' action='/auth/request'><input name='email'><button>Sign in</button></form>")
+  return html(
+    "<h1>SaaS Pro</h1>" +
+    "<form method=POST action=/auth/request>" +
+    "<input name=email type=email placeholder='you@example.com' required>" +
+    "<button>Sign in</button></form>"
+  )
 }
 
 post /auth/request {
   use count_request
   use throttle
-  let email = request.body.email
-  let token = magic_link.create(email, env("APP_SECRET"), { expires_minutes: 15 })
-  let link = "http://localhost:8080/auth/click?t=" + token
-  notify.email(email, "Sign-in link", "<a href='" + link + "'>Sign in</a>", { html: true })
-  return json({ sent: true })
+  let r = body_validate(request, {
+    type: "object", required: ["email"],
+    properties: { email: { type: "string", format: "email" } }
+  })
+  if (!r.ok) { return r.response }
+
+  let token = magic_link.create(r.body.email, SECRET, { expires_minutes: 15 })
+  let link  = "http://localhost:8080/auth/click?t=" + token
+  if (env("RESEND_API_KEY") != "") {
+    notify.email(r.body.email, "Sign-in link", "<a href='" + link + "'>Sign in</a>", { html: true })
+  }
+  return json({ sent: true, link: link })  // link in JSON helps local dev
 }
 
 get /auth/click {
   use count_request
-  let email = magic_link.verify(request.query.t, env("APP_SECRET"))
-  if (email == null) { return status(401, "invalid link") }
+  let email = magic_link.verify(request.query.t, SECRET)
+  if (email == null) { return problem(401, "Invalid or expired sign-in link") }
 
-  let existing = sql.query_one(db, "SELECT * FROM users WHERE email = ?", email)
-  if (existing == null) {
-    sql.exec(db, "INSERT INTO users (email, created_at) VALUES (?, ?)", email, now_iso())
-  }
-  return html("Signed in. <a href='/dashboard'>Dashboard</a>")
+  // Insert-or-noop the user record.
+  sql.upsert(db, "users",
+    { email: email, stripe_id: null, subscribed: 0, created_at: now_iso() },
+    ["email"])
+  return session.create({ email: email }, { secret: SECRET, max_age: 86400 })
 }
 
-// ---- Stripe checkout + portal --------------------------------------
+post /auth/logout { return session.destroy() }
+
+// ---------- Dashboard / Stripe ----------
+
+get /dashboard {
+  use count_request
+  use require_user
+  let claims = session.read(request, SECRET)
+  let user   = sql.find_one(db, "users", { email: claims.email })
+  return json(user)
+}
+
 post /checkout {
   use count_request
-  let email = request.body.email
-  let user = sql.query_one(db, "SELECT * FROM users WHERE email = ?", email)
-  if (user == null) { return status(404, "unknown user") }
+  use require_user
+  let claims = session.read(request, SECRET)
+  let user   = sql.find_one(db, "users", { email: claims.email })
 
-  let stripe_id = user.stripe_id
-  if (stripe_id == null) {
-    let c = stripe.customer_create(email, { name: email })
-    stripe_id = c.id
-    sql.exec(db, "UPDATE users SET stripe_id = ? WHERE id = ?", stripe_id, user.id)
+  if (user.stripe_id == null) {
+    let c = stripe.customer_create(user.email, { name: user.email })
+    sql.update(db, "users", { stripe_id: c.id }, { id: user.id })
+    user.stripe_id = c.id
   }
   let s = stripe.checkout(env("STRIPE_PRICE_ID"), {
-    mode: "subscription",
-    customer: stripe_id,
+    mode:        "subscription",
+    customer:    user.stripe_id,
     success_url: "http://localhost:8080/dashboard",
     cancel_url:  "http://localhost:8080/"
   })
@@ -112,8 +156,10 @@ post /checkout {
 
 get /portal {
   use count_request
-  let user = sql.query_one(db, "SELECT * FROM users WHERE email = ?", request.query.email)
-  if (user == null || user.stripe_id == null) { return status(404, "no stripe customer") }
+  use require_user
+  let claims = session.read(request, SECRET)
+  let user   = sql.find_one(db, "users", { email: claims.email })
+  if (user?.stripe_id == null) { return problem(404, "No Stripe customer yet") }
   let p = stripe.customer_portal(user.stripe_id, "http://localhost:8080/dashboard")
   return redirect(p.url)
 }
@@ -124,74 +170,106 @@ post /webhooks/stripe {
     request.headers["stripe-signature"],
     env("STRIPE_WEBHOOK_SECRET")
   )
-  if (!ok) { return status(401, { error: "bad signature" }) }
+  if (!ok) { return problem(401, "Bad webhook signature") }
   let event = json_parse(request.body_text)
   if (event.type == "checkout.session.completed") {
-    let cust = event.data.object.customer
-    sql.exec(db, "UPDATE users SET subscribed = 1 WHERE stripe_id = ?", cust)
+    sql.update(db, "users", { subscribed: 1 }, { stripe_id: event.data.object.customer })
   }
   return json({ received: true })
 }
 
-// ---- AI summarization (subscribers only) ----------------------------
+// ---------- AI summarization (subscribers only) ----------
+
 post /summarize {
   use count_request
   use throttle
   use require_subscribed
-  let summary = ai.complete("Summarize in 2 sentences: " + request.body.text)
+  let r = body_validate(request, {
+    type: "object", required: ["text"],
+    properties: { text: { type: "string", min_length: 10 } }
+  })
+  if (!r.ok) { return r.response }
+  let summary = ai.complete("Summarize in 2 sentences: " + r.body.text)
   return json({ summary: summary })
 }
 
-// ---- Notes + FTS5 search --------------------------------------------
+// ---------- Notes + FTS5 search ----------
+
 post /notes {
   use count_request
-  let r = sql.exec(db, "INSERT INTO notes (user_id, title, body, created_at) VALUES (?, ?, ?, ?)",
-    request.body.user_id, request.body.title, request.body.body, now_iso())
-  search.index(db, "notes_fts", r.last_insert_id, request.body)
-  return status(201, { id: r.last_insert_id })
+  use require_user
+  let claims = session.read(request, SECRET)
+  let user   = sql.find_one(db, "users", { email: claims.email })
+
+  let r = body_validate(request, {
+    type: "object", required: ["title"],
+    properties: {
+      title: { type: "string", min_length: 1 },
+      body:  { type: "string" }
+    }
+  })
+  if (!r.ok) { return r.response }
+
+  let id = sql.insert(db, "notes", {
+    user_id:    user.id,
+    title:      r.body.title,
+    body:       r.body.body || "",
+    created_at: now_iso()
+  }).last_insert_id
+  search.index(db, "notes_fts", id, { title: r.body.title, body: r.body.body || "" })
+  return status(201, { id: id })
 }
 
 get /search {
   use count_request
+  use require_user
   return json(search.query(db, "notes_fts", request.query.q, { limit: 20 }))
 }
 
-// ---- S3 direct upload (presigned URL) -------------------------------
+// ---------- S3 direct upload (presigned URL) ----------
+
 get /upload {
   use count_request
   use require_subscribed
   let key = "uploads/" + id.ulid() + ".bin"
-  let url = s3.presign("my-bucket", key, { expires: 600 })
+  let url = s3.presign(env("S3_BUCKET") || "my-bucket", key, { expires: 600 })
   return json({ key: key, upload_url: url })
 }
 
-// ---- GraphQL --------------------------------------------------------
+// ---------- GraphQL ----------
+
 let resolvers = {
   Query: {
     me: fn(args) {
-      return sql.query_one(db, "SELECT id, email, subscribed FROM users WHERE email = ?", args.email)
+      return sql.find_one(db, "users", { email: args.email })
     },
     notes: fn(args) {
-      return sql.query(db, "SELECT * FROM notes WHERE user_id = ? LIMIT ?", args.user_id, args.limit ?? 20)
+      return sql.find(db, "notes", { user_id: args.user_id }, {
+        order: "id DESC",
+        limit: args.limit ?? 20
+      })
     }
   }
 }
 let gql = graphql.handler(resolvers)
 post /graphql { return gql(request.body) }
 
-// ---- Health + Metrics -----------------------------------------------
+// ---------- Health + Metrics ----------
+
 get /metrics { return metrics.handler() }
 get /healthz { return health.live() }
 get /readyz {
   return health.ready({
-    database: fn() { return sql.query_one(db, "SELECT 1 AS ok").ok == 1 }
+    database: fn() { return sql.find_one(db, "users", {}) != null || sql.count(db, "users", {}) >= 0 }
   })
 }
 
-// ---- Daily digest cron ----------------------------------------------
+// ---------- Daily digest cron ----------
+
 cron("0 9 * * *", fn() {
-  let active = sql.query_one(db, "SELECT COUNT(*) AS n FROM users WHERE subscribed = 1")
-  println("[digest] active subscribers:", active.n)
+  let active = sql.count(db, "users", { subscribed: 1 })
+  let total  = sql.count(db, "users", {})
+  println("[digest]", now_iso(), "active:", active, "/", total)
 })
 
 println("SaaS Pro running at http://localhost:8080/")

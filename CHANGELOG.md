@@ -4,6 +4,28 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.66.0] — 2026-05-03
+
+### Improved — examples/ folder cleanup + modernization
+
+The 17-example folder had pre-positioning duplicates and stale patterns.
+Trimmed to 16 with the surviving examples now showing modern idioms:
+
+- **Deleted** `examples/blog.mx` (duplicate of `mx new blog`)
+- **Deleted** `examples/todo_api.mx` (duplicate of `mx new todo`)
+- **Modernized** `examples/saas_pro.mx` — kitchen-sink showcase now using
+  `sql.find/upsert/update/insert/count`, `body_validate`, `problem`,
+  `session.create/read`, `arr.find_one`, `arr.push`. Same surface as
+  before (Stripe + AI + Search + S3 + GraphQL + metrics + cron) but
+  every endpoint reads cleanly.
+- **Modernized** `examples/full_app.mx` — JWT signup/login + paginated
+  posts + ETag-cached `/me` + SSE feed + OpenAPI/Swagger, all written
+  with the modern toolkit.
+- **Polished** `examples/chat.mx` — `body_validate`, `arr.push`/`arr.filter`,
+  `session.destroy`.
+
+[1.66.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.66.0
+
 ## [1.65.0] — 2026-05-03
 
 ### Improved — `mx new saas` rewritten — completes the template refresh

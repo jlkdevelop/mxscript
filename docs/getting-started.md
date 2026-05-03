@@ -85,7 +85,10 @@ After `mx run app.mx` you automatically get:
 - `examples/` — runnable single-file demos
 - `examples/url_shortener.mx` — same as `mx new shortener`
 - `examples/crud.mx` — REST API for a `posts` collection
-- `examples/saas_pro.mx` — Stripe + magic link + metrics
+- `examples/full_app.mx` — JWT signup + paginated posts + AI summary + SSE feed
+- `examples/saas_pro.mx` — Stripe + magic link + AI + S3 + GraphQL + metrics
+- `examples/agent.mx` — tool-calling AI agent (CLI mode)
+- `examples/chat.mx` — WebSocket chat with embedded browser client
 - `mx help <name>` — docs for any builtin (e.g. `mx help sql.find`)
 - [`mxscript.com`](https://mxscript.com) — language site
 - [GitHub](https://github.com/jlkdevelop/mxscript) — source + releases
