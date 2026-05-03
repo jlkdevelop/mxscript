@@ -4,6 +4,48 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.64.0] — 2026-05-03
+
+### Added — browser playground at `site/playground/`
+
+- **A complete in-browser playground** built on the v0.63 wasm
+  target. Single HTML page with a textarea editor, an output pane,
+  and a wired-in `Run ▶` button. Cmd/Ctrl-Enter runs the program.
+
+- **Six bundled examples**, picked to show off the language without
+  needing network IO:
+  - Hello world
+  - Closures + counter pattern
+  - `map` / `filter` / `reduce` over a numeric array
+  - `match` expression with wildcard
+  - JSON encode + decode round trip
+  - Tight numeric loop (showcasing the bytecode VM)
+
+- **Drops on any static host.** Three files: `index.html`,
+  `wasm_exec.js`, `mx.wasm`. Push to GitHub Pages, Vercel, Netlify,
+  Cloudflare Pages, S3 — anywhere that serves files. The page only
+  needs HTTP(S); `WebAssembly.instantiateStreaming` rejects
+  `file://` origins.
+
+- **Production-grade UI**. Dark GitHub-style theme, monospace code
+  pane with tab support, run-time milliseconds reported in the
+  status bar, error styling for failed runs, brand colour matched
+  to the logo. Fully responsive (collapses to single column under
+  720px).
+
+- **`mx.wasm` is gitignored**. Build artefacts don't bloat the repo;
+  the playground README documents the one-line build:
+
+  ```bash
+  mx build --wasm && cp dist/mx.wasm site/playground/
+  ```
+
+- **README pitched at the top.** New "Try it in your browser"
+  section above the install steps so newcomers can play without
+  cloning anything.
+
+[0.64.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.64.0
+
 ## [0.63.0] — 2026-05-02
 
 ### Added — `mx build --wasm` (run MX in the browser)

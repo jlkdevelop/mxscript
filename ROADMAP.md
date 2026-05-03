@@ -8,6 +8,9 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.64.0** (2026-05-03)
+  - In-browser playground at `site/playground/` — single HTML page + the wasm interpreter, six bundled examples, Cmd/Ctrl-Enter to run
+  - Drop on any static host (GitHub Pages, Vercel, Netlify, Cloudflare Pages, S3); wasm is gitignored, built per-release
 - **v0.63.0** (2026-05-02)
   - `mx build --wasm` compiles the interpreter to WebAssembly with `dist/mx.wasm` + `dist/wasm_exec.js`
   - Browser-exposed `window.mxRun(source)` returns `{ stdout, stderr, error }`
