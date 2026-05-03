@@ -4,6 +4,28 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.18.0] — 2026-05-03
+
+### Added — `mx version --check`
+
+```
+$ mx version --check
+MX Script v1.18.0
+✓ up to date (latest release: v1.18.0)
+
+$ mx version --check
+MX Script v1.10.0
+↑ v1.18.0 available — run `mx upgrade`
+```
+
+Queries the GitHub releases API for the latest tag and compares it
+to the binary's compile-time version using a semver-aware
+comparison (strips the `v` prefix, parses MAJOR.MINOR.PATCH,
+tolerates pre-release suffixes). Prints a `↑` nudge when an
+upgrade exists, `✓` when current, `⚠` when GitHub is unreachable.
+
+[1.18.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.18.0
+
 ## [1.17.0] — 2026-05-03
 
 ### Added — `notify.sms` (Twilio)

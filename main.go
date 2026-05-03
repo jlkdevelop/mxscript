@@ -58,7 +58,7 @@ func (rr *replReader) ReadLine() (string, bool) {
 // Version is bumped at release time. Override at build with:
 //
 //	go build -ldflags "-X main.Version=v0.2.0"
-var Version = "v1.17.0"
+var Version = "v1.18.0"
 
 const (
 	cReset  = "\033[0m"
@@ -133,7 +133,16 @@ func main() {
 	case "ship":
 		cmdShip(args)
 	case "version", "-v", "--version":
+		check := false
+		for _, a := range args {
+			if a == "--check" {
+				check = true
+			}
+		}
 		fmt.Println("MX Script", Version)
+		if check {
+			cmdVersionCheck()
+		}
 	case "help", "-h", "--help":
 		if len(args) > 0 {
 			cmdHelpTopic(args[0])
@@ -1781,6 +1790,84 @@ func mustAbs(p string) string {
 		return p
 	}
 	return abs
+}
+
+// ===== mx version --check =====
+
+// cmdVersionCheck queries the GitHub releases API for the latest tag
+// and compares it to the binary's compile-time Version. Emits one of
+// three lines:
+//
+//   ✓ up to date
+//   ↑ v1.20.0 available — run `mx upgrade`
+//   ⚠ couldn't reach GitHub
+func cmdVersionCheck() {
+	resp, err := http.Get("https://api.github.com/repos/jlkdevelop/mxscript/releases/latest")
+	if err != nil {
+		fmt.Printf("%s⚠ couldn't reach GitHub: %v%s\n", cYellow, err, cReset)
+		return
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Printf("%s⚠ couldn't read GitHub response%s\n", cYellow, cReset)
+		return
+	}
+	var release struct {
+		TagName string `json:"tag_name"`
+	}
+	if err := json.Unmarshal(raw, &release); err != nil {
+		fmt.Printf("%s⚠ couldn't parse GitHub response%s\n", cYellow, cReset)
+		return
+	}
+	if release.TagName == "" {
+		fmt.Printf("%s⚠ no release tag returned by GitHub%s\n", cYellow, cReset)
+		return
+	}
+	if !semverNewer(release.TagName, Version) {
+		fmt.Printf("%s✓%s up to date (latest release: %s)\n", cGreen, cReset, release.TagName)
+		return
+	}
+	fmt.Printf("%s↑ %s available — run %smx upgrade%s%s\n",
+		cYellow, release.TagName, cBold, cReset, cYellow)
+	fmt.Print(cReset)
+}
+
+// semverNewer reports whether `latest` is strictly newer than `current`
+// for our version-tag scheme (`vMAJOR.MINOR.PATCH`). Permissive on
+// missing components so prereleases / partial tags don't confuse the
+// pin check.
+func semverNewer(latest, current string) bool {
+	a := parseSemver(latest)
+	b := parseSemver(current)
+	for i := 0; i < 3; i++ {
+		if a[i] > b[i] {
+			return true
+		}
+		if a[i] < b[i] {
+			return false
+		}
+	}
+	return false
+}
+
+func parseSemver(tag string) [3]int {
+	t := strings.TrimPrefix(tag, "v")
+	parts := strings.SplitN(t, ".", 3)
+	out := [3]int{}
+	for i := 0; i < 3 && i < len(parts); i++ {
+		// Strip a `-` or `+` build/prerelease suffix.
+		s := parts[i]
+		for k, c := range s {
+			if c < '0' || c > '9' {
+				s = s[:k]
+				break
+			}
+		}
+		n, _ := strconv.Atoi(s)
+		out[i] = n
+	}
+	return out
 }
 
 // ===== mx ship =====
