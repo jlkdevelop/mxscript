@@ -58,7 +58,7 @@ func (rr *replReader) ReadLine() (string, bool) {
 // Version is bumped at release time. Override at build with:
 //
 //	go build -ldflags "-X main.Version=v0.2.0"
-var Version = "v1.59.0"
+var Version = "v1.60.0"
 
 const (
 	cReset  = "\033[0m"
@@ -173,7 +173,7 @@ func main() {
 }
 
 func printHelp() {
-	fmt.Printf("%sMX Script%s %s — a modern open-source language for web apps and APIs\n\n",
+	fmt.Printf("%sMX Script%s %s — a lightweight scripting language for one-file web APIs\n\n",
 		cGreen, cReset, Version)
 	fmt.Println("Usage: mx <command> [args]")
 	fmt.Println()
@@ -208,7 +208,7 @@ func printHelp() {
 	fmt.Println("  audit <file.mx>              Security checklist (rate limits, TLS, secrets, etc.)")
 	fmt.Println("  stats <file.mx>              Code metrics (routes, fns, middleware, namespaces used)")
 	fmt.Println("  ship                         Run fmt --check + check + audit + test (CI-friendly preflight)")
-	fmt.Println("  open <url-or-port>           Open a URL (or http://localhost:PORT) in the default browser")
+	fmt.Println("  open [target]                Open in browser. Shortcuts: docs, repo, playground, releases. Or pass a URL / port number.")
 	fmt.Println("  logs [path] [--level=info]   Pretty-print JSON log lines (stdin if no path)")
 	fmt.Println("  parse <file.mx>              Print the parsed AST as JSON (for tooling)")
 	fmt.Println("  watch <path> -- <cmd...>     Run <cmd> whenever any file in <path> changes")
@@ -2362,10 +2362,26 @@ func pickTimestamp(entry map[string]any) string {
 // Falls back to printing the URL when none works so headless
 // environments still get the link.
 func cmdOpen(args []string) {
-	if len(args) < 1 {
-		fatal("usage: mx open <url-or-port>")
+	target := ""
+	if len(args) > 0 {
+		target = args[0]
 	}
-	target := args[0]
+
+	// Friendly shortcuts — saves typing the full URL.
+	switch target {
+	case "":
+		target = "https://mxscript.com"
+	case "docs", "site":
+		target = "https://mxscript.com"
+	case "repo", "github", "src":
+		target = "https://github.com/jlkdevelop/mxscript"
+	case "playground", "try":
+		target = "https://try.mxscript.com"
+	case "issues", "bugs":
+		target = "https://github.com/jlkdevelop/mxscript/issues"
+	case "releases", "changelog":
+		target = "https://github.com/jlkdevelop/mxscript/releases"
+	}
 
 	// Bare port number → localhost URL.
 	if _, err := strconv.Atoi(target); err == nil {

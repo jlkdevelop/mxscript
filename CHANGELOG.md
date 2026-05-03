@@ -4,6 +4,26 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.60.0] — 2026-05-03
+
+### Improved — `mx open` shortcuts + help banner aligned to positioning
+
+```
+mx open                # → mxscript.com
+mx open docs           # → mxscript.com
+mx open repo           # → github.com/jlkdevelop/mxscript
+mx open playground     # → try.mxscript.com
+mx open releases       # → GitHub releases
+mx open issues         # → GitHub issues
+mx open 8080           # → http://localhost:8080  (existing)
+mx open <full-url>     # → arbitrary URL          (existing)
+```
+
+The `mx help` banner now reads "a lightweight scripting language for
+one-file web APIs" to match the positioning on the README and website.
+
+[1.60.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.60.0
+
 ## [1.59.0] — 2026-05-03
 
 ### Improved — `mx init` scaffold polish
