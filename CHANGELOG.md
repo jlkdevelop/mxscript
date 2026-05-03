@@ -4,6 +4,28 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.65.0] — 2026-05-03
+
+### Improved — `mx new saas` rewritten — completes the template refresh
+
+The SaaS template was the last one still using in-memory `users = {}`
+maps and the old custom `sign_cookie` for sessions. Refreshed to use:
+
+- **SQLite** via `sql.upsert` / `sql.find_one` / `sql.update` / `sql.find` /
+  `sql.count` — no in-memory state, survives restarts
+- **`session.create` / `session.read`** for proper signed cookies
+  (was a custom `sign_cookie` helper before)
+- **`body_validate`** on `/auth/request` with `format: "email"` schema
+- **`problem()`** for every error path
+- **Server-rendered HTML pages** factored into named functions
+  (`landingPage`, `dashboardPage`, `adminPage`, etc.) so the file
+  reads top-down: routes → templates
+
+All nine `mx new` templates are now on the v1.41-v1.65 toolkit:
+api, todo, chat, ai, blog, saas, dashboard, react, shortener.
+
+[1.65.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.65.0
+
 ## [1.64.0] — 2026-05-03
 
 ### Improved — `mx new blog` template rewritten with the modern toolkit
