@@ -4,6 +4,26 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.62.0] — 2026-05-03
+
+### Added — `mx test --json` for CI integration
+
+Each test result on its own JSON line, plus a final summary line:
+
+```
+$ mx test app_test.mx --json
+{"file":"app_test.mx","name":"addition","status":"pass","duration_ms":0.004}
+{"file":"app_test.mx","name":"subtraction","status":"pass","duration_ms":0.002}
+{"file":"app_test.mx","name":"bad case","status":"fail","duration_ms":0.001,"error":"assertion failed"}
+{"summary":true,"passed":2,"failed":1,"duration_ms":12}
+```
+
+Pipes cleanly through `jq` for CI dashboards, GitHub Actions step
+summaries, or test-result aggregators. Exit code is still non-zero on
+any failure so existing CI jobs keep failing the build.
+
+[1.62.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.62.0
+
 ## [1.61.0] — 2026-05-03
 
 ### Improved — `mx new chat` ships a working browser client out of the box

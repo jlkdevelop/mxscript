@@ -58,7 +58,7 @@ func (rr *replReader) ReadLine() (string, bool) {
 // Version is bumped at release time. Override at build with:
 //
 //	go build -ldflags "-X main.Version=v0.2.0"
-var Version = "v1.61.0"
+var Version = "v1.62.0"
 
 const (
 	cReset  = "\033[0m"
@@ -189,7 +189,7 @@ func printHelp() {
 	fmt.Println("  build --railway       Write Dockerfile + railway.toml for Railway deploys")
 	fmt.Println("  build --compose       Write Dockerfile + docker-compose.yml for self-hosted")
 	fmt.Println("  repl                  Start an interactive REPL")
-	fmt.Println("  test [path] [--cover] [--watch] [--filter S] [-u]  Run *_test.mx files (current dir by default)")
+	fmt.Println("  test [path] [--cover] [--watch] [--filter S] [-u] [--json]  Run *_test.mx files (current dir by default)")
 	fmt.Println("  bench [path]          Run *_bench.mx benchmarks (each fn bench_*)")
 	fmt.Println("  fmt [paths]           Format .mx files (-w writes, --check exits 1 on diffs, --diff previews changes)")
 	fmt.Println("  lsp                   Run the Language Server (JSON-RPC over stdio)")
@@ -1114,6 +1114,7 @@ func cmdTest(args []string) {
 	watch := false
 	filter := ""
 	updateSnaps := false
+	jsonOut := false
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		switch {
@@ -1123,6 +1124,8 @@ func cmdTest(args []string) {
 			watch = true
 		case a == "--update-snapshots" || a == "-u":
 			updateSnaps = true
+		case a == "--json":
+			jsonOut = true
 		case a == "--filter" || a == "-f":
 			if i+1 < len(args) {
 				i++
@@ -1145,14 +1148,43 @@ func cmdTest(args []string) {
 		fatal("test discovery failed: %v", err)
 	}
 	if len(files) == 0 {
-		fmt.Printf("%sno *_test.mx files found under %s%s\n", cYellow, root, cReset)
+		if !jsonOut {
+			fmt.Printf("%sno *_test.mx files found under %s%s\n", cYellow, root, cReset)
+		}
 		return
+	}
+
+	// Reporters split the output: pretty TTY for interactive use,
+	// one-JSON-object-per-line for CI piping. Keeping the work loop
+	// agnostic and pushing the emit through a function keeps both
+	// modes from drifting apart.
+	report := func(file, name, status, errMsg string, durMS float64) {
+		if jsonOut {
+			out := map[string]any{"file": file, "name": name, "status": status}
+			if errMsg != "" {
+				out["error"] = errMsg
+			}
+			if durMS > 0 {
+				out["duration_ms"] = durMS
+			}
+			b, _ := json.Marshal(out)
+			fmt.Println(string(b))
+			return
+		}
+		switch status {
+		case "pass":
+			fmt.Printf("  %s✓%s %s\n", cGreen, cReset, name)
+		case "fail":
+			fmt.Printf("  %s✗%s %s — %s\n", cRed, cReset, name, errMsg)
+		}
 	}
 
 	totalPass, totalFail := 0, 0
 	start := time.Now()
 	for _, file := range files {
-		fmt.Printf("\n%s%s%s\n", cBold, file, cReset)
+		if !jsonOut {
+			fmt.Printf("\n%s%s%s\n", cBold, file, cReset)
+		}
 
 		src, err := os.ReadFile(file)
 		if err != nil {
@@ -1197,10 +1229,12 @@ func cmdTest(args []string) {
 			}
 		}
 		if len(fnNames)+len(inlineNames) == 0 {
-			if filter != "" {
-				fmt.Printf("  %s(no tests matched %q)%s\n", cGray, filter, cReset)
-			} else {
-				fmt.Printf("  %s(no test_* functions or `test \"...\"` blocks)%s\n", cGray, cReset)
+			if !jsonOut {
+				if filter != "" {
+					fmt.Printf("  %s(no tests matched %q)%s\n", cGray, filter, cReset)
+				} else {
+					fmt.Printf("  %s(no test_* functions or `test \"...\"` blocks)%s\n", cGray, cReset)
+				}
 			}
 			continue
 		}
@@ -1222,16 +1256,18 @@ func cmdTest(args []string) {
 				_ = fileCov
 			}
 			if err := runProgramQuietly(interp, prog); err != nil {
-				fmt.Printf("  %s✗%s %s — %v\n", cRed, cReset, prettyTestName(name), err)
+				report(file, prettyTestName(name), "fail", err.Error(), 0)
 				totalFail++
 				continue
 			}
+			tStart := time.Now()
 			_, err := interp.CallByName(name, nil)
+			dur := float64(time.Since(tStart).Microseconds()) / 1000
 			if err != nil {
-				fmt.Printf("  %s✗%s %s — %v\n", cRed, cReset, prettyTestName(name), err)
+				report(file, prettyTestName(name), "fail", err.Error(), dur)
 				totalFail++
 			} else {
-				fmt.Printf("  %s✓%s %s\n", cGreen, cReset, prettyTestName(name))
+				report(file, prettyTestName(name), "pass", "", dur)
 				totalPass++
 			}
 			if cover && fileCov != interp.Coverage() {
@@ -1254,15 +1290,18 @@ func cmdTest(args []string) {
 				_ = fileCov
 			}
 			if err := runProgramQuietly(interp, prog); err != nil {
-				fmt.Printf("  %s✗%s %s — %v\n", cRed, cReset, name, err)
+				report(file, name, "fail", err.Error(), 0)
 				totalFail++
 				continue
 			}
-			if err := interp.RunTest(inlineIndices[i]); err != nil {
-				fmt.Printf("  %s✗%s %s — %v\n", cRed, cReset, name, err)
+			tStart := time.Now()
+			err := interp.RunTest(inlineIndices[i])
+			dur := float64(time.Since(tStart).Microseconds()) / 1000
+			if err != nil {
+				report(file, name, "fail", err.Error(), dur)
 				totalFail++
 			} else {
-				fmt.Printf("  %s✓%s %s\n", cGreen, cReset, name)
+				report(file, name, "pass", "", dur)
 				totalPass++
 			}
 			if cover && fileCov != interp.Coverage() {
@@ -1294,6 +1333,21 @@ func cmdTest(args []string) {
 	}
 
 	elapsed := time.Since(start).Round(time.Millisecond)
+	if jsonOut {
+		// Final summary line so a CI consumer always knows when output ends.
+		summary := map[string]any{
+			"summary":     true,
+			"passed":      totalPass,
+			"failed":      totalFail,
+			"duration_ms": float64(elapsed.Microseconds()) / 1000,
+		}
+		b, _ := json.Marshal(summary)
+		fmt.Println(string(b))
+		if totalFail > 0 {
+			os.Exit(1)
+		}
+		return
+	}
 	fmt.Println()
 	if totalFail == 0 {
 		fmt.Printf("%s✓ %d passed%s in %s\n", cGreen, totalPass, cReset, elapsed)
