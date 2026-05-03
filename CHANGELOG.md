@@ -4,6 +4,51 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.53.0] — 2026-05-03
+
+### Improved — `mx new todo` rewritten to use the object-driven CRUD
+
+The todo template is now a clean showcase of v1.41-v1.52 helpers:
+
+```mx
+get /todos {
+  let p     = paginate(request)
+  let where = {}
+  if (request.query?.done != null) { where.done = num(request.query.done) }
+  let total = sql.count(db, "todos", where)
+  let items = sql.find(db, "todos", where, { order: "id DESC", limit: p.limit, offset: p.offset })
+  return json(page_response(items, p, total))
+}
+
+post /todos {
+  let r = validate(request.body, schema)
+  if (!r.valid) {
+    return problem(400, "Validation failed", "", { errors: r.errors, trace_id: request.id })
+  }
+  let res = sql.insert(db, "todos", { title: request.body.title, done: 0, created_at: now_iso() })
+  return status(201, { id: res.last_insert_id, title: request.body.title })
+}
+
+put /todos/:id/done {
+  if (!sql.exists(db, "todos", { id: num(request.params.id) })) {
+    return problem(404, "Todo not found")
+  }
+  sql.update(db, "todos", { done: 1 }, { id: num(request.params.id) })
+  return json({ ok: true })
+}
+
+delete /todos/:id {
+  let r = sql.delete(db, "todos", { id: num(request.params.id) })
+  if (r.rows_affected == 0) { return problem(404, "Todo not found") }
+  return json({ deleted: request.params.id })
+}
+```
+
+No more hand-rolled INSERT / UPDATE / DELETE / SELECT strings. Every
+endpoint reads what it does — the SQL is structural, not stringly-typed.
+
+[1.53.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.53.0
+
 ## [1.52.0] — 2026-05-03
 
 ### Added — `sql.count()` + `sql.exists()`
