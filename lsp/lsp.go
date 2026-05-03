@@ -667,6 +667,8 @@ var builtinDocs = map[string]builtinDoc{
 	"sql.delete":               {"sql.delete(db, table, where) -> { rows_affected, last_insert_id }", "DELETE FROM table WHERE col = ?. 'where' is an object of column-equality matches (AND-joined). Empty where errors — refuses to delete every row."},
 	"sql.find":                 {"sql.find(db, table, where, opts?) -> array", "SELECT * FROM table WHERE col = ?. opts: { columns: [...], order: 'col DESC', limit, offset }. Empty where is fine — returns all rows."},
 	"sql.find_one":             {"sql.find_one(db, table, where, opts?) -> object|null", "Like sql.find but returns the first row (or null). Forces LIMIT 1."},
+	"sql.count":                {"sql.count(db, table, where) -> number", "SELECT count(*) FROM table WHERE col = ?. Empty where counts every row. Returns a plain number, not an object."},
+	"sql.exists":                {"sql.exists(db, table, where) -> bool", "True iff at least one row matches the where object. Uses SELECT 1 ... LIMIT 1 internally so a hit short-circuits without scanning."},
 	"form.parse":               {"form.parse(s) -> object|null", "Parse application/x-www-form-urlencoded; multi-value keys collapse to arrays. null on malformed input."},
 	"form.encode":              {"form.encode(obj) -> string", "Encode an object as urlencoded form body with sorted keys. Arrays expand to repeated keys; null values skip."},
 	"xml.parse":                {"xml.parse(s) -> object|null", "Parse XML into { tag, attrs, text, children } nodes. null on empty input; throws on malformed."},

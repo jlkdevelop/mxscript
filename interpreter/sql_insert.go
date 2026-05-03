@@ -482,6 +482,125 @@ func buildFindQuery(args []Value) (string, []Value, error) {
 	return q, flat, nil
 }
 
+// sql.count(db, table, where) — number
+//
+//   sql.count(db, "users", { active: 1 })
+//   sql.count(db, "events", {})
+//
+// Returns a plain number (not an object). Empty `where` counts every
+// row. The hand-written equivalent — `sql.first("SELECT count(*) AS n
+// FROM ...").n` — shows up in pagination handlers across every codebase.
+func builtinSQLCount(_ *Interpreter, args []Value) (Value, error) {
+	h, err := mustDBHandle(args)
+	if err != nil {
+		return Value{}, err
+	}
+	if len(args) < 3 {
+		return Value{}, fmt.Errorf("sql.count(db, table, where) requires 3 arguments")
+	}
+	table, err := stringArg(args, 1)
+	if err != nil {
+		return Value{}, err
+	}
+	if !validIdent(table) {
+		return Value{}, fmt.Errorf("sql.count: table name %q must be a plain identifier", table)
+	}
+	if args[2].Kind != KindObject {
+		return Value{}, fmt.Errorf("sql.count: 'where' must be an object")
+	}
+	whereObj := args[2].Object
+	whereCols := append([]string(nil), whereObj.Keys...)
+	sort.Strings(whereCols)
+	for _, c := range whereCols {
+		if !validIdent(c) {
+			return Value{}, fmt.Errorf("sql.count: column %q must be a plain identifier", c)
+		}
+	}
+	whereClause := ""
+	flat := make([]Value, 0, len(whereCols))
+	if len(whereCols) > 0 {
+		exprs := make([]string, len(whereCols))
+		for i, c := range whereCols {
+			exprs[i] = c + " = ?"
+			v, _ := whereObj.Get(c)
+			flat = append(flat, v)
+		}
+		whereClause = " WHERE " + strings.Join(exprs, " AND ")
+	}
+	q := fmt.Sprintf("SELECT count(*) AS n FROM %s%s", table, whereClause)
+	rows, err := sqlQuery(h, q, flat)
+	if err != nil {
+		return Value{}, err
+	}
+	if rows.Kind != KindArray || len(rows.Array) == 0 {
+		return NumberValue(0), nil
+	}
+	row := rows.Array[0]
+	if row.Kind != KindObject {
+		return NumberValue(0), nil
+	}
+	if n, ok := row.Object.Get("n"); ok && n.Kind == KindNumber {
+		return n, nil
+	}
+	return NumberValue(0), nil
+}
+
+// sql.exists(db, table, where) — bool. Sugar for sql.count(...) > 0
+// but reads cleaner at call sites:
+//
+//   if (sql.exists(db, "users", { email: e })) {
+//     return problem(409, "Email already in use")
+//   }
+//
+// Internally we run a `LIMIT 1` SELECT, not count(*), so a hit short-
+// circuits without scanning the rest of the table.
+func builtinSQLExists(_ *Interpreter, args []Value) (Value, error) {
+	h, err := mustDBHandle(args)
+	if err != nil {
+		return Value{}, err
+	}
+	if len(args) < 3 {
+		return Value{}, fmt.Errorf("sql.exists(db, table, where) requires 3 arguments")
+	}
+	table, err := stringArg(args, 1)
+	if err != nil {
+		return Value{}, err
+	}
+	if !validIdent(table) {
+		return Value{}, fmt.Errorf("sql.exists: table name %q must be a plain identifier", table)
+	}
+	if args[2].Kind != KindObject {
+		return Value{}, fmt.Errorf("sql.exists: 'where' must be an object")
+	}
+	whereObj := args[2].Object
+	whereCols := append([]string(nil), whereObj.Keys...)
+	sort.Strings(whereCols)
+	for _, c := range whereCols {
+		if !validIdent(c) {
+			return Value{}, fmt.Errorf("sql.exists: column %q must be a plain identifier", c)
+		}
+	}
+	whereClause := ""
+	flatArgs := make([]Value, 0, len(whereCols))
+	if len(whereCols) > 0 {
+		exprs := make([]string, len(whereCols))
+		for i, c := range whereCols {
+			exprs[i] = c + " = ?"
+			v, _ := whereObj.Get(c)
+			flatArgs = append(flatArgs, v)
+		}
+		whereClause = " WHERE " + strings.Join(exprs, " AND ")
+	}
+	// SELECT 1 ... LIMIT 1 short-circuits as soon as the first match
+	// is found — much cheaper than count(*) for "does anything match".
+	q := fmt.Sprintf("SELECT 1 FROM %s%s LIMIT 1", table, whereClause)
+	rows, err := sqlQuery(h, q, flatArgs)
+	if err != nil {
+		return Value{}, err
+	}
+	return BoolValue(rows.Kind == KindArray && len(rows.Array) > 0), nil
+}
+
 // validOrderClause accepts `col` or `col ASC` or `col DESC` — no
 // commas, no functions, no expressions. Multi-column sorts go through
 // sql.query directly.

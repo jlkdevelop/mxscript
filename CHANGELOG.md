@@ -4,6 +4,26 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.52.0] — 2026-05-03
+
+### Added — `sql.count()` + `sql.exists()`
+
+```mx
+let total       = sql.count(db, "users", {})
+let active_pros = sql.count(db, "users", { active: 1, plan: "pro" })
+
+if (sql.exists(db, "users", { email: e })) {
+  return problem(409, "Email already in use")
+}
+```
+
+`sql.count` returns a plain number — no more
+`sql.first("SELECT count(*) AS n ...").n` ceremony in pagination
+handlers. `sql.exists` runs `SELECT 1 ... LIMIT 1` so a hit
+short-circuits without scanning the rest of the table.
+
+[1.52.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.52.0
+
 ## [1.51.0] — 2026-05-03
 
 ### Added — `sql.find()` + `sql.find_one()` — object-driven SELECT

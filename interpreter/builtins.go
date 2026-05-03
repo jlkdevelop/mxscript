@@ -556,6 +556,8 @@ func registerBuiltins(i *Interpreter) {
 	sqlNS.Set("delete", FunctionValue(&Function{Name: "sql.delete", Native: builtinSQLDelete}))
 	sqlNS.Set("find", FunctionValue(&Function{Name: "sql.find", Native: builtinSQLFind}))
 	sqlNS.Set("find_one", FunctionValue(&Function{Name: "sql.find_one", Native: builtinSQLFindOne}))
+	sqlNS.Set("count", FunctionValue(&Function{Name: "sql.count", Native: builtinSQLCount}))
+	sqlNS.Set("exists", FunctionValue(&Function{Name: "sql.exists", Native: builtinSQLExists}))
 	g.Set("sql", ObjectValue(sqlNS))
 	builtinNames["sql"] = true
 

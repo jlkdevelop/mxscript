@@ -42,3 +42,5 @@ func builtinSQLUpdate(i *Interpreter, args []Value) (Value, error)      { return
 func builtinSQLDelete(i *Interpreter, args []Value) (Value, error)      { return Value{}, errSQLUnsupported }
 func builtinSQLFind(i *Interpreter, args []Value) (Value, error)        { return Value{}, errSQLUnsupported }
 func builtinSQLFindOne(i *Interpreter, args []Value) (Value, error)     { return Value{}, errSQLUnsupported }
+func builtinSQLCount(i *Interpreter, args []Value) (Value, error)       { return Value{}, errSQLUnsupported }
+func builtinSQLExists(i *Interpreter, args []Value) (Value, error)      { return Value{}, errSQLUnsupported }
