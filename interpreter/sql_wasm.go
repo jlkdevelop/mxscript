@@ -36,3 +36,4 @@ func builtinSQLQueryOne(i *Interpreter, args []Value) (Value, error)    { return
 func builtinSQLClose(i *Interpreter, args []Value) (Value, error)       { return Value{}, errSQLUnsupported }
 func builtinSQLMigrate(i *Interpreter, args []Value) (Value, error)     { return Value{}, errSQLUnsupported }
 func builtinSQLTransaction(i *Interpreter, args []Value) (Value, error) { return Value{}, errSQLUnsupported }
+func builtinSQLInsert(i *Interpreter, args []Value) (Value, error)      { return Value{}, errSQLUnsupported }

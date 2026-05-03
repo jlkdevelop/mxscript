@@ -4,6 +4,29 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.48.0] — 2026-05-03
+
+### Added — `sql.insert(db, table, row|rows)` for single + batched inserts
+
+```mx
+sql.insert(db, "users", { name: "Ada", role: "admin" })
+
+sql.insert(db, "users", [
+  { name: "Linus",  role: "user" },
+  { name: "Donald", role: "user" },
+  { name: "Grace",  role: "admin" }
+])
+```
+
+Builds `INSERT INTO users (name, role) VALUES (?, ?), (?, ?), (?, ?)`
+in a single round-trip. Returns the same `{ rows_affected, last_insert_id }`
+shape as `sql.exec`. Missing keys → NULL; extra keys in batched rows
+are an error so column drift gets caught.
+
+Closes the gap where every API hand-rolled the same INSERT-builder logic.
+
+[1.48.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.48.0
+
 ## [1.47.0] — 2026-05-03
 
 ### Added — automatic `request.id` + `X-Request-ID` echo
