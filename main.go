@@ -58,7 +58,7 @@ func (rr *replReader) ReadLine() (string, bool) {
 // Version is bumped at release time. Override at build with:
 //
 //	go build -ldflags "-X main.Version=v0.2.0"
-var Version = "v1.6.0"
+var Version = "v1.7.0"
 
 const (
 	cReset  = "\033[0m"
@@ -124,6 +124,8 @@ func main() {
 		cmdExamples(args)
 	case "env":
 		cmdEnv(args)
+	case "db":
+		cmdDB(args)
 	case "version", "-v", "--version":
 		fmt.Println("MX Script", Version)
 	case "help", "-h", "--help":
@@ -178,6 +180,7 @@ func printHelp() {
 	fmt.Println("  docs [topic]            Alias for `help`")
 	fmt.Println("  examples [list|show <name>]  Browse / view bundled .mx examples")
 	fmt.Println("  env                          Show MX-relevant env vars (secrets masked)")
+	fmt.Println("  db <dsn>                     Interactive SQL REPL (sqlite/postgres/mysql)")
 	fmt.Println("  version               Print version and exit")
 	fmt.Println("  help                  Show this help")
 	fmt.Println()
@@ -1713,6 +1716,85 @@ func mustAbs(p string) string {
 		return p
 	}
 	return abs
+}
+
+// ===== mx db =====
+
+// cmdDB opens an interactive SQL session against any of MX's three
+// supported backends (auto-detected from the DSN by sql.open). Lets
+// users poke at their data without writing a one-shot .mx file.
+//
+//	mx db ./app.db                                 # SQLite
+//	mx db postgres://user:pass@host:5432/dbname    # Postgres
+//	mx db mysql://user:pass@tcp(host:3306)/dbname  # MySQL
+//
+// Commands:
+//	  .schema         show every CREATE TABLE
+//	  .tables         list table names
+//	  .quit           leave
+//	  <SQL>;          run the statement, print results as a table
+func cmdDB(args []string) {
+	if len(args) < 1 {
+		fatal("usage: mx db <dsn>")
+	}
+	// We use the same auto-routing sqlOpen the language uses, by
+	// loading a tiny .mx program that opens + drops the user into a
+	// shell. Keeps the binary small — no separate driver wrangling.
+	program := `let __db = sql.open(env("MX_DB_DSN"))
+println("connected — type SQL ending with ; or .help for commands")
+let buf = ""
+while true {
+  let prompt = match buf == "" { true => "sql> ", _ => "...> " }
+  let line = read_line(prompt)
+  if (line == null) { break }
+  let trimmed = trim(line)
+  if (buf == "" && starts_with(trimmed, ".")) {
+    if (trimmed == ".quit" || trimmed == ".exit") { break }
+    if (trimmed == ".help") {
+      println("  .schema   show CREATE TABLE statements")
+      println("  .tables   list tables")
+      println("  .quit     leave")
+      continue
+    }
+    if (trimmed == ".tables") {
+      let rows = sql.query(__db, "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+      loop rows as r { println("  ", r.name) }
+      continue
+    }
+    if (trimmed == ".schema") {
+      let rows = sql.query(__db, "SELECT sql FROM sqlite_master WHERE sql IS NOT NULL")
+      loop rows as r { println(r.sql) }
+      continue
+    }
+  }
+  buf = buf + line + "\n"
+  if (ends_with(trimmed, ";")) {
+    try {
+      let lower = lower(trim(buf))
+      if (starts_with(lower, "select") || starts_with(lower, "with") || starts_with(lower, "pragma")) {
+        let rows = sql.query(__db, buf)
+        if (len(rows) == 0) { println("(no rows)") }
+        loop rows as r { println(json_stringify(r)) }
+      } else {
+        let r = sql.exec(__db, buf)
+        println("ok — rows_affected:", r.rows_affected)
+      }
+    } catch (e) {
+      println("error:", e.message)
+    }
+    buf = ""
+  }
+}
+sql.close(__db)
+println("bye")
+`
+	dsn := args[0]
+	os.Setenv("MX_DB_DSN", dsn)
+	defer os.Unsetenv("MX_DB_DSN")
+	if err := runSource("<db>", []byte(program), 0, false, false); err != nil {
+		printError("<db>", err)
+		os.Exit(1)
+	}
 }
 
 // ===== mx env =====

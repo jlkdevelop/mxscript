@@ -4,6 +4,38 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.7.0] — 2026-05-03
+
+### Added — `mx db <dsn>` (interactive SQL REPL) + `read_line()`
+
+```
+$ mx db ./app.db
+connected — type SQL ending with ; or .help for commands
+sql> .tables
+  notes
+  users
+sql> SELECT * FROM users LIMIT 3;
+{"id":1,"email":"j@example.com","name":"Jassim"}
+{"id":2,"email":"a@example.com","name":"Ada"}
+sql> .quit
+bye
+```
+
+Multi-line input until you hit `;`, JSON-formatted result rows, all
+three SQL backends (SQLite / Postgres / MySQL) auto-detected from
+the DSN. Implemented as a one-line shim that runs an MX program
+which uses `sql.open` + a new `read_line()` builtin in a loop.
+
+`read_line(prompt?)` is also a general-purpose stdin reader for
+user-written CLIs:
+
+```mx
+let name = read_line("your name? ")
+println("hello,", name)
+```
+
+[1.7.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.7.0
+
 ## [1.6.0] — 2026-05-03
 
 ### Added — `mx env` (env var status with masked secrets)

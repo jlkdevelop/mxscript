@@ -101,6 +101,7 @@ func registerBuiltins(i *Interpreter) {
 	def("eval", builtinEval)
 	def("now", builtinNow)
 	def("sleep", builtinSleep)
+	def("read_line", builtinReadLine)
 
 	// --- String ops ---
 	def("len", builtinLen)
@@ -1216,6 +1217,32 @@ func builtinSleep(i *Interpreter, args []Value) (Value, error) {
 	}
 	time.Sleep(time.Duration(args[0].Number) * time.Millisecond)
 	return NullValue(), nil
+}
+
+// stdinReader is a single buffered reader for read_line. Sharing it
+// across calls lets users type multi-character lines without the
+// reader losing its buffered chars between calls.
+var (
+	stdinReaderOnce sync.Once
+	stdinReader     *bufio.Reader
+)
+
+// read_line(prompt?) — reads one line from stdin (without the
+// trailing newline). Returns null on EOF. Optional prompt is
+// written to stdout before blocking on read so REPL-style scripts
+// don't have to manage their own write step.
+func builtinReadLine(_ *Interpreter, args []Value) (Value, error) {
+	stdinReaderOnce.Do(func() {
+		stdinReader = bufio.NewReader(os.Stdin)
+	})
+	if len(args) > 0 && args[0].Kind == KindString {
+		fmt.Fprint(os.Stdout, args[0].String)
+	}
+	line, err := stdinReader.ReadString('\n')
+	if err != nil && line == "" {
+		return NullValue(), nil
+	}
+	return StringValue(strings.TrimRight(line, "\r\n")), nil
 }
 
 // ===== String ops =====
