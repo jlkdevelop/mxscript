@@ -346,6 +346,163 @@ func builtinSQLDelete(_ *Interpreter, args []Value) (Value, error) {
 	return sqlExec(h, q, flat)
 }
 
+// sql.find(db, table, where, opts?) — SELECT * FROM table WHERE col = ?
+//
+//   sql.find(db, "users", { role: "admin" })
+//   sql.find(db, "users", {}, { order: "created_at DESC", limit: 10 })
+//   sql.find(db, "users", { active: 1 }, { columns: ["id", "name"], offset: 20 })
+//
+// Returns an array of row objects (same shape as sql.query). Unlike
+// sql.update/sql.delete, an empty `where` is fine — SELECT-everything
+// is a valid common case.
+//
+// Recognised opts:
+//   columns []string  — column whitelist (default: *)
+//   order   string    — raw ORDER BY clause; must be a plain identifier
+//                       optionally followed by ASC/DESC. No commas.
+//                       Use sql.query for multi-column / complex sorts.
+//   limit   number    — LIMIT N
+//   offset  number    — OFFSET N (paired with limit usually)
+func builtinSQLFind(_ *Interpreter, args []Value) (Value, error) {
+	h, err := mustDBHandle(args)
+	if err != nil {
+		return Value{}, err
+	}
+	if len(args) < 3 {
+		return Value{}, fmt.Errorf("sql.find(db, table, where, opts?) requires at least 3 arguments")
+	}
+	q, flat, err := buildFindQuery(args)
+	if err != nil {
+		return Value{}, err
+	}
+	return sqlQuery(h, q, flat)
+}
+
+// sql.find_one — same as sql.find but returns the first row (or null).
+// Forces LIMIT 1 onto the query so we don't pull the whole table just
+// to return one row.
+func builtinSQLFindOne(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 3 {
+		return Value{}, fmt.Errorf("sql.find_one(db, table, where, opts?) requires at least 3 arguments")
+	}
+	// Force opts.limit = 1, preserving order/columns if present.
+	limited := append([]Value(nil), args...)
+	if len(limited) >= 4 && limited[3].Kind == KindObject {
+		clone := NewOrderedMap()
+		for _, k := range limited[3].Object.Keys {
+			v, _ := limited[3].Object.Get(k)
+			if k == "limit" {
+				continue
+			}
+			clone.Set(k, v)
+		}
+		clone.Set("limit", NumberValue(1))
+		limited[3] = ObjectValue(clone)
+	} else {
+		opts := NewOrderedMap()
+		opts.Set("limit", NumberValue(1))
+		limited = append(limited, ObjectValue(opts))
+	}
+	v, err := builtinSQLFind(i, limited)
+	if err != nil {
+		return Value{}, err
+	}
+	if v.Kind != KindArray || len(v.Array) == 0 {
+		return NullValue(), nil
+	}
+	return v.Array[0], nil
+}
+
+func buildFindQuery(args []Value) (string, []Value, error) {
+	table, err := stringArg(args, 1)
+	if err != nil {
+		return "", nil, err
+	}
+	if !validIdent(table) {
+		return "", nil, fmt.Errorf("sql.find: table name %q must be a plain identifier", table)
+	}
+	if args[2].Kind != KindObject {
+		return "", nil, fmt.Errorf("sql.find: 'where' must be an object")
+	}
+
+	// Columns.
+	colsClause := "*"
+	var orderClause, limitClause, offsetClause string
+	if len(args) >= 4 && args[3].Kind == KindObject {
+		o := args[3].Object
+		if v, ok := o.Get("columns"); ok && v.Kind == KindArray {
+			cols := make([]string, 0, len(v.Array))
+			for i, e := range v.Array {
+				if e.Kind != KindString || !validIdent(e.String) {
+					return "", nil, fmt.Errorf("sql.find: opts.columns[%d] must be a plain identifier", i)
+				}
+				cols = append(cols, e.String)
+			}
+			if len(cols) > 0 {
+				colsClause = strings.Join(cols, ", ")
+			}
+		}
+		if v, ok := o.Get("order"); ok && v.Kind == KindString {
+			if !validOrderClause(v.String) {
+				return "", nil, fmt.Errorf("sql.find: opts.order must be 'col' or 'col ASC|DESC' — got %q", v.String)
+			}
+			orderClause = " ORDER BY " + v.String
+		}
+		if v, ok := o.Get("limit"); ok && v.Kind == KindNumber {
+			limitClause = fmt.Sprintf(" LIMIT %d", int64(v.Number))
+		}
+		if v, ok := o.Get("offset"); ok && v.Kind == KindNumber {
+			offsetClause = fmt.Sprintf(" OFFSET %d", int64(v.Number))
+		}
+	}
+
+	// Where.
+	whereObj := args[2].Object
+	whereCols := append([]string(nil), whereObj.Keys...)
+	sort.Strings(whereCols)
+	for _, c := range whereCols {
+		if !validIdent(c) {
+			return "", nil, fmt.Errorf("sql.find: column %q must be a plain identifier", c)
+		}
+	}
+	whereClause := ""
+	flat := make([]Value, 0, len(whereCols))
+	if len(whereCols) > 0 {
+		exprs := make([]string, len(whereCols))
+		for i, c := range whereCols {
+			exprs[i] = c + " = ?"
+			v, _ := whereObj.Get(c)
+			flat = append(flat, v)
+		}
+		whereClause = " WHERE " + strings.Join(exprs, " AND ")
+	}
+
+	q := fmt.Sprintf("SELECT %s FROM %s%s%s%s%s",
+		colsClause, table, whereClause, orderClause, limitClause, offsetClause)
+	return q, flat, nil
+}
+
+// validOrderClause accepts `col` or `col ASC` or `col DESC` — no
+// commas, no functions, no expressions. Multi-column sorts go through
+// sql.query directly.
+func validOrderClause(s string) bool {
+	parts := strings.Fields(s)
+	if len(parts) == 0 || len(parts) > 2 {
+		return false
+	}
+	if !validIdent(parts[0]) {
+		return false
+	}
+	if len(parts) == 2 {
+		switch strings.ToUpper(parts[1]) {
+		case "ASC", "DESC":
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 // validIdent matches identifiers safe to interpolate into SQL — letters,
 // digits, underscore, no embedded quotes or whitespace. We don't quote
 // table/column names because the supported SQLite/Postgres/MySQL trio

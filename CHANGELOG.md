@@ -4,6 +4,40 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.51.0] — 2026-05-03
+
+### Added — `sql.find()` + `sql.find_one()` — object-driven SELECT
+
+```mx
+let admins = sql.find(db, "users", { role: "admin" })
+let user   = sql.find_one(db, "users", { id: request.params.id })
+let recent = sql.find(db, "users", { active: 1 }, {
+  columns: ["id", "name"],
+  order:   "created_at DESC",
+  limit:   10
+})
+```
+
+Empty `where` is fine here — returns all rows (the natural SELECT
+semantics). Opts: `columns` (whitelist), `order` (single column,
+optional ASC/DESC), `limit`, `offset`.
+
+`sql.find_one` forces `LIMIT 1` so a "give me one row" lookup never
+buffers the whole table.
+
+With this the object-driven CRUD surface is complete:
+
+```mx
+sql.find       // SELECT
+sql.find_one   // SELECT ... LIMIT 1
+sql.insert     // INSERT (single or batched)
+sql.upsert     // INSERT ... ON CONFLICT DO UPDATE
+sql.update     // UPDATE
+sql.delete     // DELETE
+```
+
+[1.51.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.51.0
+
 ## [1.50.0] — 2026-05-03
 
 ### Added — `sql.update()` + `sql.delete()` — finishes the CRUD set

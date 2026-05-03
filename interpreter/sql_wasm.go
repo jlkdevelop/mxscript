@@ -40,3 +40,5 @@ func builtinSQLInsert(i *Interpreter, args []Value) (Value, error)      { return
 func builtinSQLUpsert(i *Interpreter, args []Value) (Value, error)      { return Value{}, errSQLUnsupported }
 func builtinSQLUpdate(i *Interpreter, args []Value) (Value, error)      { return Value{}, errSQLUnsupported }
 func builtinSQLDelete(i *Interpreter, args []Value) (Value, error)      { return Value{}, errSQLUnsupported }
+func builtinSQLFind(i *Interpreter, args []Value) (Value, error)        { return Value{}, errSQLUnsupported }
+func builtinSQLFindOne(i *Interpreter, args []Value) (Value, error)     { return Value{}, errSQLUnsupported }
