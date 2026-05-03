@@ -304,3 +304,90 @@ if (request.body == null) {
   return status(400, { error: "body required" })
 }
 ```
+
+## Pipe operator
+
+`|>` forwards a value into a call. `a |> f` rewrites at parse time to `f(a)`.
+
+```mx
+let report = users
+  |> arr.filter(fn(u) { return u.active })
+  |> arr.map(fn(u) { return u.email })
+  |> arr.sort
+  |> arr.join("\n")
+
+// Lower precedence than every binary operator, so:
+let n = (1 + 2) |> double         // double(3) = 6
+```
+
+If the right-hand side already has args, the LHS is **prepended**: `5 |> add(10)` becomes `add(5, 10)`.
+
+## Range expressions
+
+```mx
+loop 1..=10 as i { print(i) }     // 1, 2, 3, ..., 10  (inclusive)
+let zeros = 0..n                  // 0, 1, ..., n-1    (exclusive)
+```
+
+`a..b` excludes `b`; `a..=b` includes it. Materialises to an integer array.
+
+## Compound assignment
+
+```mx
+count += 1
+total *= 2
+cfg.retries -= 1
+arr[i] /= 4
+cached ??= compute_expensive_thing()    // assign only if currently null
+```
+
+Desugared at parse time so the runtime sees plain `=`.
+
+## Format strings
+
+```mx
+format("Hello {}, age {}", name, age)        // → "Hello Ada, age 30"
+format("{0}-{1}-{0}", "a", "b")              // → "a-b-a"
+format("{:?}", { name: "alice" })            // → pretty multi-line repr
+format("{{ {} }}", "hi")                     // → "{ hi }"
+format("%s = %d", "n", 7)                    // printf fallback still works
+```
+
+## Optional type annotations
+
+```mx
+let count: int = 0
+let name: string = "alice"
+
+fn add(a: int, b: int): int {
+  return a + b
+}
+```
+
+Decorative today — runtime ignores them. They show up in `mx docs <name>` and LSP hover.
+
+## Inline tests + benches
+
+```mx
+test "addition is commutative" {
+  assert_eq(add(2, 3), 5)
+}
+
+bench "fib 15" {
+  fib(15)
+}
+```
+
+Discovered by `mx test` and `mx bench`. Bodies are inert under `mx run` so test files can live alongside production code.
+
+## Doc comments
+
+```mx
+/// Add two numbers and return the sum.
+/// Both args are coerced.
+fn add(a, b) {
+  return a + b
+}
+```
+
+`mx docs add` prints the signature and the doc body. LSP hover surfaces the same content in editors.
