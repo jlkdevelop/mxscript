@@ -8,6 +8,9 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.78.0** (2026-05-03)
+  - `pp(value)` pretty-print builtin (colored, indented, smart inline-vs-multiline arrays)
+  - REPL auto-uses `PrettyDisplay` so result objects render readable
 - **v0.77.0** (2026-05-03)
   - `mx ci init <github|gitlab>` — CI workflow scaffolding (fmt + check + test)
   - `scripts/install.sh` — one-line install with OS/arch detection and `go install` fallback

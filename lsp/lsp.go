@@ -526,6 +526,7 @@ var builtinDocs = map[string]builtinDoc{
 	"pick":                       {"pick(obj, keys[]) -> object", "New object containing only the named keys."},
 	"omit":                       {"omit(obj, keys[]) -> object", "New object with the named keys removed."},
 	"merge":                      {"merge(a, b) -> object", "Shallow merge; b's values overwrite a's on key clash."},
+	"pp":                         {"pp(value, opts?) -> value", "Pretty-print a value (indented, colored). Returns the value unchanged so it composes."},
 	"deep_merge":                 {"deep_merge(a, b) -> object", "Recursive merge — descends into nested objects."},
 	"search.create":              {"search.create(db, table, columns[])", "Create an FTS5 virtual table for full-text search."},
 	"search.index":               {"search.index(db, table, id, doc)", "Insert (or replace) a row in the FTS5 table."},

@@ -4,6 +4,42 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.78.0] — 2026-05-03
+
+### Added — `pp()` pretty-printer + REPL auto-formatting
+
+```
+mx> { name: "Jassim", roles: ["admin", "dev"], posts: [{ id: 1, title: "Hello" }] }
+=> {
+  name: "Jassim",
+  roles: ["admin", "dev"],
+  posts: [
+    {
+      id: 1,
+      title: "Hello"
+    }
+  ]
+}
+```
+
+- **`pp(value, opts?)`** — prints a value indented and colored. Keys
+  are magenta, strings cyan, numbers yellow, `true` green, `false`
+  red, `null` gray, `<fn>` blue. Returns the value unchanged so it
+  composes inside expressions: `let user = pp(get_user(id))` logs
+  the user without changing semantics.
+- **Smart inline-vs-multiline arrays.** Short numeric / string arrays
+  stay on one line; arrays containing objects or longer than ~60
+  chars expand. Same heuristic as JS console.log.
+- **Cycle-safe.** Recursion capped at depth 10 (renders `...`).
+- **Color detection** — checks `os.Stdout.Stat()` for the
+  char-device bit; pipes / files get plain output automatically.
+  Override with `pp(v, { colors: false })`.
+- **REPL auto-uses it.** Results display through `PrettyDisplay`
+  instead of one-line JSON. Multi-line input still works exactly
+  the same.
+
+[0.78.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.78.0
+
 ## [0.77.0] — 2026-05-03
 
 ### Added — `mx ci init` + one-line installer

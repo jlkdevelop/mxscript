@@ -97,6 +97,7 @@ func registerBuiltins(i *Interpreter) {
 	def("fetch", builtinFetch)
 	def("error", builtinError)
 	def("typeof", builtinTypeof)
+	def("pp", builtinPP)
 	def("eval", builtinEval)
 	def("now", builtinNow)
 	def("sleep", builtinSleep)
