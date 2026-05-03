@@ -4,6 +4,38 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.41.0] — 2026-05-03
+
+### Improved — file uploads: `save_upload()`, `.ext` field, multi-file support
+
+```mx
+post /avatar {
+  let img = request.files?.image
+  if (img == null)        { return status(400, { error: "no image" }) }
+  if (img.size > 5_000_000) { return status(413, { error: "too large" }) }
+
+  let saved = save_upload(img, "./uploads/" + uuid() + img.ext)
+  if (!saved.ok) { return status(500, { error: saved.error }) }
+
+  return json({ url: saved.path, size: saved.size })
+}
+```
+
+`save_upload(file, path)` writes a multipart file to disk atomically
+(`.tmp` → rename), creating parent directories as needed. Returns
+`{ ok: true, path, size }` or `{ ok: false, error }` so a single `if`
+covers the failure path.
+
+Each file object now carries a lowercased `.ext` field
+(`".jpg"`, `".pdf"`, `""` if none) so the typical
+`uuid() + img.ext` filename pattern is one expression.
+
+Multi-file fields (`<input name="docs" multiple>`) now return an
+array under that key. Single-file fields stay as a plain object so
+existing `request.files.image.name` code keeps working.
+
+[1.41.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.41.0
+
 ## [1.40.0] — 2026-05-03
 
 ### Added — `ai.complete` with custom OpenAI-compatible endpoints

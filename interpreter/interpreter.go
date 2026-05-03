@@ -79,7 +79,15 @@ func parseMultipart(r *http.Request) (*OrderedMap, *OrderedMap, error) {
 			fields.Set(k, StringValue(v[0]))
 		}
 	}
-	// File uploads.
+	// File uploads. Each field maps to either a single file object
+	// (the common case) or an array of file objects when the form
+	// posts multiple files under one name (`<input name="docs" multiple>`).
+	// Each file object exposes:
+	//   - name         original filename
+	//   - size         byte count
+	//   - content_type Content-Type header from the part
+	//   - content      raw bytes as a string
+	//   - ext          extension including the dot, lowercased ("" if none)
 	fkeys := make([]string, 0, len(r.MultipartForm.File))
 	for k := range r.MultipartForm.File {
 		fkeys = append(fkeys, k)
@@ -90,22 +98,33 @@ func parseMultipart(r *http.Request) (*OrderedMap, *OrderedMap, error) {
 		if len(fhs) == 0 {
 			continue
 		}
-		fh := fhs[0]
-		f, err := fh.Open()
-		if err != nil {
-			return nil, nil, err
+		var entries []Value
+		for _, fh := range fhs {
+			f, err := fh.Open()
+			if err != nil {
+				return nil, nil, err
+			}
+			body, err := io.ReadAll(f)
+			f.Close()
+			if err != nil {
+				return nil, nil, err
+			}
+			ext := strings.ToLower(filepath.Ext(fh.Filename))
+			obj := NewOrderedMap()
+			obj.Set("name", StringValue(fh.Filename))
+			obj.Set("size", NumberValue(float64(fh.Size)))
+			obj.Set("content_type", StringValue(fh.Header.Get("Content-Type")))
+			obj.Set("content", StringValue(string(body)))
+			obj.Set("ext", StringValue(ext))
+			entries = append(entries, ObjectValue(obj))
 		}
-		body, err := io.ReadAll(f)
-		f.Close()
-		if err != nil {
-			return nil, nil, err
+		// One file → object; multiple → array. Keeps the simple
+		// `request.files.image.name` pattern working unchanged.
+		if len(entries) == 1 {
+			files.Set(k, entries[0])
+		} else {
+			files.Set(k, ArrayValue(entries))
 		}
-		obj := NewOrderedMap()
-		obj.Set("name", StringValue(fh.Filename))
-		obj.Set("size", NumberValue(float64(fh.Size)))
-		obj.Set("content_type", StringValue(fh.Header.Get("Content-Type")))
-		obj.Set("content", StringValue(string(body)))
-		files.Set(k, ObjectValue(obj))
 	}
 	return fields, files, nil
 }

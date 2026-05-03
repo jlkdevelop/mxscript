@@ -99,6 +99,7 @@ func registerBuiltins(i *Interpreter) {
 	def("fetch_all", builtinFetchAll)
 	def("proxy", builtinProxy)
 	def("static_file", builtinStaticFile)
+	def("save_upload", builtinSaveUpload)
 	def("error", builtinError)
 	def("typeof", builtinTypeof)
 	def("pp", builtinPP)
