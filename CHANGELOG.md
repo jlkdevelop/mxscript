@@ -4,6 +4,27 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.64.0] — 2026-05-03
+
+### Improved — `mx new blog` template rewritten with the modern toolkit
+
+The blog template now uses `sql.find / sql.find_one / sql.count /
+sql.insert / sql.delete`, `paginate` + `page_response`, `body_validate`,
+`problem` (RFC 7807), and `etag` + `cache_control` for the post page.
+
+- `GET /` renders an SSR markdown blog index, paginated.
+- `GET /p/:slug` renders a single post; cached with ETag + 5-minute
+  Cache-Control so repeat visits land as 304 from the CDN.
+- `GET /api/posts` is a clean JSON-only paginated list — same data,
+  for any non-browser client.
+- `/admin/login`, `/admin`, `/admin/new`, `/admin/posts` (POST),
+  and `DELETE /admin/posts/:id` covered by a session-cookie middleware.
+
+The HTML is server-rendered with no build step. JSON validation errors
+come back as `application/problem+json` with the request's trace_id.
+
+[1.64.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.64.0
+
 ## [1.63.0] — 2026-05-03
 
 ### Improved — `mx new ai` rewritten as a real `/chat` HTTP endpoint
