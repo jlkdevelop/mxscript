@@ -4,6 +4,43 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.46.0] — 2026-05-03
+
+### Added — `problem()` for RFC 7807 problem+json error responses
+
+```mx
+post /users {
+  let r = validate(request.body, schema)
+  if (!r.valid) {
+    return problem(400, "Validation failed",
+      "Two fields didn't match the schema",
+      { errors: r.errors })
+  }
+}
+
+get /users/:id {
+  let u = sql.first(db, "...", request.params.id)
+  if (u == null) { return problem(404, "User not found") }
+  return json(u)
+}
+```
+
+Renders the standard machine-readable shape with the right Content-Type:
+
+```
+HTTP/1.1 400 Bad Request
+Content-Type: application/problem+json
+
+{ "type": "about:blank", "title": "Validation failed", "status": 400,
+  "detail": "...", "errors": [...] }
+```
+
+`ext` keys (the 4th arg) merge onto the top-level body — RFC 7807 §3.2
+explicitly allows arbitrary extension members. Override `type` for a
+custom problem-type URI.
+
+[1.46.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.46.0
+
 ## [1.45.0] — 2026-05-03
 
 ### Improved — `mx new api` is now the canonical one-file API showcase

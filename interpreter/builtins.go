@@ -106,6 +106,7 @@ func registerBuiltins(i *Interpreter) {
 	def("api_key_auth", builtinAPIKeyAuth)
 	def("paginate", builtinPaginate)
 	def("page_response", builtinPageResponse)
+	def("problem", builtinProblem)
 	def("error", builtinError)
 	def("typeof", builtinTypeof)
 	def("pp", builtinPP)

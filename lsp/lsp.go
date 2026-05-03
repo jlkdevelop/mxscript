@@ -660,6 +660,7 @@ var builtinDocs = map[string]builtinDoc{
 	"api_key_auth":             {"api_key_auth(request, allowed_keys) -> bool", "Validate X-API-Key header (or Authorization: Bearer) against a comma-separated allow-list. Constant-time compare. Empty allow-list always returns false (fail-closed)."},
 	"paginate":                 {"paginate(request, opts?) -> { page, per_page, limit, offset }", "Read ?page= and ?per_page= from request.query. opts: { default_per_page=20, max_per_page=100 }. Returns SQL-ready limit/offset and echoes page/per_page for the envelope."},
 	"page_response":            {"page_response(items, page_info, total) -> envelope", "Build { items, page, per_page, total, total_pages, has_next, has_prev } from a paginate() result + total row count."},
+	"problem":                  {"problem(status, title, detail?, ext?) -> response", "RFC 7807 application/problem+json error response. ext object's keys are merged onto the top-level body — e.g. { errors: [...], trace_id: '...' }."},
 	"form.parse":               {"form.parse(s) -> object|null", "Parse application/x-www-form-urlencoded; multi-value keys collapse to arrays. null on malformed input."},
 	"form.encode":              {"form.encode(obj) -> string", "Encode an object as urlencoded form body with sorted keys. Arrays expand to repeated keys; null values skip."},
 	"xml.parse":                {"xml.parse(s) -> object|null", "Parse XML into { tag, attrs, text, children } nodes. null on empty input; throws on malformed."},
