@@ -380,6 +380,18 @@ func registerBuiltins(i *Interpreter) {
 	def("close_chan", builtinChanClose)
 	def("wait_group", builtinWaitGroup)
 
+	// --- Stripe namespace ---
+	// Thin wrappers over the four Stripe API calls SaaS apps actually
+	// need: checkout sessions, customers, the billing portal, and
+	// subscriptions. All read STRIPE_SECRET_KEY from the environment.
+	stripeNS := NewOrderedMap()
+	stripeNS.Set("checkout", FunctionValue(&Function{Name: "stripe.checkout", Native: builtinStripeCheckout}))
+	stripeNS.Set("customer_create", FunctionValue(&Function{Name: "stripe.customer_create", Native: builtinStripeCustomerCreate}))
+	stripeNS.Set("customer_portal", FunctionValue(&Function{Name: "stripe.customer_portal", Native: builtinStripeCustomerPortal}))
+	stripeNS.Set("subscription_create", FunctionValue(&Function{Name: "stripe.subscription_create", Native: builtinStripeSubscriptionCreate}))
+	g.Set("stripe", ObjectValue(stripeNS))
+	builtinNames["stripe"] = true
+
 	// --- Webhooks namespace ---
 	// Production webhook senders sign payloads in subtly different ways:
 	// HMAC-SHA256, with or without a timestamp prefix, hex or base64,

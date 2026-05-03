@@ -1,0 +1,76 @@
+// stripe.mx — full Stripe SaaS loop in 60 lines.
+// Run: STRIPE_SECRET_KEY=sk_test_... STRIPE_WEBHOOK_SECRET=whsec_... mx run stripe.mx
+//
+// What this demonstrates:
+//   POST /signup             → create a Stripe customer + Checkout session
+//   POST /webhooks/stripe    → verify signature, mark subscription active
+//   GET  /account            → return Customer Portal redirect URL
+//   GET  /pricing            → simple pricing page
+
+server { port: 8080 }
+
+// In production: persist these in SQLite. In-memory map is enough for the demo.
+let users = {}        // email -> { stripe_customer_id, subscribed }
+
+// ---- Pricing page (HTML) -----------------------------------------------
+route GET /pricing {
+  return html("<h1>Pricing</h1><p>$10 / month</p><form method='POST' action='/signup'><input name='email' placeholder='you@example.com'><button>Sign up</button></form>")
+}
+
+// ---- Signup → Checkout session ----------------------------------------
+route POST /signup {
+  let email = request.body.email
+
+  let customer = stripe.customer_create(email, { name: email })
+  users[email] = { stripe_customer_id: customer.id, subscribed: false }
+
+  let session = stripe.checkout(env("STRIPE_PRICE_ID"), {
+    mode: "subscription",
+    customer: customer.id,
+    success_url: "http://localhost:8080/welcome?email=" + email,
+    cancel_url:  "http://localhost:8080/pricing"
+  })
+
+  return redirect(session.url)
+}
+
+// ---- Customer portal --------------------------------------------------
+route GET /account {
+  let email = request.query.email
+  let user = users[email]
+  if (user == null) { return status(404, { error: "unknown user" }) }
+
+  let portal = stripe.customer_portal(user.stripe_customer_id,
+    "http://localhost:8080/welcome?email=" + email)
+  return redirect(portal.url)
+}
+
+// ---- Webhook: subscription created → mark user active -----------------
+route POST /webhooks/stripe {
+  let ok = webhooks.verify_stripe(
+    request.body_text,
+    request.headers["stripe-signature"],
+    env("STRIPE_WEBHOOK_SECRET")
+  )
+  if (!ok) { return status(401, { error: "bad signature" }) }
+
+  let event = json_parse(request.body_text)
+  if (event.type == "checkout.session.completed") {
+    let cust_email = event.data.object.customer_email
+    if (users[cust_email] != null) {
+      users[cust_email].subscribed = true
+      println("subscribed:", cust_email)
+    }
+  }
+  return json({ received: true })
+}
+
+route GET /welcome {
+  let user = users[request.query.email]
+  if (user == null || !user.subscribed) {
+    return html("<h1>Pending…</h1><p>Subscription confirming. Refresh in a moment.</p>")
+  }
+  return html("<h1>Welcome 🎉</h1><p><a href='/account?email=" + request.query.email + "'>Manage billing</a></p>")
+}
+
+println("stripe demo at http://localhost:8080/pricing")

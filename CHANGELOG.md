@@ -4,6 +4,52 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.65.0] — 2026-05-03
+
+### Added — `stripe.*` payments namespace
+
+- **The four calls every SaaS app actually makes**, behind a clean
+  surface that pairs with v0.56's `webhooks.verify_stripe`:
+
+  ```mx
+  let session = stripe.checkout("price_abc", {
+    mode: "subscription",
+    success_url: "https://app.example/welcome",
+    cancel_url:  "https://app.example/pricing",
+    customer_email: "alice@app.com"
+  })
+  return redirect(session.url)
+
+  let cust   = stripe.customer_create("alice@app.com", { name: "Alice" })
+  let portal = stripe.customer_portal(cust.id, "https://app.example/account")
+  let sub    = stripe.subscription_create(cust.id, "price_abc", { trial_period_days: 7 })
+  ```
+
+- **All four read `STRIPE_SECRET_KEY`** from the environment and
+  return small ordered-map results — `{ url, id }` for checkout /
+  portal, `{ id, email }` for customer create, `{ id, status }` for
+  subscription create. Never any `null`s on success.
+
+- **HTTP plumbing centralised.** `stripeRequest()` handles the
+  basic-auth + `application/x-www-form-urlencoded` + 30s timeout
+  combo Stripe still expects in 2026, so each public helper stays
+  one screen.
+
+- **Test override hook.** `stripeBaseURLFn` is a function variable
+  callers can swap to point at httptest in tests. Production
+  resolves to `https://api.stripe.com/v1` unchanged.
+
+- **5 wire-format tests** confirm checkout payload, customer-create
+  payload (including `metadata[plan]=pro` form encoding), portal,
+  subscription with `trial_period_days`, and missing-API-key error.
+
+- **`examples/stripe.mx`** — full SaaS payment loop in 60 lines:
+  pricing page → signup → checkout → webhook → marks user active →
+  customer portal for billing management. Pairs `stripe.*` with
+  `webhooks.verify_stripe` end-to-end.
+
+[0.65.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.65.0
+
 ## [0.64.0] — 2026-05-03
 
 ### Added — browser playground at `site/playground/`

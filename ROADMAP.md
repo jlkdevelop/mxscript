@@ -8,6 +8,10 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.65.0** (2026-05-03)
+  - `stripe.*` namespace: `checkout`, `customer_create`, `customer_portal`, `subscription_create`
+  - `STRIPE_SECRET_KEY` auth, 30s timeouts, `stripeBaseURLFn` test hook
+  - `examples/stripe.mx` — full SaaS payment loop in 60 lines (pairs with `webhooks.verify_stripe`)
 - **v0.64.0** (2026-05-03)
   - In-browser playground at `site/playground/` — single HTML page + the wasm interpreter, six bundled examples, Cmd/Ctrl-Enter to run
   - Drop on any static host (GitHub Pages, Vercel, Netlify, Cloudflare Pages, S3); wasm is gitignored, built per-release
