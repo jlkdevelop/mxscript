@@ -4,6 +4,38 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.88.0] — 2026-05-03
+
+### Added — `health.*` (k8s-flavoured liveness / readiness probes)
+
+```mx
+get /healthz { return health.live() }   // 200 once the server is up
+
+get /readyz {
+  return health.ready({
+    database: fn() { sql.query_one(db, "SELECT 1") != null },
+    redis:    fn() { redis.get(r, "ping") != null },
+    queue:    fn() { return jobs.stats(q).pending < 10000 }
+  })
+}
+```
+
+- **Conventions baked in.** `health.live()` returns 200 whenever the
+  process is alive enough to handle HTTP. `health.ready()` runs each
+  check fn and returns 200 only when all pass; otherwise 503 with
+  per-check status — dashboards can pinpoint which dependency is
+  down without grepping logs.
+- **Throwing checks count as failures.** A check fn that errors out
+  is recorded with the error message in the body so debugging
+  doesn't require server-side log access.
+- **Truthy/falsy unification.** Returns `false` / `null` mark the
+  check as failed; anything else (a row, a non-empty array, a number)
+  marks it ok. Lets check fns be one-liners.
+- **4 tests** cover live always-200, ready all-pass round-trip,
+  degraded 503 with mixed pass/fail, and the throwing-fn path.
+
+[0.88.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.88.0
+
 ## [0.87.0] — 2026-05-03
 
 ### Added — `ws.connect(url)` outbound WebSocket client

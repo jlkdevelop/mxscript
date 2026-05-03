@@ -8,6 +8,8 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.88.0** (2026-05-03)
+  - `health.live()` / `health.ready({ ... })` — k8s-flavoured liveness + readiness probes with per-check status in the JSON body
 - **v0.87.0** (2026-05-03)
   - `ws.connect(url, opts?)` — outbound WebSocket client (ws:// + wss://) with RFC 6455-correct masking
   - End-to-end roundtrip test: httptest upgrade → DialWebSocket → echo

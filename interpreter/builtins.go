@@ -161,6 +161,13 @@ func registerBuiltins(i *Interpreter) {
 	wsNS.Set("connect", FunctionValue(&Function{Name: "ws.connect", Native: builtinWSConnect}))
 	g.Set("ws", ObjectValue(wsNS))
 	builtinNames["ws"] = true
+
+	// health.* — k8s-style liveness / readiness probes.
+	healthNS := NewOrderedMap()
+	healthNS.Set("live", FunctionValue(&Function{Name: "health.live", Native: builtinHealthLive}))
+	healthNS.Set("ready", FunctionValue(&Function{Name: "health.ready", Native: builtinHealthReady}))
+	g.Set("health", ObjectValue(healthNS))
+	builtinNames["health"] = true
 	def("random_string", builtinRandomString)
 	def("random_bytes", builtinRandomBytes)
 	def("base32_encode", builtinBase32Encode)

@@ -529,6 +529,8 @@ var builtinDocs = map[string]builtinDoc{
 	"rate_limit":               {"rate_limit(key, max, window_seconds) -> bool", "Application-level token-bucket rate limit. Returns true if allowed."},
 	"rate_limit_reset":         {"rate_limit_reset(key?)", "Reset one bucket (or all if key omitted). Test-only."},
 	"ws.connect":              {"ws.connect(url, opts?) -> { send, recv, close }", "Outbound WebSocket client. Supports ws:// and wss://."},
+	"health.live":             {"health.live() -> response", "200 OK liveness probe — succeeds the moment the HTTP server responds."},
+	"health.ready":            {"health.ready({ name: fn() }) -> response", "Run every check fn; 200 with results when all pass, 503 + per-check status otherwise."},
 	"cron":                     {"cron(spec, fn) -> stop_fn", "Vixie cron schedule. 5 fields: minute hour dom month dow. Returns a function that cancels the schedule."},
 	"notify.slack":             {"notify.slack(webhook_url, message) -> { ok, status, error }", "Post to a Slack incoming webhook. Message can be a string or a full Slack payload object."},
 	"notify.discord":           {"notify.discord(webhook_url, message) -> { ok, status, error }", "Post to a Discord webhook. String → content; object passes through (content, embeds, etc.)."},
