@@ -58,7 +58,7 @@ func (rr *replReader) ReadLine() (string, bool) {
 // Version is bumped at release time. Override at build with:
 //
 //	go build -ldflags "-X main.Version=v0.2.0"
-var Version = "v1.70.0"
+var Version = "v1.71.0"
 
 const (
 	cReset  = "\033[0m"
@@ -198,7 +198,7 @@ func printHelp() {
 	fmt.Println("  lsp                   Run the Language Server (JSON-RPC over stdio)")
 	fmt.Println("  upgrade               Self-update to the latest release")
 	fmt.Println("  doctor                Diagnose env / install / runtime")
-	fmt.Println("  routes <file.mx>      List every route the program registers (no server boot)")
+	fmt.Println("  routes <file.mx> [--json]  List every route (no server boot). --json emits one JSON line per route.")
 	fmt.Println("  check <file.mx>       Static analysis: undefined idents, wrong arity, unused lets")
 	fmt.Println("  pkg <init|add|list|update|remove|install> [args]")
 	fmt.Println("  serve [dir] [--port N]  Static file server (defaults to . on :8080)")
@@ -3718,10 +3718,21 @@ func (sw *statusWriter) WriteHeader(code int) {
 //	GET    /api/v1/users/:id         [auth]
 //	5 routes
 func cmdRoutes(args []string) {
-	if len(args) < 1 {
-		fatal("usage: mx routes <file.mx>")
+	jsonOut := false
+	var file string
+	for _, a := range args {
+		switch {
+		case a == "--json":
+			jsonOut = true
+		case !strings.HasPrefix(a, "-"):
+			if file == "" {
+				file = a
+			}
+		}
 	}
-	file := args[0]
+	if file == "" {
+		fatal("usage: mx routes <file.mx> [--json]")
+	}
 	src, err := os.ReadFile(file)
 	if err != nil {
 		fatal("cannot read %s: %v", file, err)
@@ -3738,12 +3749,31 @@ func cmdRoutes(args []string) {
 	}
 	interp := interpreter.New()
 	interp.SetFile(file)
+	// Silence println / log output from the loaded program — we only
+	// want the route summary, not the program's own startup chatter.
+	// Stderr stays connected so real errors still surface.
+	interp.Out = io.Discard
 	if err := interp.Load(prog); err != nil {
 		printError(file, err)
 		os.Exit(1)
 	}
 
 	routes := interp.RouteSummary()
+
+	if jsonOut {
+		// One JSON line per route — pipes cleanly through jq for CI
+		// drift detection ("did the route set change?").
+		for _, r := range routes {
+			b, _ := json.Marshal(map[string]any{
+				"method":      r.Method,
+				"path":        r.Path,
+				"middlewares": r.Middlewares,
+			})
+			fmt.Println(string(b))
+		}
+		return
+	}
+
 	if len(routes) == 0 {
 		fmt.Printf("%sno routes registered in %s%s\n", cYellow, file, cReset)
 		return

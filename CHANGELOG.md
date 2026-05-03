@@ -4,6 +4,24 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.71.0] — 2026-05-03
+
+### Added — `mx routes --json` for CI drift detection
+
+```
+$ mx routes app.mx --json
+{"method":"POST","middlewares":null,"path":"/shorten"}
+{"method":"GET","middlewares":null,"path":"/:code"}
+{"method":"GET","middlewares":null,"path":"/api/links"}
+{"method":"GET","middlewares":null,"path":"/api/links/:code"}
+```
+
+One JSON line per route. Pipes cleanly through `jq` for "did the
+route set change?" assertions in CI. The loaded program's `println`
+output is suppressed in this mode so the JSON stream stays clean.
+
+[1.71.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.71.0
+
 ## [1.70.0] — 2026-05-03
 
 ### Improved — `mx init --git` + cleaned-up `mx help` banner
