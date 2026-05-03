@@ -58,7 +58,7 @@ func (rr *replReader) ReadLine() (string, bool) {
 // Version is bumped at release time. Override at build with:
 //
 //	go build -ldflags "-X main.Version=v0.2.0"
-var Version = "v1.29.0"
+var Version = "v1.30.0"
 
 const (
 	cReset  = "\033[0m"
@@ -189,7 +189,7 @@ func printHelp() {
 	fmt.Println("  build --railway       Write Dockerfile + railway.toml for Railway deploys")
 	fmt.Println("  build --compose       Write Dockerfile + docker-compose.yml for self-hosted")
 	fmt.Println("  repl                  Start an interactive REPL")
-	fmt.Println("  test [path] [--cover] [--watch]  Run *_test.mx files (current dir by default)")
+	fmt.Println("  test [path] [--cover] [--watch] [--filter S]  Run *_test.mx files (current dir by default)")
 	fmt.Println("  bench [path]          Run *_bench.mx benchmarks (each fn bench_*)")
 	fmt.Println("  fmt [paths]           Format .mx files (-w writes, --check exits 1 on diffs, --diff previews changes)")
 	fmt.Println("  lsp                   Run the Language Server (JSON-RPC over stdio)")
@@ -1002,12 +1002,21 @@ func cmdTest(args []string) {
 	root := "."
 	cover := false
 	watch := false
-	for _, a := range args {
+	filter := ""
+	for i := 0; i < len(args); i++ {
+		a := args[i]
 		switch {
 		case a == "--cover":
 			cover = true
 		case a == "--watch":
 			watch = true
+		case a == "--filter" || a == "-f":
+			if i+1 < len(args) {
+				i++
+				filter = args[i]
+			}
+		case strings.HasPrefix(a, "--filter="):
+			filter = strings.TrimPrefix(a, "--filter=")
 		case !strings.HasPrefix(a, "-"):
 			root = a
 		}
@@ -1058,16 +1067,28 @@ func cmdTest(args []string) {
 		// stays supported for older test files.
 		var fnNames []string
 		var inlineNames []string
+		var inlineIndices []int // original positions in prog.Stmts' TestDecls
+		nthInline := -1
 		for _, s := range prog.Stmts {
 			if fn, ok := s.(*parser.FnDecl); ok && strings.HasPrefix(fn.Name, "test_") {
-				fnNames = append(fnNames, fn.Name)
+				if filter == "" || matchesTestFilter(fn.Name, filter) || matchesTestFilter(prettyTestName(fn.Name), filter) {
+					fnNames = append(fnNames, fn.Name)
+				}
 			}
 			if td, ok := s.(*parser.TestDecl); ok {
-				inlineNames = append(inlineNames, td.Name)
+				nthInline++
+				if filter == "" || matchesTestFilter(td.Name, filter) {
+					inlineNames = append(inlineNames, td.Name)
+					inlineIndices = append(inlineIndices, nthInline)
+				}
 			}
 		}
 		if len(fnNames)+len(inlineNames) == 0 {
-			fmt.Printf("  %s(no test_* functions or `test \"...\"` blocks)%s\n", cGray, cReset)
+			if filter != "" {
+				fmt.Printf("  %s(no tests matched %q)%s\n", cGray, filter, cReset)
+			} else {
+				fmt.Printf("  %s(no test_* functions or `test \"...\"` blocks)%s\n", cGray, cReset)
+			}
 			continue
 		}
 
@@ -1103,7 +1124,7 @@ func cmdTest(args []string) {
 				}
 			}
 		}
-		for idx, name := range inlineNames {
+		for i, name := range inlineNames {
 			interp := interpreter.New()
 			interp.SetFile(file)
 			if cover {
@@ -1118,7 +1139,7 @@ func cmdTest(args []string) {
 				totalFail++
 				continue
 			}
-			if err := interp.RunTest(idx); err != nil {
+			if err := interp.RunTest(inlineIndices[i]); err != nil {
 				fmt.Printf("  %s✗%s %s — %v\n", cRed, cReset, name, err)
 				totalFail++
 			} else {
@@ -1230,6 +1251,15 @@ func findTestFiles(root string) ([]string, error) {
 func prettyTestName(name string) string {
 	stripped := strings.TrimPrefix(name, "test_")
 	return strings.ReplaceAll(stripped, "_", " ")
+}
+
+// matchesTestFilter is the predicate `mx test --filter PATTERN` uses
+// to decide whether to run a test. Case-insensitive substring match —
+// no globs, no regex — keeping it predictable and quote-free in shells.
+// Patterns that look like regex (contain wildcard chars) still work as
+// plain substrings: literal characters match themselves, no surprises.
+func matchesTestFilter(name, filter string) bool {
+	return strings.Contains(strings.ToLower(name), strings.ToLower(filter))
 }
 
 // ===== mx upgrade =====

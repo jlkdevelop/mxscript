@@ -4,6 +4,43 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.30.0] — 2026-05-03
+
+### Improved — pretty `assert_eq` failures + `mx test --filter`
+
+`assert_eq(actual, expected)` now produces a readable, multi-line diff
+instead of a one-line dump:
+
+```
+✗ object mismatch — assert_eq failed
+  expected:
+    {
+      name: "alice",
+      age: 31,
+      role: "admin"
+    }
+  actual:
+    {
+      name: "alice",
+      age: 30
+    }
+```
+
+Short scalars stay on one line:
+
+```
+✗ scalar mismatch — assert_eq failed
+  expected: 5
+    actual: 4
+```
+
+`mx test --filter SUBSTRING` (also `-f`) skips tests whose name doesn't
+contain the substring (case-insensitive). Matches both inline test
+names and `test_*` function names (snake_case stripped). Useful for
+the `mx test --watch --filter foo` tightening loop.
+
+[1.30.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.30.0
+
 ## [1.29.0] — 2026-05-03
 
 ### Added — inline `test "name" { ... }` blocks

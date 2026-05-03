@@ -3836,9 +3836,42 @@ func builtinAssertEq(i *Interpreter, args []Value) (Value, error) {
 		if len(args) > 2 {
 			prefix = "assert_eq failed: " + args[2].Display()
 		}
-		return Value{}, fmt.Errorf("%s — left: %s, right: %s", prefix, args[0].Display(), args[1].Display())
+		return Value{}, fmt.Errorf("%s%s", prefix, prettyEqDiff(args[0], args[1]))
 	}
 	return NullValue(), nil
+}
+
+// prettyEqDiff renders the actual / expected diff for assert_eq failures.
+// One-liner for short primitive values; multi-line indented form for
+// long strings, arrays, and objects so the diff is readable in test
+// output. Uses PrettyDisplay so nested structures look the same as
+// `pp(value)` in the REPL.
+func prettyEqDiff(left, right Value) string {
+	ld := left.Display()
+	rd := right.Display()
+	// Short scalar case — keep it on one line. The threshold is generous
+	// enough to fit "left: 12345, right: 67890" without wrapping in most
+	// terminals.
+	short := left.Kind != KindArray && left.Kind != KindObject &&
+		right.Kind != KindArray && right.Kind != KindObject &&
+		len(ld) <= 60 && len(rd) <= 60 &&
+		!strings.Contains(ld, "\n") && !strings.Contains(rd, "\n")
+	if short {
+		return fmt.Sprintf("\n  expected: %s\n    actual: %s", rd, ld)
+	}
+	// For complex values, pretty-print both sides indented two spaces
+	// so they align under "expected:" / "actual:" labels. Strip the
+	// leading indent prettyValue emits so we can apply our own.
+	indent := func(s string) string {
+		lines := strings.Split(s, "\n")
+		for i, line := range lines {
+			lines[i] = "    " + line
+		}
+		return strings.Join(lines, "\n")
+	}
+	return fmt.Sprintf("\n  expected:\n%s\n  actual:\n%s",
+		indent(PrettyDisplay(right, false)),
+		indent(PrettyDisplay(left, false)))
 }
 
 // render(path, vars?, partials?) reads an HTML template from disk and
