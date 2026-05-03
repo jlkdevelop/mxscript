@@ -143,6 +143,28 @@ func registerBuiltins(i *Interpreter) {
 	strNS.Set("unescape_html", FunctionValue(&Function{Name: "str.unescape_html", Native: builtinHTMLUnescape}))
 	g.Set("str", ObjectValue(strNS))
 	builtinNames["str"] = true
+
+	// arr.* — namespaced aliases for the array helpers. Same idea as
+	// str.*: top-level forms stay for terse scripts, namespaced forms
+	// for libraries.
+	arrNS := NewOrderedMap()
+	arrNS.Set("len", FunctionValue(&Function{Name: "arr.len", Native: builtinLen}))
+	arrNS.Set("map", FunctionValue(&Function{Name: "arr.map", Native: builtinMap}))
+	arrNS.Set("filter", FunctionValue(&Function{Name: "arr.filter", Native: builtinFilter}))
+	arrNS.Set("reduce", FunctionValue(&Function{Name: "arr.reduce", Native: builtinReduce}))
+	arrNS.Set("sort", FunctionValue(&Function{Name: "arr.sort", Native: builtinSort}))
+	arrNS.Set("reverse", FunctionValue(&Function{Name: "arr.reverse", Native: builtinReverse}))
+	arrNS.Set("find", FunctionValue(&Function{Name: "arr.find", Native: builtinFind}))
+	arrNS.Set("push", FunctionValue(&Function{Name: "arr.push", Native: builtinPush}))
+	arrNS.Set("pop", FunctionValue(&Function{Name: "arr.pop", Native: builtinPop}))
+	arrNS.Set("join", FunctionValue(&Function{Name: "arr.join", Native: builtinJoin}))
+	arrNS.Set("sort_by", FunctionValue(&Function{Name: "arr.sort_by", Native: builtinSortBy}))
+	arrNS.Set("unique", FunctionValue(&Function{Name: "arr.unique", Native: builtinUnique}))
+	arrNS.Set("flatten", FunctionValue(&Function{Name: "arr.flatten", Native: builtinFlatten}))
+	arrNS.Set("zip", FunctionValue(&Function{Name: "arr.zip", Native: builtinZip}))
+	arrNS.Set("range", FunctionValue(&Function{Name: "arr.range", Native: builtinRange}))
+	g.Set("arr", ObjectValue(arrNS))
+	builtinNames["arr"] = true
 	def("slug", builtinSlug)
 	def("markdown", builtinMarkdown)
 

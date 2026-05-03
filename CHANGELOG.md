@@ -4,6 +4,30 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.96.0] — 2026-05-03
+
+### Added — `arr.*` namespace (mirrors `str.*`)
+
+Same idea as v0.95's `str.*`: namespaced aliases for the array
+helpers so library code can favor clarity:
+
+```mx
+arr.map([1, 2, 3], fn(n) { return n * 2 })
+arr.filter(users, fn(u) { return u.subscribed })
+arr.reduce(scores, fn(acc, n) { return acc + n }, 0)
+arr.sort_by(posts, fn(p) { return p.created_at })
+arr.unique(emails)
+arr.flatten([[1,2], [3,4]])
+arr.zip(names, ages)
+arr.range(1, 11)            // [1..10]
+```
+
+Aliased: `len`, `map`, `filter`, `reduce`, `sort`, `sort_by`,
+`reverse`, `find`, `push`, `pop`, `join`, `unique`, `flatten`,
+`zip`, `range`.
+
+[0.96.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.96.0
+
 ## [0.95.0] — 2026-05-03
 
 ### Added — `str.*` namespace (organising the existing string builtins)
