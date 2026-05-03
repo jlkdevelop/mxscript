@@ -4,6 +4,30 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.44.0] — 2026-05-03
+
+### Added — `paginate()` + `page_response()` for list endpoints
+
+```mx
+get /users {
+  let p     = paginate(request)                                    // { page, per_page, limit, offset }
+  let total = sql.first(db, "SELECT count(*) AS n FROM users").n
+  let items = sql.query(db, "SELECT * FROM users LIMIT ? OFFSET ?", p.limit, p.offset)
+  return json(page_response(items, p, total))
+}
+```
+
+Reads `?page=` and `?per_page=` from the query string with sensible
+defaults (20 per page, 100 max — overridable via opts). The returned
+object has SQL-ready `limit` and `offset` so the user just plugs them
+into the query.
+
+`page_response()` builds the conventional envelope:
+`{ items, page, per_page, total, total_pages, has_next, has_prev }` —
+the shape every list-endpoint client already knows how to consume.
+
+[1.44.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.44.0
+
 ## [1.43.0] — 2026-05-03
 
 ### Added — `api_key_auth()` for service-to-service auth

@@ -104,6 +104,8 @@ func registerBuiltins(i *Interpreter) {
 	def("not_modified", builtinNotModified)
 	def("cache_control", builtinCacheControl)
 	def("api_key_auth", builtinAPIKeyAuth)
+	def("paginate", builtinPaginate)
+	def("page_response", builtinPageResponse)
 	def("error", builtinError)
 	def("typeof", builtinTypeof)
 	def("pp", builtinPP)
