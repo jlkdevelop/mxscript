@@ -8,6 +8,9 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.71.0** (2026-05-03)
+  - VM lowers array literals `[1,2,3]`, object literals `{a:1}`, indexed reads, and `loop xs as item { }` iteration
+  - New opcodes: `OpMakeArray`, `OpMakeObject`, `OpGetIndex`, `OpLength`; ~1.5-2× speedup on loops and object construction
 - **v0.70.0** (2026-05-03)
   - `ai.image(prompt, opts?)` — DALL-E 3 image generation; `ai.transcribe(audio_path)` — Whisper speech-to-text
 - **v0.69.0** (2026-05-03)

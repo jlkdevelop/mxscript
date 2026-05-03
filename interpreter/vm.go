@@ -52,6 +52,10 @@ const (
 	OpReturn                // halt; return top of stack (or null)
 	OpCall                  // pop arg values + callee; push call result
 	OpGetField              // pop obj; push obj.<consts[arg].String>
+	OpMakeArray             // pop arg values; push as KindArray
+	OpMakeObject            // pop arg*2 values (key, value pairs); push as KindObject
+	OpGetIndex              // pop index; pop target; push target[index]
+	OpLength                // pop value; push its length (array len, string len, object key count)
 )
 
 type Instr struct {
@@ -66,6 +70,10 @@ type Compiled struct {
 	Code     []Instr
 	Consts   []Value
 	VarNames []string
+
+	// loopGen counts loop-temporary variables so two nested `loop`
+	// statements don't share the same hidden name.
+	loopGen int
 }
 
 // CompileExpr lowers a single expression node into a self-contained
@@ -181,6 +189,40 @@ func (c *Compiled) compileExpr(e parser.Expr) bool {
 		}
 		c.emit(OpGetField, c.addConst(StringValue(n.Property)))
 		return true
+	case *parser.IndexExpr:
+		if !c.compileExpr(n.Object) {
+			return false
+		}
+		if !c.compileExpr(n.Index) {
+			return false
+		}
+		c.emit(OpGetIndex, 0)
+		return true
+	case *parser.ArrayLit:
+		// Spread inside an array literal needs runtime concat; bail.
+		for _, el := range n.Elements {
+			if _, isSpread := el.(*parser.SpreadExpr); isSpread {
+				return false
+			}
+		}
+		for _, el := range n.Elements {
+			if !c.compileExpr(el) {
+				return false
+			}
+		}
+		c.emit(OpMakeArray, int32(len(n.Elements)))
+		return true
+	case *parser.ObjectLit:
+		// For each pair: push the key as a constant, then compile
+		// the value. OpMakeObject pops 2*N values.
+		for _, p := range n.Pairs {
+			c.emit(OpConst, c.addConst(StringValue(p.Key)))
+			if !c.compileExpr(p.Value) {
+				return false
+			}
+		}
+		c.emit(OpMakeObject, int32(len(n.Pairs)))
+		return true
 	case *parser.BinaryExpr:
 		// Short-circuit operators — fall back; they need branching beyond
 		// what the basic stack ops provide.
@@ -295,6 +337,73 @@ func (c *Compiled) compileStmt(s parser.Stmt) bool {
 		if !c.compileStmts(n.Body) {
 			return false
 		}
+		c.emit(OpJump, loopStart)
+		c.patch(jumpOut, c.here())
+		return true
+
+	case *parser.LoopStmt:
+		// `loop iterable as item { body }` — desugar to:
+		//   let __arr_N   = <iterable>
+		//   let __len_N   = len(__arr_N)
+		//   let __i_N     = 0
+		//   while __i_N < __len_N {
+		//     let item    = __arr_N[__i_N]
+		//     let idxVar? = __i_N
+		//     <body>
+		//     __i_N = __i_N + 1
+		//   }
+		// We use unique synthetic names (with `__loop_` prefix) so
+		// nested loops don't collide.
+		gen := c.loopGen
+		c.loopGen++
+		arrName := fmt.Sprintf("__loop_arr_%d", gen)
+		lenName := fmt.Sprintf("__loop_len_%d", gen)
+		idxName := fmt.Sprintf("__loop_idx_%d", gen)
+
+		// __arr = iterable
+		if !c.compileExpr(n.Iterable) {
+			return false
+		}
+		c.emit(OpStoreVar, c.addVar(arrName))
+
+		// __len = length(__arr)
+		c.emit(OpLoadVar, c.addVar(arrName))
+		c.emit(OpLength, 0)
+		c.emit(OpStoreVar, c.addVar(lenName))
+
+		// __i = 0
+		c.emit(OpConst, c.addConst(NumberValue(0)))
+		c.emit(OpStoreVar, c.addVar(idxName))
+
+		loopStart := c.here()
+		// while __i < __len
+		c.emit(OpLoadVar, c.addVar(idxName))
+		c.emit(OpLoadVar, c.addVar(lenName))
+		c.emit(OpLt, 0)
+		jumpOut := c.emit(OpJumpIfFalse, 0)
+
+		// item = __arr[__i]
+		c.emit(OpLoadVar, c.addVar(arrName))
+		c.emit(OpLoadVar, c.addVar(idxName))
+		c.emit(OpGetIndex, 0)
+		c.emit(OpStoreVar, c.addVar(n.Var))
+
+		// optional index variable
+		if n.IndexVar != "" {
+			c.emit(OpLoadVar, c.addVar(idxName))
+			c.emit(OpStoreVar, c.addVar(n.IndexVar))
+		}
+
+		if !c.compileStmts(n.Body) {
+			return false
+		}
+
+		// __i = __i + 1
+		c.emit(OpLoadVar, c.addVar(idxName))
+		c.emit(OpConst, c.addConst(NumberValue(1)))
+		c.emit(OpAdd, 0)
+		c.emit(OpStoreVar, c.addVar(idxName))
+
 		c.emit(OpJump, loopStart)
 		c.patch(jumpOut, c.here())
 		return true
@@ -471,6 +580,77 @@ func (c *Compiled) Run(interp *Interpreter, env *Env) (Value, error) {
 			default:
 				return Value{}, fmt.Errorf("cannot read field %q from %s", field, obj.typeName())
 			}
+		case OpGetIndex:
+			idx := stack[len(stack)-1]
+			target := stack[len(stack)-2]
+			stack = stack[:len(stack)-2]
+			switch target.Kind {
+			case KindArray:
+				if idx.Kind != KindNumber {
+					return Value{}, fmt.Errorf("array index must be a number, got %s", idx.typeName())
+				}
+				k := int(idx.Number)
+				if k < 0 || k >= len(target.Array) {
+					stack = append(stack, NullValue())
+				} else {
+					stack = append(stack, target.Array[k])
+				}
+			case KindObject:
+				if idx.Kind != KindString {
+					return Value{}, fmt.Errorf("object key must be a string, got %s", idx.typeName())
+				}
+				if v, ok := target.Object.Get(idx.String); ok {
+					stack = append(stack, v)
+				} else {
+					stack = append(stack, NullValue())
+				}
+			case KindString:
+				if idx.Kind != KindNumber {
+					return Value{}, fmt.Errorf("string index must be a number, got %s", idx.typeName())
+				}
+				k := int(idx.Number)
+				if k < 0 || k >= len(target.String) {
+					stack = append(stack, NullValue())
+				} else {
+					stack = append(stack, StringValue(string(target.String[k])))
+				}
+			case KindNull:
+				stack = append(stack, NullValue())
+			default:
+				return Value{}, fmt.Errorf("cannot index %s", target.typeName())
+			}
+		case OpLength:
+			v := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			switch v.Kind {
+			case KindArray:
+				stack = append(stack, NumberValue(float64(len(v.Array))))
+			case KindString:
+				stack = append(stack, NumberValue(float64(len(v.String))))
+			case KindObject:
+				stack = append(stack, NumberValue(float64(len(v.Object.Keys))))
+			case KindNull:
+				stack = append(stack, NumberValue(0))
+			default:
+				return Value{}, fmt.Errorf("cannot take length of %s", v.typeName())
+			}
+		case OpMakeArray:
+			n := int(ins.Arg)
+			els := make([]Value, n)
+			copy(els, stack[len(stack)-n:])
+			stack = stack[:len(stack)-n]
+			stack = append(stack, ArrayValue(els))
+		case OpMakeObject:
+			n := int(ins.Arg)
+			om := NewOrderedMap()
+			start := len(stack) - n*2
+			for k := 0; k < n; k++ {
+				key := stack[start+k*2].String
+				val := stack[start+k*2+1]
+				om.Set(key, val)
+			}
+			stack = stack[:start]
+			stack = append(stack, ObjectValue(om))
 		}
 	}
 	if len(stack) == 0 {

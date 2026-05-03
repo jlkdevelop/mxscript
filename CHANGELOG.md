@@ -4,6 +4,45 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.71.0] — 2026-05-03
+
+### Added — VM lowers `[arr]` / `{obj}` / `loop` / `[index]`
+
+Wide-coverage push for `--bytecode`. Programs that build arrays,
+objects, and iterate over collections — i.e. most real programs —
+now run on the stack machine end-to-end.
+
+```bash
+$ mx bench /tmp/loop.mx                # tree-walker
+loop array     5.42 us/op
+$ mx bench --bytecode /tmp/loop.mx     # bytecode
+loop array     3.56 us/op    (~1.5×)
+```
+
+Make-object micro-bench drops from 29.73 us/op to 14.66 us/op (2×).
+
+- **`OpMakeArray`** pops N values + pushes `KindArray`.
+- **`OpMakeObject`** pops N×2 (key, value) values + pushes `KindObject`.
+  Keys come from the constant pool so encoding stays compact.
+- **`OpGetIndex`** indexes arrays (numeric), objects (string), and
+  strings (numeric, returns single-char). Out-of-bounds reads return
+  null, matching the tree-walker.
+- **`OpLength`** — pops a value and pushes its length (array
+  elements, string bytes, object keys; null → 0).
+- **`LoopStmt` lowering** — `loop xs as n { body }` desugars to a
+  while loop with hidden synthetic temporaries (`__loop_arr_0`,
+  `__loop_idx_0`, `__loop_len_0`). Nested loops use unique counters
+  so siblings don't collide. Optional `loop xs as i, item { ... }`
+  exposes both index and value.
+- **Spread elements** in array literals still fall back (need a
+  runtime concat opcode); plain `[1, 2, 3]` and `{ a: 1, b: 2 }`
+  compile cleanly.
+- **3 new VM tests** cover array literals, object literals, indexed
+  reads, loop-over-array totals, loop-with-index variants, and a
+  nested-loop sanity check (sum 1..3 × sum 10..20 = 180).
+
+[0.71.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.71.0
+
 ## [0.70.0] — 2026-05-03
 
 ### Added — `ai.image()` (DALL-E) + `ai.transcribe()` (Whisper)

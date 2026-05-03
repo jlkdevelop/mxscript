@@ -119,13 +119,73 @@ func TestVMRefusesShortCircuit(t *testing.T) {
 }
 
 func TestVMRefusesUnsupportedNode(t *testing.T) {
-	// Array and object literals still need their own opcodes; the VM
-	// compiler bails out for them. Calls now compile (OpCall) so
-	// they're no longer in this list.
-	for _, src := range []string{"[1,2,3]", "{ a: 1 }"} {
+	// Spread args, optional chaining, and short-circuit operators
+	// still fall back. Plain array / object literals + index reads
+	// now compile (v0.71).
+	for _, src := range []string{
+		`null?.field`,                      // optional chaining
+		`true && false`,                    // short-circuit
+	} {
 		if _, ok := CompileExpr(parseExpr(t, src)); ok {
 			t.Errorf("%q: expected compile to refuse, but it accepted", src)
 		}
+	}
+}
+
+func TestVMCompilesArrayLiteral(t *testing.T) {
+	c, ok := CompileExpr(parseExpr(t, "[1, 2, 3]"))
+	if !ok {
+		t.Fatal("compile refused array literal")
+	}
+	v, err := c.Run(nil, NewEnv(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Kind != KindArray || len(v.Array) != 3 || v.Array[1].Number != 2 {
+		t.Errorf("got %+v", v)
+	}
+}
+
+func TestVMCompilesObjectLiteral(t *testing.T) {
+	c, ok := CompileExpr(parseExpr(t, `{ name: "Jassim", age: 30 }`))
+	if !ok {
+		t.Fatal("compile refused object literal")
+	}
+	v, err := c.Run(nil, NewEnv(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Kind != KindObject {
+		t.Fatalf("got %+v", v)
+	}
+	name, _ := v.Object.Get("name")
+	if name.String != "Jassim" {
+		t.Errorf("name: got %v", name)
+	}
+}
+
+func TestVMCompilesIndexAccess(t *testing.T) {
+	src := `let xs = [10, 20, 30]
+let middle = xs[1]
+let user = { name: "x" }
+let n = user["name"]`
+	tokens, _ := lexer.New(src).Tokenize()
+	prog, _ := parser.New(tokens).Parse()
+	c, ok := CompileBlock(prog.Stmts)
+	if !ok {
+		t.Fatal("compile refused")
+	}
+	env := NewEnv(nil)
+	if _, err := c.Run(nil, env); err != nil {
+		t.Fatal(err)
+	}
+	mid, _ := env.Get("middle")
+	if mid.Number != 20 {
+		t.Errorf("middle: got %v", mid)
+	}
+	n, _ := env.Get("n")
+	if n.String != "x" {
+		t.Errorf("n: got %v", n)
 	}
 }
 
@@ -211,12 +271,12 @@ while i < 100 {
 }
 
 func TestVMRefusesUnsupportedStmt(t *testing.T) {
-	// loop / try / destructuring lets still fall back. return now
-	// compiles since the VM has OpReturn for function-body lowering.
+	// try and destructuring lets still fall back. return + loop now
+	// compile (v0.71). Break and continue inside loop bodies still
+	// fall back since they need labelled-jump tracking.
 	cases := []string{
 		`let { a, b } = { a: 1, b: 2 }`, // destructuring
 		`try { 1 } catch e { 2 }`,       // try
-		`loop [1,2,3] as x { }`,         // loop
 	}
 	for _, src := range cases {
 		tokens, err := lexer.New(src).Tokenize()
@@ -230,6 +290,64 @@ func TestVMRefusesUnsupportedStmt(t *testing.T) {
 		if _, ok := CompileBlock(prog.Stmts); ok {
 			t.Errorf("%q: expected compile refusal", src)
 		}
+	}
+}
+
+func TestVMCompilesLoopOverArray(t *testing.T) {
+	src := `let total = 0
+let items = [1, 2, 3, 4, 5]
+loop items as n {
+  total = total + n
+}`
+	tokens, _ := lexer.New(src).Tokenize()
+	prog, _ := parser.New(tokens).Parse()
+	c, ok := CompileBlock(prog.Stmts)
+	if !ok {
+		t.Fatal("compile refused loop over array")
+	}
+	env := NewEnv(nil)
+	if _, err := c.Run(nil, env); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	v, _ := env.Get("total")
+	if v.Number != 15 {
+		t.Errorf("total: want 15, got %v", v.Number)
+	}
+}
+
+func TestVMCompilesLoopWithIndex(t *testing.T) {
+	src := `let pairs = []
+loop ["a", "b", "c"] as i, x {
+  pairs = pairs
+}`
+	tokens, _ := lexer.New(src).Tokenize()
+	prog, _ := parser.New(tokens).Parse()
+	if _, ok := CompileBlock(prog.Stmts); !ok {
+		t.Fatal("compile refused loop with index")
+	}
+}
+
+func TestVMNestedLoops(t *testing.T) {
+	src := `let total = 0
+loop [1, 2, 3] as a {
+  loop [10, 20] as b {
+    total = total + a * b
+  }
+}`
+	tokens, _ := lexer.New(src).Tokenize()
+	prog, _ := parser.New(tokens).Parse()
+	c, ok := CompileBlock(prog.Stmts)
+	if !ok {
+		t.Fatal("compile refused nested loops")
+	}
+	env := NewEnv(nil)
+	if _, err := c.Run(nil, env); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	// (1+2+3) * (10+20) = 6 * 30 = 180
+	v, _ := env.Get("total")
+	if v.Number != 180 {
+		t.Errorf("total: want 180, got %v", v.Number)
 	}
 }
 
