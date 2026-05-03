@@ -263,6 +263,16 @@ func (p *Parser) parseLet() (Stmt, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Optional type annotation: `let x: int = 5`. Decorative — we
+	// just record the source span; runtime ignores it.
+	annotation := ""
+	if p.check(lexer.TokenColon) {
+		p.advance()
+		annotation, err = p.parseTypeAnnotation()
+		if err != nil {
+			return nil, err
+		}
+	}
 	if _, err := p.expect(lexer.TokenAssign, "after let name"); err != nil {
 		return nil, err
 	}
@@ -271,7 +281,17 @@ func (p *Parser) parseLet() (Stmt, error) {
 		return nil, err
 	}
 	p.match(lexer.TokenSemicolon)
-	return &LetStmt{pos: mkPos(tok), Name: name.Lexeme, Value: val}, nil
+	return &LetStmt{pos: mkPos(tok), Name: name.Lexeme, Value: val, Type: annotation}, nil
+}
+
+// parseTypeAnnotation reads a single type identifier — `int`, `string`,
+// `MyShape`, etc. Phase 1 keeps it bare to avoid the `array<int>`
+// generic-vs-comparison ambiguity that would need lookahead/backtracking.
+func (p *Parser) parseTypeAnnotation() (string, error) {
+	if !p.check(lexer.TokenIdent) {
+		return "", p.errorf("expected a type name after `:`, got %s", p.cur().Type)
+	}
+	return p.advance().Lexeme, nil
 }
 
 // parseDestructurePattern parses object `{ a, b: c, d = "x" }` or array
@@ -345,38 +365,69 @@ func (p *Parser) parseFn() (Stmt, error) {
 	if err != nil {
 		return nil, err
 	}
-	params, err := p.parseParamList()
+	params, paramTypes, err := p.parseTypedParamList()
 	if err != nil {
 		return nil, err
+	}
+	// Optional return-type annotation: `fn add(a, b): int { ... }`.
+	returnType := ""
+	if p.check(lexer.TokenColon) {
+		p.advance()
+		returnType, err = p.parseTypeAnnotation()
+		if err != nil {
+			return nil, err
+		}
 	}
 	body, err := p.parseBlock()
 	if err != nil {
 		return nil, err
 	}
-	return &FnDecl{pos: mkPos(tok), Name: name.Lexeme, Params: params, Body: body}, nil
+	return &FnDecl{
+		pos: mkPos(tok), Name: name.Lexeme, Params: params, Body: body,
+		ParamTypes: paramTypes, ReturnType: returnType,
+	}, nil
 }
 
+// parseParamList preserves the legacy names-only API for callers that
+// don't need type annotations (anonymous fn literals, middlewares).
 func (p *Parser) parseParamList() ([]string, error) {
+	names, _, err := p.parseTypedParamList()
+	return names, err
+}
+
+// parseTypedParamList accepts both `(a, b)` and `(a: int, b: string)`
+// — the type slot is optional per param. Returns parallel arrays so a
+// later type checker can index them in lockstep.
+func (p *Parser) parseTypedParamList() ([]string, []string, error) {
 	if _, err := p.expect(lexer.TokenLParen, "to start parameter list"); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	var params []string
+	var params, types []string
 	if !p.check(lexer.TokenRParen) {
 		for {
 			id, err := p.expect(lexer.TokenIdent, "as parameter name")
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			params = append(params, id.Lexeme)
+			t := ""
+			if p.check(lexer.TokenColon) {
+				p.advance()
+				t, err = p.parseTypeAnnotation()
+				if err != nil {
+					return nil, nil, err
+				}
+			}
+			types = append(types, t)
 			if !p.match(lexer.TokenComma) {
 				break
 			}
 		}
 	}
 	if _, err := p.expect(lexer.TokenRParen, "to close parameter list"); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return params, nil
+	return params, types, nil
 }
 
 func (p *Parser) parseBlock() ([]Stmt, error) {

@@ -4,6 +4,35 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.38.0] — 2026-05-03
+
+### Added — gradual type annotations
+
+```mx
+let count: int = 0
+let name: string = "alice"
+
+fn add(a: int, b: int): int {
+  return a + b
+}
+
+fn mixed(a, b: string) {                  // partial annotations are fine
+  return a + b
+}
+```
+
+Annotations are optional and decorative today — runtime ignores them
+completely, so dropping them into existing code is a no-op. They show
+up in `mx docs <name>` and LSP hover so callers see what shape to
+expect, and they unblock a future static type checker without any
+syntax churn.
+
+Phase 1 keeps the type slot a bare identifier (`int`, `string`,
+`MyShape`) — generics like `array<int>` will arrive once the parser
+can disambiguate them from comparison.
+
+[1.38.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.38.0
+
 ## [1.37.0] — 2026-05-03
 
 ### Added — range expressions `1..10` and `1..=10`

@@ -43,6 +43,10 @@ type LetStmt struct {
 	Name    string              // single-binding form: `let x = ...`
 	Pattern *DestructurePattern // destructure form: `let {a,b} = ...` / `let [a,b] = ...`
 	Value   Expr
+	// Type is an optional annotation — `let x: int = 5`. Decorative
+	// today; surfaced in LSP hover and `mx docs` so callers know what
+	// shape to expect. Empty string means "no annotation".
+	Type string
 }
 
 func (*LetStmt) stmtNode() {}
@@ -82,6 +86,11 @@ type FnDecl struct {
 	Name   string
 	Params []string
 	Body   []Stmt
+	// ParamTypes parallels Params; entries may be empty when no
+	// annotation was given. ReturnType is `-> string` etc, also
+	// optional.
+	ParamTypes []string
+	ReturnType string
 }
 
 func (*FnDecl) stmtNode() {}

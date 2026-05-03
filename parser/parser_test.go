@@ -154,6 +154,33 @@ func TestPipeRewriteIntoCall(t *testing.T) {
 	}
 }
 
+func TestLetTypeAnnotation(t *testing.T) {
+	prog := mustParse(t, `let x: int = 5`)
+	let := prog.Stmts[0].(*LetStmt)
+	if let.Type != "int" {
+		t.Errorf("type: got %q, want int", let.Type)
+	}
+}
+
+func TestFnTypeAnnotations(t *testing.T) {
+	prog := mustParse(t, `fn add(a: int, b: int): int { return a + b }`)
+	fn := prog.Stmts[0].(*FnDecl)
+	if len(fn.ParamTypes) != 2 || fn.ParamTypes[0] != "int" || fn.ParamTypes[1] != "int" {
+		t.Errorf("param types: %+v", fn.ParamTypes)
+	}
+	if fn.ReturnType != "int" {
+		t.Errorf("return type: %q", fn.ReturnType)
+	}
+}
+
+func TestFnMixedAnnotations(t *testing.T) {
+	prog := mustParse(t, `fn mixed(a, b: string) { return a + b }`)
+	fn := prog.Stmts[0].(*FnDecl)
+	if fn.ParamTypes[0] != "" || fn.ParamTypes[1] != "string" {
+		t.Errorf("expected ['', 'string'], got %+v", fn.ParamTypes)
+	}
+}
+
 func TestPipePrependsToExistingArgs(t *testing.T) {
 	// `5 |> add(10)` should desugar to add(5, 10) — LHS prepended.
 	prog := mustParse(t, `let x = 5 |> add(10)`)
