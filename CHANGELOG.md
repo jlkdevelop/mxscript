@@ -4,6 +4,35 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.63.0] — 2026-05-03
+
+### Improved — `mx new ai` rewritten as a real `/chat` HTTP endpoint
+
+The AI template used to be a CLI: it ran one agent call against the
+hardcoded question "What time is it?" and exited. Useful for the
+"hello world" beat, useless as the basis of a real app.
+
+The new template is a tool-calling agent exposed as a JSON API:
+
+```bash
+$ mx new ai my-bot && cd my-bot && mx run app.mx
+$ curl -X POST :8080/chat -H 'Content-Type: application/json' \
+       -d '{"question":"What time is it, and what is 17 * 23?"}'
+{
+  "answer":     "It's 2026-05-03T16:55:01Z and 17 * 23 = 391.",
+  "tool_calls": [
+    { "name": "now",  "args": {},                "result": "2026-05-03T..." },
+    { "name": "calc", "args": { "expr": "17*23" }, "result": "391" }
+  ]
+}
+```
+
+Pass `?provider=anthropic` (or any of the 13 built-in providers) to
+swap models. Validation via `body_validate`; agent failures surface
+as RFC 7807 `application/problem+json` 500s with the request's trace_id.
+
+[1.63.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.63.0
+
 ## [1.62.0] — 2026-05-03
 
 ### Added — `mx test --json` for CI integration
