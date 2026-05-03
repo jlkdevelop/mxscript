@@ -4,6 +4,37 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.21.0] — 2026-05-03
+
+### Added — `fetch_all(urls, opts?)` (parallel HTTP fan-out)
+
+```mx
+let pages = fetch_all([
+  "https://api.example.com/users/1",
+  "https://api.example.com/users/2",
+  { url: "https://api.example.com/users/3", method: "POST", body: "..." }
+])
+
+loop pages as p {
+  if (p.error != null) { println("failed:", p.error); continue }
+  println(p.status, p.text)
+}
+```
+
+- **Results in input order** so callers can correlate without
+  carrying a key.
+- **Mixed entry types** — bare strings default to GET; objects pass
+  through as fetch's second arg with the URL pulled from `.url`.
+- **Failure entries** get `{ status: 0, text: "", error: "..." }`
+  so loops don't have to special-case successes.
+- **`opts.concurrency` caps in-flight** (default 16, or len(urls)
+  when smaller). Useful for hitting paginated APIs without
+  ddosing yourself.
+- **4 tests** including the concurrency cap (10 URLs with
+  `concurrency: 2` peaks at exactly 2 in-flight on the server side).
+
+[1.21.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.21.0
+
 ## [1.20.0] — 2026-05-03
 
 ### Added — `mx open <url-or-port>` (cross-platform browser opener)

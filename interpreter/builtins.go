@@ -96,6 +96,7 @@ func registerBuiltins(i *Interpreter) {
 	def("env_required", builtinEnvRequired)
 	def("fetch", builtinFetch)
 	def("fetch_retry", builtinFetchRetry)
+	def("fetch_all", builtinFetchAll)
 	def("error", builtinError)
 	def("typeof", builtinTypeof)
 	def("pp", builtinPP)
@@ -1144,6 +1145,99 @@ func builtinEnvRequired(i *Interpreter, args []Value) (Value, error) {
 		return Value{}, fmt.Errorf("required env var %q is not set", name)
 	}
 	return StringValue(v), nil
+}
+
+// fetch_all(urls, opts?) — fan out N concurrent fetches and return
+// the results in input order. `urls` is an array of strings (uses
+// the default GET) or objects shaped like fetch's second arg with
+// an extra `url` field. Each entry's response is the same shape
+// fetch returns: { status, headers, body, text }, plus an optional
+// `error` field for entries that failed.
+//
+//   let pages = fetch_all([
+//     "https://api.example.com/a",
+//     { url: "https://api.example.com/b", method: "POST", body: "..." }
+//   ])
+//   loop pages as p { println(p.status, p.text) }
+//
+// opts.concurrency caps in-flight requests (default = len(urls), but
+// at most 16). Useful for hitting paginated APIs without ddosing
+// yourself.
+func builtinFetchAll(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 1 || args[0].Kind != KindArray {
+		return Value{}, fmt.Errorf("fetch_all(urls, opts?) requires an array")
+	}
+	entries := args[0].Array
+	if len(entries) == 0 {
+		return ArrayValue(nil), nil
+	}
+	concurrency := len(entries)
+	if concurrency > 16 {
+		concurrency = 16
+	}
+	if len(args) > 1 && args[1].Kind == KindObject {
+		if v, ok := args[1].Object.Get("concurrency"); ok && v.Kind == KindNumber {
+			concurrency = int(v.Number)
+			if concurrency < 1 {
+				concurrency = 1
+			}
+		}
+	}
+
+	out := make([]Value, len(entries))
+	sem := make(chan struct{}, concurrency)
+	var wg sync.WaitGroup
+	var mu sync.Mutex // serialises mutation of `out` even though indices differ — defensive
+
+	for idx, e := range entries {
+		idx, e := idx, e
+		wg.Add(1)
+		sem <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			fetchArgs := []Value{}
+			switch e.Kind {
+			case KindString:
+				fetchArgs = []Value{e}
+			case KindObject:
+				url, ok := e.Object.Get("url")
+				if !ok {
+					mu.Lock()
+					out[idx] = errorEntry("fetch_all: object entry missing `url`")
+					mu.Unlock()
+					return
+				}
+				fetchArgs = []Value{url, e}
+			default:
+				mu.Lock()
+				out[idx] = errorEntry(fmt.Sprintf("fetch_all: entry %d must be a string or object", idx))
+				mu.Unlock()
+				return
+			}
+			v, err := builtinFetch(i, fetchArgs)
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				out[idx] = errorEntry(err.Error())
+				return
+			}
+			out[idx] = v
+		}()
+	}
+	wg.Wait()
+	return ArrayValue(out), nil
+}
+
+// errorEntry packages an HTTP-fan-out error in the same shape fetch
+// would return for a successful call so callers can `loop r as p`
+// without special-casing.
+func errorEntry(msg string) Value {
+	out := NewOrderedMap()
+	out.Set("status", NumberValue(0))
+	out.Set("text", StringValue(""))
+	out.Set("error", StringValue(msg))
+	return ObjectValue(out)
 }
 
 // fetch_retry(url, opts?) — same surface as fetch() plus exponential
