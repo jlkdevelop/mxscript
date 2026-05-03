@@ -58,7 +58,7 @@ func (rr *replReader) ReadLine() (string, bool) {
 // Version is bumped at release time. Override at build with:
 //
 //	go build -ldflags "-X main.Version=v0.2.0"
-var Version = "v1.66.0"
+var Version = "v1.67.0"
 
 const (
 	cReset  = "\033[0m"
@@ -122,6 +122,8 @@ func main() {
 		cmdCI(args)
 	case "examples":
 		cmdExamples(args)
+	case "tutorial", "tour":
+		cmdTutorial(args)
 	case "env":
 		cmdEnv(args)
 	case "db":
@@ -203,6 +205,7 @@ func printHelp() {
 	fmt.Println("  help [topic]            Show built-in docs for a function (e.g. mx help ai.complete)")
 	fmt.Println("  docs [topic]            Alias for `help`")
 	fmt.Println("  examples [list|show <name>]  Browse / view bundled .mx examples")
+	fmt.Println("  tutorial [topic]             Hands-on walkthrough — start with no args; pass sql/auth/ai for deeper dives")
 	fmt.Println("  env                          Show MX-relevant env vars (secrets masked)")
 	fmt.Println("  db <dsn>                     Interactive SQL REPL (sqlite/postgres/mysql)")
 	fmt.Println("  audit <file.mx>              Security checklist (rate limits, TLS, secrets, etc.)")
@@ -3131,6 +3134,311 @@ func min3(a, b, c int) int {
 		return b
 	}
 	return c
+}
+
+// ===== mx tutorial =====
+//
+// Hands-on walkthrough printed at the terminal. The goal is to get a
+// brand-new MX user from "installed it" to "ran a real API" in 60
+// seconds, with no live-typing-into-MX gymnastics. Each lesson is a
+// self-contained snippet they paste into a file, plus the command to
+// run it.
+
+func cmdTutorial(args []string) {
+	topic := "start"
+	if len(args) > 0 {
+		topic = strings.ToLower(args[0])
+	}
+	switch topic {
+	case "start", "intro", "welcome":
+		printTutorialStart()
+	case "sql", "db", "database":
+		printTutorialSQL()
+	case "auth":
+		printTutorialAuth()
+	case "ai":
+		printTutorialAI()
+	case "list", "topics":
+		printTutorialTopics()
+	default:
+		fmt.Fprintf(os.Stderr, "%sunknown tutorial topic %q%s\n", cRed, topic, cReset)
+		printTutorialTopics()
+		os.Exit(1)
+	}
+}
+
+func tutHeader(title string) {
+	fmt.Printf("\n%s%s%s\n", cBold, title, cReset)
+	fmt.Println(strings.Repeat("─", len(title)))
+}
+
+func tutStep(n int, title string) {
+	fmt.Printf("\n%sStep %d — %s%s\n", cCyan, n, title, cReset)
+}
+
+func tutCode(s string) {
+	fmt.Println()
+	for _, line := range strings.Split(strings.TrimRight(s, "\n"), "\n") {
+		fmt.Printf("  %s%s%s\n", cGray, line, cReset)
+	}
+	fmt.Println()
+}
+
+func tutShell(cmd string) {
+	fmt.Printf("    %s$%s %s\n", cGreen, cReset, cmd)
+}
+
+func printTutorialStart() {
+	tutHeader("MX Script — 60-second tour")
+	fmt.Println("\nFive lessons, ten minutes total. Each one builds on the last.")
+	fmt.Println("After this you'll have a real, deployable JSON API.")
+	fmt.Println()
+	fmt.Printf("Other topics: %smx tutorial sql%s · %smx tutorial auth%s · %smx tutorial ai%s\n",
+		cCyan, cReset, cCyan, cReset, cCyan, cReset)
+
+	tutStep(1, "Hello world (5 sec)")
+	fmt.Println("Make a file called app.mx with one line:")
+	tutCode(`println("hello from MX")`)
+	tutShell("mx run app.mx")
+
+	tutStep(2, "Your first route (15 sec)")
+	fmt.Println("Replace app.mx with this:")
+	tutCode(`server { port: 8080 }
+
+get /hello/:name {
+  return json({ greeting: "Hello, " + request.params.name })
+}`)
+	tutShell("mx run app.mx")
+	fmt.Println("    Then in another terminal:")
+	tutShell("curl :8080/hello/world")
+
+	tutStep(3, "Add SQLite + paginated list (60 sec)")
+	tutCode(`server { port: 8080 }
+
+let db = sql.open("./app.db")
+sql.migrate(db, ["CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT)"])
+
+post /users {
+  let r = body_validate(request, {
+    type: "object", required: ["name"],
+    properties: { name: { type: "string", min_length: 1 } }
+  })
+  if (!r.ok) { return r.response }
+  let id = sql.insert(db, "users", r.body).last_insert_id
+  return status(201, { id: id })
+}
+
+get /users {
+  let p = paginate(request)
+  let total = sql.count(db, "users", {})
+  let items = sql.find(db, "users", {}, { order: "id DESC", limit: p.limit, offset: p.offset })
+  return json(page_response(items, p, total))
+}`)
+	tutShell(`curl -X POST :8080/users -H 'Content-Type: application/json' -d '{"name":"Ada"}'`)
+	tutShell(`curl :8080/users`)
+
+	tutStep(4, "Try a real template (10 sec)")
+	tutShell("mx new shortener my-shortener")
+	tutShell("cd my-shortener && mx run app.mx")
+	fmt.Println("    Open another terminal:")
+	tutShell(`curl -X POST :8080/shorten -H 'Content-Type: application/json' -d '{"url":"https://mxscript.com"}'`)
+	fmt.Println("    That's a real URL shortener — paginated stats, ETag-cached detail, RFC 7807 errors.")
+
+	tutStep(5, "Deploy (30 sec)")
+	tutShell("mx build --vercel    # or --docker / --fly / --railway / --compose")
+	tutShell("git add . && git commit -m 'Deploy MX app' && git push")
+	fmt.Println("    Vercel auto-detects the generated Go module. One push, you're live.")
+
+	fmt.Printf("\n%s%sNext steps%s\n", cBold, cGreen, cReset)
+	fmt.Println("  mx new --list         # see all 9 templates")
+	fmt.Println("  mx help               # browse 300+ builtins")
+	fmt.Println("  mx tutorial sql       # deeper dive on object-driven CRUD")
+	fmt.Println("  mx tutorial auth      # JWT / sessions / API keys / magic links")
+	fmt.Println("  mx tutorial ai        # tool-calling agents across 13 LLM providers")
+	fmt.Println()
+}
+
+func printTutorialSQL() {
+	tutHeader("MX Script — object-driven SQL")
+	fmt.Println("\nMX's sql.* helpers let you express CRUD as objects, not strings.")
+	fmt.Println("Same surface across SQLite / Postgres / MySQL.")
+
+	tutStep(1, "Open a connection")
+	tutCode(`let db = sql.open("./app.db")
+// or sql.open("postgres://user:pass@host/db")
+// or sql.open("mysql://user:pass@tcp(host:3306)/db")
+sql.migrate(db, ["CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT, role TEXT)"])`)
+
+	tutStep(2, "Insert (single + batched)")
+	tutCode(`sql.insert(db, "users", { name: "Ada", role: "admin" })
+
+sql.insert(db, "users", [
+  { name: "Linus", role: "user" },
+  { name: "Grace", role: "admin" }
+])  // single round-trip`)
+
+	tutStep(3, "Find / find_one / count / exists")
+	tutCode(`let admins = sql.find(db, "users", { role: "admin" })
+let user   = sql.find_one(db, "users", { id: 1 })
+let total  = sql.count(db, "users", { role: "user" })
+
+if (sql.exists(db, "users", { email: e })) {
+  return problem(409, "Email already in use")
+}`)
+
+	tutStep(4, "Update / delete")
+	tutCode(`sql.update(db, "users", { name: "Ada Lovelace" }, { id: 1 })
+sql.delete(db, "users", { id: 1 })
+// Empty 'where' is rejected — refuses to update/delete every row by accident.`)
+
+	tutStep(5, "Upsert (create-or-update)")
+	tutCode(`sql.upsert(db, "settings",
+  { user_id: 1, key: "theme", value: "dark" },
+  ["user_id", "key"])
+// Picks ON CONFLICT (sqlite/postgres) or ON DUPLICATE KEY UPDATE (mysql).`)
+
+	tutStep(6, "Drop down to raw SQL when needed")
+	tutCode(`sql.exec(db, "UPDATE counters SET n = n + 1 WHERE id = ?", id)
+sql.query(db, "SELECT a.*, b.name FROM a JOIN b ON a.b_id = b.id")
+sql.transaction(db, fn(tx) { sql.exec(tx, "..."); sql.exec(tx, "...") })`)
+
+	fmt.Printf("\n%sFull surface%s — `mx help sql.find` (or any sql.* method).\n\n", cBold, cReset)
+}
+
+func printTutorialAuth() {
+	tutHeader("MX Script — auth toolkit")
+	fmt.Println("\nFive auth patterns — pick one per route, mix as needed.")
+
+	tutStep(1, "JWT (mobile / SPA clients)")
+	tutCode(`post /login {
+  let r = body_validate(request, schema)
+  if (!r.ok) { return r.response }
+  let user = sql.find_one(db, "users", { email: r.body.email })
+  if (user == null || !password.verify(r.body.password, user.password_hash)) {
+    return problem(401, "Bad credentials")
+  }
+  let token = jwt.sign({ sub: user.id, exp: now()/1000 + 86400 }, env("JWT_SECRET"))
+  return json({ token: token })
+}
+
+middleware require_auth {
+  if (jwt.verify(request.bearer_token, env("JWT_SECRET")) == null) {
+    return problem(401, "Unauthorized")
+  }
+}`)
+
+	tutStep(2, "Cookie sessions (browser apps)")
+	tutCode(`return session.create({ user_id: u.id }, { secret: env("APP_SECRET"), max_age: 86400 })
+
+middleware require_user {
+  let claims = session.read(request, env("APP_SECRET"))
+  if (claims == null) { return redirect("/login") }
+}`)
+
+	tutStep(3, "API keys (service-to-service)")
+	tutCode(`middleware require_api_key {
+  if (!api_key_auth(request, env("API_KEYS"))) {
+    return problem(401, "Invalid API key")
+  }
+}
+// X-API-Key header (or Authorization: Bearer fallback). Constant-time compare.`)
+
+	tutStep(4, "Magic links (passwordless)")
+	tutCode(`post /auth/request {
+  let token = magic_link.create(request.body.email, env("APP_SECRET"))
+  notify.email(request.body.email, "Sign in", "Click: /auth/click?t=" + token)
+  return json({ sent: true })
+}
+
+get /auth/click {
+  let email = magic_link.verify(request.query.t, env("APP_SECRET"))
+  if (email == null) { return problem(401, "Expired link") }
+  return session.create({ email: email }, { secret: env("APP_SECRET") })
+}`)
+
+	tutStep(5, "OAuth (Google / GitHub / Discord / LinkedIn / Microsoft)")
+	tutCode(`get /auth/google {
+  return redirect(oauth.authorize_url({ provider: "google" }))
+}
+
+get /auth/google/callback {
+  let user = oauth.exchange({ provider: "google", code: request.query.code })
+  return session.create({ email: user.email })
+}`)
+
+	fmt.Printf("\n%sBonus%s — webhook signature verification:\n", cBold, cReset)
+	tutCode(`post /webhooks/stripe {
+  if (!webhooks.verify_stripe(request.body_text, request.headers["stripe-signature"], env("STRIPE_WEBHOOK_SECRET"))) {
+    return problem(401, "Bad signature")
+  }
+  // ...
+}`)
+	fmt.Printf("Same shape for github / svix / shopify / slack.\n\n")
+}
+
+func printTutorialAI() {
+	tutHeader("MX Script — AI on tap")
+	fmt.Println("\n13 built-in providers + custom. One API.")
+
+	tutStep(1, "One-shot completion")
+	tutCode(`let summary = ai.complete("Summarize: " + request.body.text)
+return json({ summary: summary })`)
+
+	tutStep(2, "Switch providers")
+	tutCode(`ai.complete(prompt, { provider: "anthropic" })  // claude
+ai.complete(prompt, { provider: "groq" })       // fast llama
+ai.complete(prompt, { provider: "ollama" })     // local
+
+// Custom OpenAI-compatible endpoint:
+ai.complete(prompt, {
+  provider:    "custom",
+  base_url:    "https://my-vllm/v1/chat/completions",
+  api_key_env: "VLLM_KEY"
+})`)
+
+	tutStep(3, "Streaming")
+	tutCode(`sse /stream {
+  ai.stream(request.query.q, fn(chunk) { send(chunk) })
+}`)
+
+	tutStep(4, "Embeddings + similarity")
+	tutCode(`let v1 = ai.embed("the quick brown fox")
+let v2 = ai.embed("a fast brown vulpine")
+let score = ai.similarity(v1, v2)  // ~0.9`)
+
+	tutStep(5, "Tool-calling agent")
+	tutCode(`let tools = [
+  { name: "now", description: "Current time",
+    params: { type: "object", properties: {} },
+    handler: fn(_) { return now_iso() } },
+  { name: "calc", description: "Arithmetic",
+    params: { type: "object", required: ["expr"], properties: { expr: { type: "string" } } },
+    handler: fn(args) { return str(num(args.expr)) } }
+]
+
+post /chat {
+  let messages = [{ role: "user", content: request.body.question }]
+  loop 5 as turn {
+    let r = ai.complete("", { tools: tools, messages: messages })
+    if (isString(r)) { return json({ answer: r }) }
+    messages = arr.push(messages, { role: "assistant", tool_calls: r.tool_calls })
+    loop r.tool_calls as call {
+      let t = find(tools, fn(x) { return x.name == call.name })
+      messages = arr.push(messages, { role: "tool", tool_call_id: call.id, content: str(t.handler(call.arguments)) })
+    }
+  }
+}`)
+
+	fmt.Printf("\n%sScaffold an AI app%s — `mx new ai my-bot`. Real /chat endpoint with the agent loop wired up.\n\n", cBold, cReset)
+}
+
+func printTutorialTopics() {
+	tutHeader("Available tutorial topics")
+	fmt.Printf("\n  %smx tutorial%s            — five-minute hands-on tour (start here)\n", cCyan, cReset)
+	fmt.Printf("  %smx tutorial sql%s        — object-driven CRUD across SQLite/Postgres/MySQL\n", cCyan, cReset)
+	fmt.Printf("  %smx tutorial auth%s       — JWT / sessions / API keys / magic links / OAuth / webhooks\n", cCyan, cReset)
+	fmt.Printf("  %smx tutorial ai%s         — completion, embeddings, streaming, tool-calling agents\n", cCyan, cReset)
+	fmt.Println()
 }
 
 // ===== mx examples =====

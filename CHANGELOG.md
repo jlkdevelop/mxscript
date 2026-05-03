@@ -4,6 +4,29 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.67.0] — 2026-05-03
+
+### Added — `mx tutorial` hands-on walkthrough
+
+```
+$ mx tutorial            # five-step 60-second tour
+$ mx tutorial sql        # object-driven CRUD deep dive
+$ mx tutorial auth       # JWT / sessions / API keys / magic links / OAuth / webhooks
+$ mx tutorial ai         # completion / streaming / embeddings / tool-calling agents
+```
+
+The default tour walks from "hello world" → "first route" → "SQLite +
+paginated list" → "real template via `mx new shortener`" → "deploy with
+`mx build --vercel`" in five copy-pasteable lessons. Each lesson shows
+the snippet to drop into `app.mx` and the command to run after.
+
+The deep-dive topics each take one feature area (sql, auth, ai) and
+show every common pattern in one screen, with code, so users can
+search-as-they-type ("how do I do API keys again?") without leaving
+the terminal.
+
+[1.67.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.67.0
+
 ## [1.66.0] — 2026-05-03
 
 ### Improved — examples/ folder cleanup + modernization
