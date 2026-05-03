@@ -786,8 +786,9 @@ var builtinDocs = map[string]builtinDoc{
 	"debounce":   {"debounce(duration, fn) -> wrapper", ""},
 
 	// Test
-	"assert":    {"assert(cond, msg?)", ""},
-	"assert_eq": {"assert_eq(a, b, msg?)", ""},
+	"assert":          {"assert(cond, msg?)", ""},
+	"assert_eq":       {"assert_eq(a, b, msg?)", "Pretty multi-line diff on failure."},
+	"assert_snapshot": {"assert_snapshot(name, value)", "Compare value against __snapshots__/<file>.snap.json. First run writes the snapshot. `mx test -u` updates."},
 
 	// Misc
 	"retry": {"retry(fn, attempts, delay_ms?) -> any", "Call fn up to attempts times until non-error."},

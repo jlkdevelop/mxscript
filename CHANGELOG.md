@@ -4,6 +4,28 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.34.0] — 2026-05-03
+
+### Added — `assert_snapshot()` for golden-file testing
+
+```mx
+test "rendered welcome email" {
+  let body = render_email(user, plan)
+  assert_snapshot("welcome_email", body)
+}
+```
+
+First run writes the value's pretty repr to
+`__snapshots__/<file>.snap.json` next to the test source. Subsequent
+runs compare; failures show stored vs. current side-by-side. Run
+`mx test -u` (or `--update-snapshots`) to overwrite when an output
+change is intentional.
+
+Snapshots are committed — they ARE the test. Reviewing a snapshot
+diff in a PR is the same as reviewing a code change.
+
+[1.34.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.34.0
+
 ## [1.33.0] — 2026-05-03
 
 ### Added — `///` doc comments visible in `mx docs` and LSP hover

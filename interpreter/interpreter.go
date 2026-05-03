@@ -707,6 +707,9 @@ type Interpreter struct {
 	cliPort int // when > 0, overrides anything the program sets in its `server` block.
 	file    string
 
+	// snapshotMode toggles assert_snapshot between compare and update.
+	snapshotMode string
+
 	// useBytecode enables the experimental stack VM for expression
 	// statements that compile cleanly. Set via SetBytecode; gated by the
 	// CLI's --bytecode flag. Off by default until the VM has parity with
@@ -811,6 +814,17 @@ func New() *Interpreter {
 
 // SetFile records the source file path for error messages.
 func (i *Interpreter) SetFile(path string) { i.file = path }
+
+// File returns the current source file path. Builtins that need to
+// resolve relative paths (snapshots next to the test file, fixture
+// loaders, etc.) call this to anchor their lookups.
+func (i *Interpreter) File() string { return i.file }
+
+// snapshotMode controls how assert_snapshot resolves a missing or
+// changed snapshot. "" / "compare" (default): fail on miss/diff.
+// "update": overwrite the snapshot from disk and pass.
+func (i *Interpreter) SetSnapshotMode(mode string) { i.snapshotMode = mode }
+func (i *Interpreter) SnapshotMode() string         { return i.snapshotMode }
 
 // PackageResolver lets the host (the `mx` CLI) plug in a function
 // that turns a package-style import path like `github.com/foo/bar`

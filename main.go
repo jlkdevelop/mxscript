@@ -58,7 +58,7 @@ func (rr *replReader) ReadLine() (string, bool) {
 // Version is bumped at release time. Override at build with:
 //
 //	go build -ldflags "-X main.Version=v0.2.0"
-var Version = "v1.33.0"
+var Version = "v1.34.0"
 
 const (
 	cReset  = "\033[0m"
@@ -189,7 +189,7 @@ func printHelp() {
 	fmt.Println("  build --railway       Write Dockerfile + railway.toml for Railway deploys")
 	fmt.Println("  build --compose       Write Dockerfile + docker-compose.yml for self-hosted")
 	fmt.Println("  repl                  Start an interactive REPL")
-	fmt.Println("  test [path] [--cover] [--watch] [--filter S]  Run *_test.mx files (current dir by default)")
+	fmt.Println("  test [path] [--cover] [--watch] [--filter S] [-u]  Run *_test.mx files (current dir by default)")
 	fmt.Println("  bench [path]          Run *_bench.mx benchmarks (each fn bench_*)")
 	fmt.Println("  fmt [paths]           Format .mx files (-w writes, --check exits 1 on diffs, --diff previews changes)")
 	fmt.Println("  lsp                   Run the Language Server (JSON-RPC over stdio)")
@@ -1060,6 +1060,7 @@ func cmdTest(args []string) {
 	cover := false
 	watch := false
 	filter := ""
+	updateSnaps := false
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		switch {
@@ -1067,6 +1068,8 @@ func cmdTest(args []string) {
 			cover = true
 		case a == "--watch":
 			watch = true
+		case a == "--update-snapshots" || a == "-u":
+			updateSnaps = true
 		case a == "--filter" || a == "-f":
 			if i+1 < len(args) {
 				i++
@@ -1155,6 +1158,9 @@ func cmdTest(args []string) {
 		for _, name := range fnNames {
 			interp := interpreter.New()
 			interp.SetFile(file)
+			if updateSnaps {
+				interp.SetSnapshotMode("update")
+			}
 			if cover {
 				cov := interp.EnableCoverage()
 				if fileCov == nil {
@@ -1184,6 +1190,9 @@ func cmdTest(args []string) {
 		for i, name := range inlineNames {
 			interp := interpreter.New()
 			interp.SetFile(file)
+			if updateSnaps {
+				interp.SetSnapshotMode("update")
+			}
 			if cover {
 				cov := interp.EnableCoverage()
 				if fileCov == nil {

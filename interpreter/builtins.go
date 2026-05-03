@@ -480,6 +480,7 @@ func registerBuiltins(i *Interpreter) {
 	def("assert_eq", builtinAssertEq)
 	def("assert_throws", builtinAssertThrows)
 	def("assert_contains", builtinAssertContains)
+	def("assert_snapshot", builtinAssertSnapshot)
 	def("validate", builtinValidate)
 	def("sign_cookie", builtinSignCookie)
 	def("verify_cookie", builtinVerifyCookie)
