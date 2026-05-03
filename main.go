@@ -57,7 +57,7 @@ func (rr *replReader) ReadLine() (string, bool) {
 // Version is bumped at release time. Override at build with:
 //
 //	go build -ldflags "-X main.Version=v0.2.0"
-var Version = "v0.82.0"
+var Version = "v0.83.0"
 
 const (
 	cReset  = "\033[0m"
@@ -1880,8 +1880,20 @@ func cmdRoutes(args []string) {
 //	mx new blog my-blog
 //	mx new api users-api
 func cmdNew(args []string) {
-	if len(args) == 0 {
-		fatal("usage: mx new <template> [name]\n\nTemplates: api, todo, chat, ai, blog, saas")
+	if len(args) == 0 || args[0] == "--list" || args[0] == "-l" {
+		// Listing mode — show every template alongside its description
+		// so users can browse before committing.
+		names := []string{"api", "todo", "chat", "ai", "blog", "saas"}
+		fmt.Printf("\n%sAvailable templates:%s\n\n", cBold, cReset)
+		for _, name := range names {
+			tpl, ok := projectTemplates[name]
+			if !ok {
+				continue
+			}
+			fmt.Printf("  %s%-6s%s  %s\n", cCyan, name, cReset, tpl.Description)
+		}
+		fmt.Printf("\nUse: %smx new <name> [project-dir]%s\n\n", cGreen, cReset)
+		return
 	}
 	template := args[0]
 	name := template + "-app"

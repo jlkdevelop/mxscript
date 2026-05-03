@@ -381,6 +381,8 @@ func registerBuiltins(i *Interpreter) {
 	imageNS.Set("info", FunctionValue(&Function{Name: "image.info", Native: builtinImageInfo}))
 	imageNS.Set("resize", FunctionValue(&Function{Name: "image.resize", Native: builtinImageResize}))
 	imageNS.Set("convert", FunctionValue(&Function{Name: "image.convert", Native: builtinImageConvert}))
+	imageNS.Set("thumbnail", FunctionValue(&Function{Name: "image.thumbnail", Native: builtinImageThumbnail}))
+	imageNS.Set("crop", FunctionValue(&Function{Name: "image.crop", Native: builtinImageCrop}))
 	g.Set("image", ObjectValue(imageNS))
 	builtinNames["image"] = true
 
@@ -3774,6 +3776,107 @@ func builtinImageResize(i *Interpreter, args []Value) (Value, error) {
 	}
 
 	dst := imageNearestNeighborResize(src, int(w), int(h))
+	return encodeImage(dst, outFormat, quality)
+}
+
+// image.thumbnail(bytes, max_size, opts?) — fits the image within a
+// `max_size × max_size` square, preserving aspect ratio. Useful for
+// avatars and previews where you want a single dimension cap rather
+// than fixed width × height.
+func builtinImageThumbnail(_ *Interpreter, args []Value) (Value, error) {
+	data, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	maxSize, err := numberArg(args, 1)
+	if err != nil {
+		return Value{}, err
+	}
+	src, format, err := image.Decode(strings.NewReader(data))
+	if err != nil {
+		return Value{}, err
+	}
+	outFormat := format
+	quality := 85
+	if len(args) > 2 && args[2].Kind == KindObject {
+		if v, ok := args[2].Object.Get("format"); ok && v.Kind == KindString {
+			outFormat = v.String
+		}
+		if v, ok := args[2].Object.Get("quality"); ok && v.Kind == KindNumber {
+			quality = int(v.Number)
+		}
+	}
+
+	b := src.Bounds()
+	srcW, srcH := b.Dx(), b.Dy()
+	max := int(maxSize)
+	if srcW <= max && srcH <= max {
+		// Already small enough; just re-encode in case format changed.
+		return encodeImage(src, outFormat, quality)
+	}
+	var dstW, dstH int
+	if srcW > srcH {
+		dstW = max
+		dstH = srcH * max / srcW
+	} else {
+		dstH = max
+		dstW = srcW * max / srcH
+	}
+	dst := imageNearestNeighborResize(src, dstW, dstH)
+	return encodeImage(dst, outFormat, quality)
+}
+
+// image.crop(bytes, x, y, w, h, opts?) — extract a rectangular region.
+// Coordinates are top-left origin, clamped to the source bounds.
+func builtinImageCrop(_ *Interpreter, args []Value) (Value, error) {
+	if len(args) < 5 {
+		return Value{}, fmt.Errorf("image.crop(bytes, x, y, w, h, opts?) requires 5 args")
+	}
+	data, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	x, err := numberArg(args, 1)
+	if err != nil {
+		return Value{}, err
+	}
+	y, err := numberArg(args, 2)
+	if err != nil {
+		return Value{}, err
+	}
+	w, err := numberArg(args, 3)
+	if err != nil {
+		return Value{}, err
+	}
+	h, err := numberArg(args, 4)
+	if err != nil {
+		return Value{}, err
+	}
+	src, format, err := image.Decode(strings.NewReader(data))
+	if err != nil {
+		return Value{}, err
+	}
+	outFormat := format
+	quality := 85
+	if len(args) > 5 && args[5].Kind == KindObject {
+		if v, ok := args[5].Object.Get("format"); ok && v.Kind == KindString {
+			outFormat = v.String
+		}
+		if v, ok := args[5].Object.Get("quality"); ok && v.Kind == KindNumber {
+			quality = int(v.Number)
+		}
+	}
+
+	srcB := src.Bounds()
+	rect := image.Rect(srcB.Min.X+int(x), srcB.Min.Y+int(y),
+		srcB.Min.X+int(x+w), srcB.Min.Y+int(y+h))
+	rect = rect.Intersect(srcB)
+	dst := image.NewRGBA(image.Rect(0, 0, rect.Dx(), rect.Dy()))
+	for cy := 0; cy < rect.Dy(); cy++ {
+		for cx := 0; cx < rect.Dx(); cx++ {
+			dst.Set(cx, cy, src.At(rect.Min.X+cx, rect.Min.Y+cy))
+		}
+	}
 	return encodeImage(dst, outFormat, quality)
 }
 

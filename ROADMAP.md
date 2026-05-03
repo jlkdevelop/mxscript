@@ -8,6 +8,9 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.83.0** (2026-05-03)
+  - `image.thumbnail(bytes, max_size)` — aspect-preserving fit into a square; `image.crop(bytes, x, y, w, h)`
+  - `mx new --list` enumerates templates with their descriptions
 - **v0.82.0** (2026-05-03)
   - VM lowers `break` / `continue` via per-Compiled loop-frame stack with patched jumps
   - VM coverage push from v0.52 → v0.82 now complete: virtually every common shape compiles

@@ -537,6 +537,8 @@ var builtinDocs = map[string]builtinDoc{
 	"s3.delete":                  {"s3.delete(bucket, key, opts?)", "Delete an object."},
 	"s3.list":                    {"s3.list(bucket, prefix?, opts?) -> array", "List up to 1000 keys (optionally filtered by prefix)."},
 	"s3.presign":                 {"s3.presign(bucket, key, opts?) -> string", "Presigned GET URL. opts: expires (seconds, default 3600)."},
+	"image.thumbnail":            {"image.thumbnail(bytes, max_size, opts?) -> bytes", "Fit within max_size × max_size, preserving aspect ratio."},
+	"image.crop":                 {"image.crop(bytes, x, y, w, h, opts?) -> bytes", "Extract a rectangular region (top-left origin)."},
 	"magic_link.create":        {"magic_link.create(email, secret, opts?) -> string", "Signed time-limited token for passwordless email login. opts.expires_minutes (default 15)."},
 	"magic_link.verify":        {"magic_link.verify(token, secret) -> string|null", "Returns the email if the token is valid and unexpired, otherwise null."},
 	"totp.generate":            {"totp.generate(secret) -> string", "Current 6-digit RFC 6238 code. Secret is base32 (case- and padding-tolerant)."},

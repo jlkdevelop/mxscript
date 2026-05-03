@@ -4,6 +4,52 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.83.0] — 2026-05-03
+
+### Added — `image.thumbnail` + `image.crop` + `mx new --list`
+
+#### Image processing
+
+```mx
+// Avatar — preserve aspect, fit in 256×256.
+let thumb = image.thumbnail(file_bytes, 256)
+
+// Profile-banner crop — top-left origin.
+let banner = image.crop(file_bytes, 0, 100, 1200, 300)
+
+return image.convert(thumb, "jpeg", 75)
+```
+
+`image.thumbnail` is a thin convenience over the existing `resize`
+that picks the right dimension automatically: portraits fit by
+height, landscapes by width, squares by both. Skips the resize
+entirely when the image is already small enough.
+
+`image.crop` clamps to source bounds so out-of-range coordinates
+return the available subregion instead of a panic.
+
+Both forward `format` and `quality` opts to the existing
+`encodeImage` helper.
+
+#### `mx new --list`
+
+```
+$ mx new --list
+Available templates:
+
+  api    REST API with grouped routes + OpenAPI spec + Swagger UI
+  todo   Full-stack todo API with KV persistence + JWT auth
+  chat   Real-time chat with WebSockets + sessions + browser client
+  ai     AI agent with tool calling (3 tools, 5-turn loop)
+  blog   SSR blog with SQLite + markdown posts + admin
+  saas   Full SaaS starter — magic-link auth + Stripe + metrics + cron + admin
+```
+
+Same names + descriptions you'd see in the README, but without
+leaving the terminal. `mx new` (with no args) does the same thing.
+
+[0.83.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.83.0
+
 ## [0.82.0] — 2026-05-03
 
 ### Added — VM lowers `break` and `continue`
