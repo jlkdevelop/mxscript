@@ -4,6 +4,31 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.55.0] — 2026-05-03
+
+### Added — `csv()` + `ndjson()` response helpers for export endpoints
+
+```mx
+get /export/users.csv {
+  return csv(sql.find(db, "users", {}), { filename: "users.csv" })
+}
+
+get /export/events.ndjson {
+  return ndjson(sql.find(db, "events", { active: true }))
+}
+```
+
+`csv()` renders any array of objects as `text/csv; charset=utf-8`,
+column order following the first row's keys. `opts.filename` sets
+`Content-Disposition: attachment` so browsers download instead of
+trying to render.
+
+`ndjson()` writes one JSON object per line with `application/x-ndjson` —
+the de-facto shape for streaming pipelines, log shippers, and
+batched-export consumers.
+
+[1.55.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.55.0
+
 ## [1.54.0] — 2026-05-03
 
 ### Added — `server_timing()` for browser devtools timing breakdowns
