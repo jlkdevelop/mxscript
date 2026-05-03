@@ -4,6 +4,37 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.85.0] — 2026-05-03
+
+### Added — `mx examples` (browse 16 bundled examples)
+
+```
+$ mx examples
+Bundled examples (16):
+
+  agent               a tool-calling AI agent in 60 lines.
+  ai_providers        every AI provider MX Script speaks today.
+  app                 a tour of MX Script as a web framework.
+  blog                server-rendered blog with the v0.55 template engine.
+  chat                a real-time chat app in 80 lines.
+  cron                Vixie-cron scheduling for daily / weekly / hourly tasks.
+  ...
+
+$ mx examples show webhooks    # cat the source, no checkout needed
+$ mx examples copy stripe .    # write stripe.mx into the current dir
+```
+
+- **`embed.FS` bundling.** Every `.mx` example in the repo is
+  compiled into the binary at build time, so the command works from
+  any installed `mx` — not just inside a checkout.
+- **Auto-extracted summaries.** The first `// name.mx — <description>`
+  comment from each file becomes its blurb in the listing — keep
+  example headers rich and discovery improves automatically.
+- **One-shot copy** drops a working .mx file in the current dir
+  ready to `mx run`.
+
+[0.85.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.85.0
+
 ## [0.84.0] — 2026-05-03
 
 ### Added — `mx help <topic>` and `mx docs` (built-in docs viewer)

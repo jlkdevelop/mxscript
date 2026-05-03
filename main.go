@@ -16,6 +16,7 @@ import (
 	"bufio"
 	"compress/gzip"
 	"crypto/sha256"
+	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -57,7 +58,7 @@ func (rr *replReader) ReadLine() (string, bool) {
 // Version is bumped at release time. Override at build with:
 //
 //	go build -ldflags "-X main.Version=v0.2.0"
-var Version = "v0.84.0"
+var Version = "v0.85.0"
 
 const (
 	cReset  = "\033[0m"
@@ -119,6 +120,8 @@ func main() {
 		cmdServe(args)
 	case "ci":
 		cmdCI(args)
+	case "examples":
+		cmdExamples(args)
 	case "version", "-v", "--version":
 		fmt.Println("MX Script", Version)
 	case "help", "-h", "--help":
@@ -171,6 +174,7 @@ func printHelp() {
 	fmt.Println("  ci init [github|gitlab]  Scaffold a CI workflow that lints, checks, and tests")
 	fmt.Println("  help [topic]            Show built-in docs for a function (e.g. mx help ai.complete)")
 	fmt.Println("  docs [topic]            Alias for `help`")
+	fmt.Println("  examples [list|show <name>]  Browse / view bundled .mx examples")
 	fmt.Println("  version               Print version and exit")
 	fmt.Println("  help                  Show this help")
 	fmt.Println()
@@ -1774,6 +1778,95 @@ func min3(a, b, c int) int {
 		return b
 	}
 	return c
+}
+
+// ===== mx examples =====
+
+//go:embed examples/*.mx
+var bundledExamples embed.FS
+
+// cmdExamples lists / prints / copies the bundled example programs.
+// The examples are embedded into the binary at compile time so they
+// work from any installed `mx`, not just inside the repo checkout.
+//
+//	mx examples                     # list (default)
+//	mx examples list                # same
+//	mx examples show blog           # cat the source
+//	mx examples copy blog [dir]     # write blog.mx into dir (default .)
+func cmdExamples(args []string) {
+	sub := "list"
+	if len(args) > 0 {
+		sub = args[0]
+	}
+	switch sub {
+	case "list", "ls":
+		entries, err := bundledExamples.ReadDir("examples")
+		if err != nil {
+			fatal("cannot read embedded examples: %v", err)
+		}
+		fmt.Printf("\n%sBundled examples (%d):%s\n\n", cBold, len(entries), cReset)
+		for _, e := range entries {
+			name := strings.TrimSuffix(e.Name(), ".mx")
+			summary := exampleSummary(e.Name())
+			fmt.Printf("  %s%-20s%s %s\n", cCyan, name, cReset, summary)
+		}
+		fmt.Printf("\nUse: %smx examples show <name>%s or %smx examples copy <name>%s\n\n", cGreen, cReset, cGreen, cReset)
+	case "show":
+		if len(args) < 2 {
+			fatal("usage: mx examples show <name>")
+		}
+		name := args[1]
+		raw, err := bundledExamples.ReadFile("examples/" + name + ".mx")
+		if err != nil {
+			fatal("no example named %q (try `mx examples list`)", name)
+		}
+		fmt.Print(string(raw))
+	case "copy":
+		if len(args) < 2 {
+			fatal("usage: mx examples copy <name> [dest-dir]")
+		}
+		name := args[1]
+		dest := "."
+		if len(args) > 2 {
+			dest = args[2]
+		}
+		raw, err := bundledExamples.ReadFile("examples/" + name + ".mx")
+		if err != nil {
+			fatal("no example named %q", name)
+		}
+		if err := os.MkdirAll(dest, 0o755); err != nil {
+			fatal("mkdir: %v", err)
+		}
+		out := filepath.Join(dest, name+".mx")
+		if err := os.WriteFile(out, raw, 0o644); err != nil {
+			fatal("write: %v", err)
+		}
+		fmt.Printf("%s✓%s wrote %s\n", cGreen, cReset, out)
+	default:
+		fatal("unknown subcommand %q (try list/show/copy)", sub)
+	}
+}
+
+// exampleSummary pulls the first non-empty `// ...` comment line out
+// of an example file as its summary. Falls back to the file basename
+// when no comment is present.
+func exampleSummary(filename string) string {
+	raw, err := bundledExamples.ReadFile("examples/" + filename)
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(raw), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "//") {
+			s := strings.TrimSpace(strings.TrimPrefix(trimmed, "//"))
+			// Skip the `name.mx — description` header into just description.
+			if idx := strings.Index(s, "—"); idx >= 0 {
+				return strings.TrimSpace(s[idx+len("—"):])
+			}
+			return s
+		}
+	}
+	return ""
 }
 
 // ===== mx ci =====
