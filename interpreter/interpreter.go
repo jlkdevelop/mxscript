@@ -274,6 +274,15 @@ type Function struct {
 	Body    []parser.Stmt
 	Closure *Env
 	Native  func(interp *Interpreter, args []Value) (Value, error)
+
+	// VM-related fields. compiledBody is set lazily on first call
+	// when --bytecode is on; compileTried prevents re-attempting a
+	// compilation we already know will fall back. Both are guarded
+	// by mu so concurrent goroutines (spawn) don't race the lazy
+	// init step.
+	mu           sync.Mutex
+	compiledBody *Compiled
+	compileTried bool
 }
 
 type Response struct {
@@ -1973,6 +1982,35 @@ func (i *Interpreter) callFunction(node parser.Node, fn *Function, args []Value)
 			scope.Set(p, NullValue())
 		}
 	}
+
+	// Bytecode fast path: try to compile the body once and run it on
+	// the VM. The compiled body and a "we already tried" flag are
+	// cached on the Function so subsequent calls skip the cost. Any
+	// node the compiler doesn't lower flips compileTried and routes
+	// every future call through the tree-walker below.
+	if i.useBytecode {
+		fn.mu.Lock()
+		if !fn.compileTried {
+			fn.compileTried = true
+			if c, ok := CompileBlock(fn.Body); ok {
+				fn.compiledBody = c
+			}
+		}
+		compiled := fn.compiledBody
+		fn.mu.Unlock()
+		if compiled != nil {
+			v, err := compiled.Run(i, scope)
+			if err != nil {
+				var mx *MXError
+				if errors.As(err, &mx) && mx.Stack == nil {
+					mx.Stack = append([]StackFrame(nil), i.callStack...)
+				}
+				return Value{}, err
+			}
+			return v, nil
+		}
+	}
+
 	for _, s := range fn.Body {
 		err := i.execStmt(s, scope)
 		if err != nil {

@@ -50,6 +50,8 @@ const (
 	OpJumpIfFalse           // pop; if !truthy: pc = arg
 	OpPop                   // discard top
 	OpReturn                // halt; return top of stack (or null)
+	OpCall                  // pop arg values + callee; push call result
+	OpGetField              // pop obj; push obj.<consts[arg].String>
 )
 
 type Instr struct {
@@ -147,6 +149,37 @@ func (c *Compiled) compileExpr(e parser.Expr) bool {
 		default:
 			return false
 		}
+		return true
+	case *parser.CallExpr:
+		// Compile the callee, then each argument left-to-right, then
+		// emit OpCall with the argument count. The runtime resolves
+		// callee identity (native vs user function) at execution.
+		if !c.compileExpr(n.Callee) {
+			return false
+		}
+		for _, a := range n.Args {
+			// Spread args would need a different opcode; bail out for
+			// now and let the tree-walker handle them.
+			if _, isSpread := a.(*parser.SpreadExpr); isSpread {
+				return false
+			}
+			if !c.compileExpr(a) {
+				return false
+			}
+		}
+		c.emit(OpCall, int32(len(n.Args)))
+		return true
+	case *parser.MemberExpr:
+		// Support obj.field reads on the VM. Optional chaining (?.)
+		// would need a guarded path — fall back to the tree-walker
+		// for that case.
+		if n.Optional {
+			return false
+		}
+		if !c.compileExpr(n.Object) {
+			return false
+		}
+		c.emit(OpGetField, c.addConst(StringValue(n.Property)))
 		return true
 	case *parser.BinaryExpr:
 		// Short-circuit operators — fall back; they need branching beyond
@@ -265,14 +298,33 @@ func (c *Compiled) compileStmt(s parser.Stmt) bool {
 		c.emit(OpJump, loopStart)
 		c.patch(jumpOut, c.here())
 		return true
+
+	case *parser.ReturnStmt:
+		// `return expr` evaluates the expression and halts the VM
+		// with that value on the stack. `return` with no value
+		// pushes null. OpReturn is a hard stop, so this terminates
+		// the function body even from inside loops or conditionals.
+		if n.Value != nil {
+			if !c.compileExpr(n.Value) {
+				return false
+			}
+		} else {
+			c.emit(OpConst, c.addConst(NullValue()))
+		}
+		c.emit(OpReturn, 0)
+		return true
 	}
 	return false
 }
 
 // Run executes the compiled program against the given environment.
+// `interp` is needed for OpCall (function dispatch); pass nil for
+// programs that don't include calls (the runtime errors clearly if
+// a call is hit without an interpreter).
+//
 // Variables are read from / written to the env via name lookup, so
 // the VM shares state with the tree-walker for free.
-func (c *Compiled) Run(env *Env) (Value, error) {
+func (c *Compiled) Run(interp *Interpreter, env *Env) (Value, error) {
 	stack := make([]Value, 0, 32)
 	pc := 0
 	for pc < len(c.Code) {
@@ -382,6 +434,43 @@ func (c *Compiled) Run(env *Env) (Value, error) {
 				return NullValue(), nil
 			}
 			return stack[len(stack)-1], nil
+		case OpCall:
+			argc := int(ins.Arg)
+			if len(stack) < argc+1 {
+				return Value{}, fmt.Errorf("OpCall: stack underflow (have %d, need %d)", len(stack), argc+1)
+			}
+			args := make([]Value, argc)
+			copy(args, stack[len(stack)-argc:])
+			callee := stack[len(stack)-argc-1]
+			stack = stack[:len(stack)-argc-1]
+			if callee.Kind != KindFunction {
+				return Value{}, fmt.Errorf("attempt to call %s", callee.typeName())
+			}
+			fn := callee.Function
+			if interp == nil {
+				return Value{}, fmt.Errorf("OpCall without an interpreter (cannot dispatch %q)", fn.Name)
+			}
+			result, err := interp.callFunction(nil, fn, args)
+			if err != nil {
+				return Value{}, err
+			}
+			stack = append(stack, result)
+		case OpGetField:
+			obj := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			field := c.Consts[ins.Arg].String
+			switch obj.Kind {
+			case KindObject:
+				if v, ok := obj.Object.Get(field); ok {
+					stack = append(stack, v)
+				} else {
+					stack = append(stack, NullValue())
+				}
+			case KindNull:
+				stack = append(stack, NullValue())
+			default:
+				return Value{}, fmt.Errorf("cannot read field %q from %s", field, obj.typeName())
+			}
 		}
 	}
 	if len(stack) == 0 {
@@ -407,7 +496,7 @@ func (i *Interpreter) tryBytecode(e parser.Expr, env *Env) (Value, error) {
 	if c == nil {
 		return Value{}, errBytecodeFallback
 	}
-	return c.Run(env)
+	return c.Run(i, env)
 }
 
 // tryBytecodeStmt lowers a statement (and any nested statements) to
@@ -427,6 +516,6 @@ func (i *Interpreter) tryBytecodeStmt(s parser.Stmt, env *Env) error {
 	if c == nil {
 		return errBytecodeFallback
 	}
-	_, err := c.Run(env)
+	_, err := c.Run(i, env)
 	return err
 }

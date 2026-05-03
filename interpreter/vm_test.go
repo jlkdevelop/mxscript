@@ -36,7 +36,7 @@ func runVM(t *testing.T, src string, env *Env) Value {
 	if !ok {
 		t.Fatalf("compile refused for %q", src)
 	}
-	v, err := c.Run(env)
+	v, err := c.Run(nil, env)
 	if err != nil {
 		t.Fatalf("run %q: %v", src, err)
 	}
@@ -103,7 +103,7 @@ func TestVMUndefinedIdent(t *testing.T) {
 	if !ok {
 		t.Fatal("compile refused")
 	}
-	if _, err := c.Run(env); err == nil {
+	if _, err := c.Run(nil, env); err == nil {
 		t.Error("expected undefined-identifier error, got nil")
 	}
 }
@@ -119,8 +119,10 @@ func TestVMRefusesShortCircuit(t *testing.T) {
 }
 
 func TestVMRefusesUnsupportedNode(t *testing.T) {
-	// Object/array/call aren't lowered yet — they should fall back.
-	for _, src := range []string{"[1,2,3]", "{ a: 1 }", "len(\"hi\")"} {
+	// Array and object literals still need their own opcodes; the VM
+	// compiler bails out for them. Calls now compile (OpCall) so
+	// they're no longer in this list.
+	for _, src := range []string{"[1,2,3]", "{ a: 1 }"} {
 		if _, ok := CompileExpr(parseExpr(t, src)); ok {
 			t.Errorf("%q: expected compile to refuse, but it accepted", src)
 		}
@@ -132,7 +134,7 @@ func TestVMDivideByZero(t *testing.T) {
 	if !ok {
 		t.Fatal("compile refused")
 	}
-	if _, err := c.Run(NewEnv(nil)); err == nil {
+	if _, err := c.Run(nil, NewEnv(nil)); err == nil {
 		t.Error("expected division-by-zero error, got nil")
 	}
 }
@@ -153,7 +155,7 @@ x = x + 5`
 		t.Fatal("compile refused let+assign")
 	}
 	env := NewEnv(nil)
-	if _, err := c.Run(env); err != nil {
+	if _, err := c.Run(nil, env); err != nil {
 		t.Fatalf("run: %v", err)
 	}
 	v, ok := env.Get("x")
@@ -176,7 +178,7 @@ if x > 5 {
 		t.Fatal("compile refused if")
 	}
 	env := NewEnv(nil)
-	if _, err := c.Run(env); err != nil {
+	if _, err := c.Run(nil, env); err != nil {
 		t.Fatalf("run: %v", err)
 	}
 	v, _ := env.Get("x")
@@ -199,7 +201,7 @@ while i < 100 {
 		t.Fatal("compile refused while")
 	}
 	env := NewEnv(nil)
-	if _, err := c.Run(env); err != nil {
+	if _, err := c.Run(nil, env); err != nil {
 		t.Fatalf("run: %v", err)
 	}
 	v, _ := env.Get("total")
@@ -209,11 +211,10 @@ while i < 100 {
 }
 
 func TestVMRefusesUnsupportedStmt(t *testing.T) {
-	// `loop`, `try`, `return`, function calls in body, destructuring lets
-	// should all be refused so the tree-walker handles them.
+	// loop / try / destructuring lets still fall back. return now
+	// compiles since the VM has OpReturn for function-body lowering.
 	cases := []string{
 		`let { a, b } = { a: 1, b: 2 }`, // destructuring
-		`return 5`,                      // return outside fn
 		`try { 1 } catch e { 2 }`,       // try
 		`loop [1,2,3] as x { }`,         // loop
 	}
@@ -228,6 +229,92 @@ func TestVMRefusesUnsupportedStmt(t *testing.T) {
 		}
 		if _, ok := CompileBlock(prog.Stmts); ok {
 			t.Errorf("%q: expected compile refusal", src)
+		}
+	}
+}
+
+func TestVMCompilesCallExpression(t *testing.T) {
+	src := `
+fn double(n) { return n * 2 }
+let x = double(21)
+`
+	tokens, _ := lexer.New(src).Tokenize()
+	prog, _ := parser.New(tokens).Parse()
+	i := New()
+	i.SetBytecode(true)
+	if _, err := i.Exec(prog); err != nil {
+		t.Fatalf("exec: %v", err)
+	}
+	v, _ := i.Globals().Get("x")
+	if v.Kind != KindNumber || v.Number != 42 {
+		t.Errorf("x: want 42, got %+v", v)
+	}
+}
+
+func TestVMCompilesReturnStatement(t *testing.T) {
+	src := `
+fn pick(n) {
+  if n > 5 { return "big" }
+  return "small"
+}
+let a = pick(10)
+let b = pick(2)
+`
+	tokens, _ := lexer.New(src).Tokenize()
+	prog, _ := parser.New(tokens).Parse()
+	i := New()
+	i.SetBytecode(true)
+	if _, err := i.Exec(prog); err != nil {
+		t.Fatalf("exec: %v", err)
+	}
+	a, _ := i.Globals().Get("a")
+	b, _ := i.Globals().Get("b")
+	if a.String != "big" || b.String != "small" {
+		t.Errorf("a=%v b=%v", a, b)
+	}
+}
+
+func TestVMCompilesMemberAccess(t *testing.T) {
+	src := `
+let user = { name: "Jassim", age: 30 }
+let n = user.name
+`
+	tokens, _ := lexer.New(src).Tokenize()
+	prog, _ := parser.New(tokens).Parse()
+	i := New()
+	i.SetBytecode(true)
+	if _, err := i.Exec(prog); err != nil {
+		t.Fatalf("exec: %v", err)
+	}
+	v, _ := i.Globals().Get("n")
+	if v.String != "Jassim" {
+		t.Errorf("n: got %v", v)
+	}
+}
+
+func TestVMFunctionBodyCachedAfterFirstCall(t *testing.T) {
+	// The compiledBody cache should make the second call use the
+	// same bytecode object as the first; we can't observe that
+	// directly without exposing internals, but we CAN observe that
+	// repeated calls produce identical results without errors —
+	// which means cache lookup + run + result stays consistent.
+	src := `
+fn add(a, b) { return a + b }
+`
+	tokens, _ := lexer.New(src).Tokenize()
+	prog, _ := parser.New(tokens).Parse()
+	i := New()
+	i.SetBytecode(true)
+	if _, err := i.Exec(prog); err != nil {
+		t.Fatalf("exec: %v", err)
+	}
+	for k := 0; k < 5; k++ {
+		v, err := i.CallByName("add", []Value{NumberValue(2), NumberValue(3)})
+		if err != nil {
+			t.Fatalf("call %d: %v", k, err)
+		}
+		if v.Number != 5 {
+			t.Errorf("call %d: want 5, got %v", k, v.Number)
 		}
 	}
 }

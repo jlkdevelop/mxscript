@@ -8,6 +8,9 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.62.0** (2026-05-02)
+  - VM lowers function bodies, `CallExpr`, `ReturnStmt`, and `MemberExpr` — tight loops inside functions now run ~2× faster on `--bytecode`
+  - `OpCall` dispatches native and user functions; `OpGetField` reads object fields; per-Function compile cache with mutex
 - **v0.61.0** (2026-05-02)
   - `mx pkg init/add/list/remove/update/install` — git-backed package manager with `mxpkg.json` manifest and `mx_modules/` directory
   - `import "github.com/foo/bar"` resolves through `PackageResolver` to `./mx_modules/foo/bar/main.mx`

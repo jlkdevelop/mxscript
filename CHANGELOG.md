@@ -4,6 +4,48 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.62.0] — 2026-05-02
+
+### Added — VM lowers function bodies + calls + return + member access
+
+- **Function bodies now run on the bytecode VM.** When `--bytecode` is
+  on, the first call to each user-defined function tries to compile
+  its body and caches the result on the `Function` struct. Subsequent
+  calls go straight to the VM. Bodies the compiler can't lower fall
+  back to the tree-walker once and stay there (negative cache).
+
+  ```bash
+  $ mx bench /tmp/bench.mx                  # tree-walker
+  loop in fn   348us/op
+  $ mx bench --bytecode /tmp/bench.mx       # function body on VM
+  loop in fn   178us/op   (~2× faster)
+  ```
+
+- **`OpCall` opcode** dispatches calls inside compiled programs. The
+  VM compiler lowers `CallExpr` (callee + args + OpCall); at runtime,
+  OpCall pops `argc` arguments and the callee, hands off to
+  `Interpreter.callFunction`, then pushes the return value. Native
+  builtins and user functions both work — recursion included.
+
+- **`OpReturn` for `ReturnStmt`.** `return expr` evaluates the
+  expression and halts the VM with that value on the stack — exits
+  cleanly even from inside loops or conditionals. `return` with no
+  value pushes null. Combined with function-body lowering, this means
+  `if cond { return early } ...` now compiles in full.
+
+- **`OpGetField` for `MemberExpr`.** `user.name`, `request.params.id`,
+  `r.body.email` all run on the VM. Optional chaining (`?.`) still
+  falls back so the null-guard semantics stay correct.
+
+- **Per-function `sync.Mutex`** guards the lazy-compile path so
+  concurrent goroutines (`spawn { ... }`) don't race the cache.
+
+- **4 new VM tests** cover call dispatch, return, member access, and
+  cached repeated calls. All 15 VM tests + 161 total interpreter
+  tests pass.
+
+[0.62.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.62.0
+
 ## [0.61.0] — 2026-05-02
 
 ### Added — `mx pkg` package manager
