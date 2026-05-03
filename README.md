@@ -107,9 +107,13 @@ The playground at [`site/playground/`](site/playground/) ships a complete editor
 
 ## Install
 
-### Option 1 — pre-built binary (coming soon)
+### Option 1 — one-liner install
 
-Download from the [releases page](https://github.com/jlkdevelop/mxscript/releases) and put `mx` on your `$PATH`.
+```bash
+curl -fsSL https://raw.githubusercontent.com/jlkdevelop/mxscript/main/scripts/install.sh | bash
+```
+
+Detects your OS / arch, downloads the latest signed release binary, and drops it at `$HOME/.mx/bin/mx`. Add that directory to your `$PATH` and you're done. Pin a specific version with `MX_VERSION=v0.77.0`.
 
 ### Option 2 — build from source
 

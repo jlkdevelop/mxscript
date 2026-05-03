@@ -8,6 +8,9 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.77.0** (2026-05-03)
+  - `mx ci init <github|gitlab>` — CI workflow scaffolding (fmt + check + test)
+  - `scripts/install.sh` — one-line install with OS/arch detection and `go install` fallback
 - **v0.76.0** (2026-05-03)
   - `mx serve [dir]` — instant static file server with access log; pairs with `mx build --wasm` for the playground
 - **v0.75.0** (2026-05-03)

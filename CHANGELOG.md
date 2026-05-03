@@ -4,6 +4,43 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.77.0] — 2026-05-03
+
+### Added — `mx ci init` + one-line installer
+
+#### `mx ci init <github|gitlab>`
+
+Scaffolds a CI workflow that runs three checks on every push:
+
+```yaml
+# .github/workflows/ci.yml — generated
+- mx fmt --check .         # formatter is clean
+- mx check **/*.mx         # static analyzer passes
+- mx test                  # *_test.mx files pass
+```
+
+GitHub Actions and GitLab CI both ship pre-baked. Defensive: if a
+workflow file already exists at the target path, the command leaves
+it alone and prints `<file> already exists`.
+
+#### `scripts/install.sh`
+
+Powering the one-line install in the README:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jlkdevelop/mxscript/main/scripts/install.sh | bash
+```
+
+- **Detects OS + arch** (Darwin / Linux × amd64 / arm64).
+- **Resolves the latest GitHub release** and downloads the matching
+  `.tar.gz`. Pin a specific version with `MX_VERSION=v0.77.0`.
+- **Falls back to `go install`** if the binary download fails and
+  Go is on `$PATH` — useful on platforms where GoReleaser hasn't
+  built a binary yet.
+- Drops `mx` into `$HOME/.mx/bin/` (override with `INSTALL_DIR`).
+
+[0.77.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.77.0
+
 ## [0.76.0] — 2026-05-03
 
 ### Added — `mx serve [dir] [--port N]` static file server
