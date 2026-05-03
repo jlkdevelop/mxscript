@@ -4,6 +4,25 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.20.0] — 2026-05-03
+
+### Added — `mx open <url-or-port>` (cross-platform browser opener)
+
+```bash
+mx open https://mxscript.com
+mx open 8080                    # sugar for http://localhost:8080
+
+# common dev workflow:
+mx run app.mx & sleep 1 && mx open 8080
+```
+
+Tries the platform-native opener (`open` on macOS, `xdg-open` /
+`sensible-browser` on Linux, `cmd /c start` on Windows) and falls
+back to printing the URL when none is available. Detached so the
+browser process survives the parent.
+
+[1.20.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.20.0
+
 ## [1.19.0] — 2026-05-03
 
 ### Added — `assert_throws` + `assert_contains`

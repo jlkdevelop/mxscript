@@ -58,7 +58,7 @@ func (rr *replReader) ReadLine() (string, bool) {
 // Version is bumped at release time. Override at build with:
 //
 //	go build -ldflags "-X main.Version=v0.2.0"
-var Version = "v1.19.0"
+var Version = "v1.20.0"
 
 const (
 	cReset  = "\033[0m"
@@ -132,6 +132,8 @@ func main() {
 		cmdStats(args)
 	case "ship":
 		cmdShip(args)
+	case "open":
+		cmdOpen(args)
 	case "version", "-v", "--version":
 		check := false
 		for _, a := range args {
@@ -199,6 +201,7 @@ func printHelp() {
 	fmt.Println("  audit <file.mx>              Security checklist (rate limits, TLS, secrets, etc.)")
 	fmt.Println("  stats <file.mx>              Code metrics (routes, fns, middleware, namespaces used)")
 	fmt.Println("  ship                         Run fmt --check + check + audit + test (CI-friendly preflight)")
+	fmt.Println("  open <url-or-port>           Open a URL (or http://localhost:PORT) in the default browser")
 	fmt.Println("  version               Print version and exit")
 	fmt.Println("  help                  Show this help")
 	fmt.Println()
@@ -1868,6 +1871,55 @@ func parseSemver(tag string) [3]int {
 		out[i] = n
 	}
 	return out
+}
+
+// ===== mx open =====
+
+// cmdOpen launches a URL in the user's default browser. Accepts a
+// bare port number (sugar for http://localhost:N) so the workflow
+// `mx run app.mx & sleep 1 && mx open 8080` is one finger-roll.
+//
+// Implementation tries three platform-native commands:
+//   - macOS:   `open <url>`
+//   - Linux:   `xdg-open <url>`
+//   - Windows: `cmd /c start <url>`
+// Falls back to printing the URL when none works so headless
+// environments still get the link.
+func cmdOpen(args []string) {
+	if len(args) < 1 {
+		fatal("usage: mx open <url-or-port>")
+	}
+	target := args[0]
+
+	// Bare port number → localhost URL.
+	if _, err := strconv.Atoi(target); err == nil {
+		target = "http://localhost:" + target
+	}
+
+	candidates := [][]string{}
+	switch runtime.GOOS {
+	case "darwin":
+		candidates = append(candidates, []string{"open", target})
+	case "windows":
+		candidates = append(candidates, []string{"cmd", "/c", "start", target})
+	default:
+		candidates = append(candidates, []string{"xdg-open", target})
+		candidates = append(candidates, []string{"sensible-browser", target})
+	}
+
+	for _, c := range candidates {
+		cmd := exec.Command(c[0], c[1:]...)
+		cmd.Stdout = io.Discard
+		cmd.Stderr = io.Discard
+		if err := cmd.Start(); err == nil {
+			// Detach — we don't wait for the browser to exit.
+			go cmd.Wait()
+			fmt.Printf("%s✓%s opening %s\n", cGreen, cReset, target)
+			return
+		}
+	}
+	fmt.Printf("%scould not invoke a browser — open this URL manually:%s\n  %s\n",
+		cYellow, cReset, target)
 }
 
 // ===== mx ship =====
