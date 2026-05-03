@@ -468,6 +468,8 @@ func registerBuiltins(i *Interpreter) {
 	def("retry", builtinRetry)
 	def("assert", builtinAssert)
 	def("assert_eq", builtinAssertEq)
+	def("assert_throws", builtinAssertThrows)
+	def("assert_contains", builtinAssertContains)
 	def("validate", builtinValidate)
 	def("sign_cookie", builtinSignCookie)
 	def("verify_cookie", builtinVerifyCookie)
@@ -3670,6 +3672,58 @@ func builtinAssert(i *Interpreter, args []Value) (Value, error) {
 
 // assert_eq(a, b, msg?) throws if a != b. Includes both values in the
 // error message for easier debugging.
+// assert_throws(fn, msg?) — runs fn() and passes if it throws.
+// Throws an assertion failure if the call succeeds. Useful for
+// negative-path tests: "this input should be rejected".
+func builtinAssertThrows(i *Interpreter, args []Value) (Value, error) {
+	if len(args) < 1 || args[0].Kind != KindFunction {
+		return Value{}, fmt.Errorf("assert_throws(fn, msg?) requires a function")
+	}
+	_, err := i.callFunction(nil, args[0].Function, nil)
+	if err != nil {
+		return NullValue(), nil
+	}
+	prefix := "assert_throws failed (expected fn to throw)"
+	if len(args) > 1 && args[1].Kind == KindString {
+		prefix = "assert_throws failed: " + args[1].String
+	}
+	return Value{}, fmt.Errorf("%s", prefix)
+}
+
+// assert_contains(haystack, needle, msg?) — passes when:
+//   - haystack is a string and contains needle
+//   - haystack is an array and any element equals needle
+// Useful for fuzzy assertions where exact equality is too strict.
+func builtinAssertContains(_ *Interpreter, args []Value) (Value, error) {
+	if len(args) < 2 {
+		return Value{}, fmt.Errorf("assert_contains(haystack, needle, msg?) requires 2 args")
+	}
+	hay := args[0]
+	needle := args[1]
+	pass := false
+	switch hay.Kind {
+	case KindString:
+		if needle.Kind == KindString {
+			pass = strings.Contains(hay.String, needle.String)
+		}
+	case KindArray:
+		for _, el := range hay.Array {
+			if valuesEqual(el, needle) {
+				pass = true
+				break
+			}
+		}
+	}
+	if pass {
+		return NullValue(), nil
+	}
+	prefix := "assert_contains failed"
+	if len(args) > 2 && args[2].Kind == KindString {
+		prefix = "assert_contains failed: " + args[2].String
+	}
+	return Value{}, fmt.Errorf("%s — looking for %s in %s", prefix, needle.Display(), hay.Display())
+}
+
 func builtinAssertEq(i *Interpreter, args []Value) (Value, error) {
 	if len(args) < 2 {
 		return Value{}, fmt.Errorf("assert_eq(a, b, msg?) requires at least 2 arguments")

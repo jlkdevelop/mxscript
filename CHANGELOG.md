@@ -4,6 +4,32 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.19.0] — 2026-05-03
+
+### Added — `assert_throws` + `assert_contains`
+
+Two test helpers that round out the existing `assert` / `assert_eq`
+surface for the most-asked test patterns:
+
+```mx
+fn test_rejects_bad_input() {
+  assert_throws(fn() { num("not a number") })
+  assert_throws(fn() { sql.exec(db, "BROKEN SQL") }, "should reject malformed SQL")
+}
+
+fn test_response_shape() {
+  let r = ai.complete("hi", { provider: "anthropic" })
+  assert_contains(r, "Hi")
+  assert_contains(["a", "b", "c"], "b")
+}
+```
+
+`assert_throws` passes when the wrapped fn raises; `assert_contains`
+handles strings (substring) and arrays (element equality) with the
+same call shape.
+
+[1.19.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.19.0
+
 ## [1.18.0] — 2026-05-03
 
 ### Added — `mx version --check`
