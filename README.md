@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <strong>Founded and developed by <a href="https://github.com/jlkdevelop">Jassim Alkharafi</a>.</strong>
+  <strong>Created and developed by <a href="https://github.com/jlkdevelop">Jassim Alkharafi</a>.</strong>
 </p>
 
 ```mx
@@ -92,6 +92,17 @@ mx new blog my-blog       # SSR markdown blog with admin
 Each scaffolds a complete, runnable app. Read the source, change the bits you don't like, ship.
 
 ---
+
+## Try it in your browser
+
+The full interpreter compiles to WebAssembly. Run a program without installing anything:
+
+```bash
+mx build --wasm                      # produces dist/mx.wasm + wasm_exec.js
+# then serve site/playground/ — open the result in any modern browser
+```
+
+The playground at [`site/playground/`](site/playground/) ships a complete editor + run loop with bundled examples (closures, map/filter, match, JSON, tight numeric loops). See [`site/playground/README.md`](site/playground/README.md) for deploy instructions.
 
 ## Install
 
