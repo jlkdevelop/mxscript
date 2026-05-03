@@ -56,6 +56,9 @@ const (
 	OpMakeObject            // pop arg*2 values (key, value pairs); push as KindObject
 	OpGetIndex              // pop index; pop target; push target[index]
 	OpLength                // pop value; push its length (array len, string len, object key count)
+	OpAndJump               // peek; if falsy: pc = arg (leaves value); else pop + continue
+	OpOrJump                // peek; if truthy: pc = arg (leaves value); else pop + continue
+	OpNullishJump           // peek; if non-null: pc = arg (leaves value); else pop + continue
 )
 
 type Instr struct {
@@ -224,10 +227,29 @@ func (c *Compiled) compileExpr(e parser.Expr) bool {
 		c.emit(OpMakeObject, int32(len(n.Pairs)))
 		return true
 	case *parser.BinaryExpr:
-		// Short-circuit operators — fall back; they need branching beyond
-		// what the basic stack ops provide.
+		// Short-circuit operators emit a peek-and-jump pattern: the
+		// runtime opcode keeps the left value on the stack when the
+		// short-circuit condition matches, otherwise pops it before
+		// the right operand evaluates.
 		if n.Op == "&&" || n.Op == "||" || n.Op == "??" {
-			return false
+			if !c.compileExpr(n.Left) {
+				return false
+			}
+			var op Op
+			switch n.Op {
+			case "&&":
+				op = OpAndJump
+			case "||":
+				op = OpOrJump
+			case "??":
+				op = OpNullishJump
+			}
+			jump := c.emit(op, 0)
+			if !c.compileExpr(n.Right) {
+				return false
+			}
+			c.patch(jump, c.here())
+			return true
 		}
 		if !c.compileExpr(n.Left) {
 			return false
@@ -618,6 +640,27 @@ func (c *Compiled) Run(interp *Interpreter, env *Env) (Value, error) {
 				stack = append(stack, NullValue())
 			default:
 				return Value{}, fmt.Errorf("cannot index %s", target.typeName())
+			}
+		case OpAndJump:
+			top := stack[len(stack)-1]
+			if !top.IsTruthy() {
+				pc = int(ins.Arg) // leave the falsy value on the stack
+			} else {
+				stack = stack[:len(stack)-1]
+			}
+		case OpOrJump:
+			top := stack[len(stack)-1]
+			if top.IsTruthy() {
+				pc = int(ins.Arg) // leave the truthy value
+			} else {
+				stack = stack[:len(stack)-1]
+			}
+		case OpNullishJump:
+			top := stack[len(stack)-1]
+			if top.Kind != KindNull {
+				pc = int(ins.Arg) // leave the non-null value
+			} else {
+				stack = stack[:len(stack)-1]
 			}
 		case OpLength:
 			v := stack[len(stack)-1]

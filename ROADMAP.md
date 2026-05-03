@@ -8,6 +8,9 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v0.80.0** (2026-05-03)
+  - VM lowers `&&` / `||` / `??` short-circuit operators (new `OpAndJump`, `OpOrJump`, `OpNullishJump` opcodes)
+  - Tripwire test asserts the right side doesn't evaluate when the left determines the result
 - **v0.79.0** (2026-05-03)
   - `s3.*` namespace — pure-Go AWS Signature V4; works with AWS S3, Cloudflare R2, Backblaze B2, DigitalOcean Spaces, MinIO, Wasabi
   - SigV4 verified against AWS's published canonical example byte-for-byte

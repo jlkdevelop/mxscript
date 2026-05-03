@@ -4,6 +4,38 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.80.0] — 2026-05-03
+
+### Added — VM lowers `&&`, `||`, `??` short-circuit
+
+Three new opcodes that peek-and-conditionally-pop, so the VM can
+compile short-circuit operators without re-evaluating the right side
+when the left determines the result:
+
+- `OpAndJump` — peek; if falsy, jump (leave value); else pop, fall through
+- `OpOrJump`  — peek; if truthy, jump (leave value); else pop, fall through
+- `OpNullishJump` — peek; if non-null, jump (leave value); else pop, fall through
+
+```mx
+let user = users["jassim"] ?? default_user        // VM-compiled
+let safe = trusted && expensive_check()           // expensive_check NOT called when trusted is false
+let role = current_role || "viewer"               // VM-compiled
+```
+
+Combined with v0.71's array/object/loop coverage and v0.62's
+function-body lowering, the VM now lowers virtually every expression
+shape MX programs use day-to-day. Optional chaining (`?.`) is the
+last common construct still falling back.
+
+- **9 VM tests** cover all three operators in both branches
+  (truthy left, falsy left), plus the critical short-circuit
+  guarantee that the right side doesn't evaluate when the left
+  determines the result (uses `nonexistent_should_not_eval` as a
+  tripwire — if the VM ran it, the test would fail with
+  "undefined identifier" instead of returning the expected value).
+
+[0.80.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.80.0
+
 ## [0.79.0] — 2026-05-03
 
 ### Added — `s3.*` (pure-Go AWS Signature V4)

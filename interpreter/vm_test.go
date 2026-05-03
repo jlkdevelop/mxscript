@@ -108,23 +108,55 @@ func TestVMUndefinedIdent(t *testing.T) {
 	}
 }
 
-func TestVMRefusesShortCircuit(t *testing.T) {
-	// && / || / ?? need branching; the MVP compiler bails out and
-	// callers fall back to the tree-walker.
-	for _, src := range []string{"true && false", "1 || 2", "null ?? 7"} {
-		if _, ok := CompileExpr(parseExpr(t, src)); ok {
-			t.Errorf("%q: expected compile to refuse, but it accepted", src)
+func TestVMShortCircuitOps(t *testing.T) {
+	cases := []struct {
+		src  string
+		want any
+	}{
+		{`true && "yes"`, "yes"},
+		{`false && "yes"`, false},
+		{`true || "alt"`, true},
+		{`false || "alt"`, "alt"},
+		{`null ?? "fallback"`, "fallback"},
+		{`"value" ?? "fallback"`, "value"},
+		// Short-circuit really must short-circuit: the right side
+		// shouldn't run when the left determines the result. Use
+		// an undefined identifier on the right; if the VM evaluated
+		// it we'd get a runtime error instead of "ok".
+		{`true || nonexistent_should_not_eval`, true},
+		{`false && nonexistent_should_not_eval`, false},
+		{`"x" ?? nonexistent_should_not_eval`, "x"},
+	}
+	env := NewEnv(nil)
+	for _, tc := range cases {
+		c, ok := CompileExpr(parseExpr(t, tc.src))
+		if !ok {
+			t.Errorf("%q: compile refused", tc.src)
+			continue
+		}
+		v, err := c.Run(nil, env)
+		if err != nil {
+			t.Errorf("%q: %v", tc.src, err)
+			continue
+		}
+		switch want := tc.want.(type) {
+		case string:
+			if v.Kind != KindString || v.String != want {
+				t.Errorf("%q: got %+v, want %q", tc.src, v, want)
+			}
+		case bool:
+			if v.Kind != KindBool || v.Bool != want {
+				t.Errorf("%q: got %+v, want %v", tc.src, v, want)
+			}
 		}
 	}
 }
 
 func TestVMRefusesUnsupportedNode(t *testing.T) {
-	// Spread args, optional chaining, and short-circuit operators
-	// still fall back. Plain array / object literals + index reads
-	// now compile (v0.71).
+	// Optional chaining still falls back. Spread inside arrays falls
+	// back too. Short-circuit ops compile in v0.80.
 	for _, src := range []string{
-		`null?.field`,                      // optional chaining
-		`true && false`,                    // short-circuit
+		`null?.field`, // optional chaining
 	} {
 		if _, ok := CompileExpr(parseExpr(t, src)); ok {
 			t.Errorf("%q: expected compile to refuse, but it accepted", src)
