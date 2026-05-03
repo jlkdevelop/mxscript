@@ -5936,6 +5936,8 @@ func builtinAIComplete(i *Interpreter, args []Value) (Value, error) {
 	maxTokens := 256
 	var tools []Value
 	var messages []Value
+	customBaseURL := ""
+	customKeyEnv := ""
 
 	if len(args) > 1 && args[1].Kind == KindObject {
 		opts := args[1].Object
@@ -5955,6 +5957,14 @@ func builtinAIComplete(i *Interpreter, args []Value) (Value, error) {
 		if v, ok := opts.Get("messages"); ok && v.Kind == KindArray {
 			messages = v.Array
 		}
+		// Custom OpenAI-compatible endpoint — for self-hosted vLLM,
+		// LiteLLM, AI Gateway proxies, etc. Pair with provider:"custom".
+		if v, ok := opts.Get("base_url"); ok && v.Kind == KindString {
+			customBaseURL = v.String
+		}
+		if v, ok := opts.Get("api_key_env"); ok && v.Kind == KindString {
+			customKeyEnv = v.String
+		}
 	}
 
 	if provider == "anthropic" {
@@ -5962,6 +5972,19 @@ func builtinAIComplete(i *Interpreter, args []Value) (Value, error) {
 	}
 	if provider == "gemini" || provider == "google" {
 		return aiCompleteGemini(prompt, model, maxTokens)
+	}
+	if provider == "custom" {
+		if customBaseURL == "" {
+			return Value{}, fmt.Errorf("ai.complete with provider=\"custom\" requires base_url")
+		}
+		cfg := openAICompatProvider{
+			Name:         "custom",
+			BaseURL:      customBaseURL,
+			EnvKey:       customKeyEnv,
+			DefaultModel: model,
+			NoAuth:       customKeyEnv == "",
+		}
+		return aiCompleteOpenAICompat(cfg, prompt, model, maxTokens)
 	}
 	if cfg, ok := openAICompatProviders[provider]; ok {
 		return aiCompleteOpenAICompat(cfg, prompt, model, maxTokens)

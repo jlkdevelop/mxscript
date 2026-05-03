@@ -4,6 +4,27 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.40.0] — 2026-05-03
+
+### Added — `ai.complete` with custom OpenAI-compatible endpoints
+
+```mx
+let r = ai.complete("hello", {
+  provider:    "custom",
+  base_url:    "https://my-vllm.internal/v1/chat/completions",
+  api_key_env: "VLLM_API_KEY",     // optional — omit for unauthed endpoints
+  model:       "llama-3.3-70b-instruct"
+})
+```
+
+Lets MX talk to any OpenAI-wire-compatible endpoint without waiting for
+a built-in provider entry: self-hosted vLLM / TGI / Ollama clusters,
+LiteLLM proxies, AI Gateway proxies, Cloudflare Workers AI, internal
+inference services. The 13 built-in providers stay unchanged — `custom`
+is the escape hatch.
+
+[1.40.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.40.0
+
 ## [1.39.0] — 2026-05-03
 
 ### Added — `mx new dashboard` template + `arr.slice` / `arr.take` / `arr.drop`
