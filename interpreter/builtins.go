@@ -175,6 +175,9 @@ func registerBuiltins(i *Interpreter) {
 	arrNS.Set("group_by", FunctionValue(&Function{Name: "arr.group_by", Native: builtinGroupBy}))
 	arrNS.Set("count_by", FunctionValue(&Function{Name: "arr.count_by", Native: builtinCountBy}))
 	arrNS.Set("partition", FunctionValue(&Function{Name: "arr.partition", Native: builtinPartition}))
+	arrNS.Set("slice", FunctionValue(&Function{Name: "arr.slice", Native: builtinSlice}))
+	arrNS.Set("take", FunctionValue(&Function{Name: "arr.take", Native: builtinTake}))
+	arrNS.Set("drop", FunctionValue(&Function{Name: "arr.drop", Native: builtinDrop}))
 	g.Set("arr", ObjectValue(arrNS))
 	builtinNames["arr"] = true
 
@@ -1951,6 +1954,75 @@ func builtinPop(i *Interpreter, args []Value) (Value, error) {
 		return NullValue(), nil
 	}
 	return a[len(a)-1], nil
+}
+
+// arr.slice(arr, start, end?) — mirrors JS / Python list slicing.
+// Negative indices count from the end; out-of-range bounds clamp to
+// [0, len]. End defaults to len(arr).
+func builtinSlice(_ *Interpreter, args []Value) (Value, error) {
+	if len(args) < 2 || args[0].Kind != KindArray {
+		return Value{}, fmt.Errorf("arr.slice(arr, start, end?) requires an array and a start index")
+	}
+	a := args[0].Array
+	n := len(a)
+	start := normalizeSliceIdx(int(args[1].Number), n)
+	end := n
+	if len(args) > 2 && args[2].Kind == KindNumber {
+		end = normalizeSliceIdx(int(args[2].Number), n)
+	}
+	if end < start {
+		end = start
+	}
+	out := make([]Value, end-start)
+	copy(out, a[start:end])
+	return ArrayValue(out), nil
+}
+
+func builtinTake(_ *Interpreter, args []Value) (Value, error) {
+	if len(args) < 2 || args[0].Kind != KindArray || args[1].Kind != KindNumber {
+		return Value{}, fmt.Errorf("arr.take(arr, n) requires an array and a count")
+	}
+	a := args[0].Array
+	n := int(args[1].Number)
+	if n < 0 {
+		n = 0
+	}
+	if n > len(a) {
+		n = len(a)
+	}
+	out := make([]Value, n)
+	copy(out, a[:n])
+	return ArrayValue(out), nil
+}
+
+func builtinDrop(_ *Interpreter, args []Value) (Value, error) {
+	if len(args) < 2 || args[0].Kind != KindArray || args[1].Kind != KindNumber {
+		return Value{}, fmt.Errorf("arr.drop(arr, n) requires an array and a count")
+	}
+	a := args[0].Array
+	n := int(args[1].Number)
+	if n < 0 {
+		n = 0
+	}
+	if n > len(a) {
+		n = len(a)
+	}
+	out := make([]Value, len(a)-n)
+	copy(out, a[n:])
+	return ArrayValue(out), nil
+}
+
+func normalizeSliceIdx(i, n int) int {
+	if i < 0 {
+		i += n
+	}
+	if i < 0 {
+		return 0
+	}
+	if i > n {
+		return n
+	}
+	return i
 }
 
 func builtinMap(i *Interpreter, args []Value) (Value, error) {

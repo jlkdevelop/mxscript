@@ -4,6 +4,36 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.39.0] — 2026-05-03
+
+### Added — `mx new dashboard` template + `arr.slice` / `arr.take` / `arr.drop`
+
+```bash
+mx new dashboard my-admin
+cd my-admin
+cp .env.example .env
+mx run app.mx
+```
+
+A self-contained admin dashboard in one `app.mx` (~150 lines) showing
+the shape of a real MX app:
+
+- Cookie session auth (single-password `ADMIN_PASSWORD`)
+- Live metrics tiles + Chart.js timeseries
+- WebSocket fan-out — every counter update broadcasts to every open
+  dashboard tab
+- Cron-driven synthetic traffic so charts move without real users
+- Server-rendered HTML (no build step)
+
+Three new array builtins fell out of writing the rolling-history logic
+and ship alongside:
+
+- `arr.slice(arr, start, end?)` — JS/Python style, negative indices
+- `arr.take(arr, n)` — first n
+- `arr.drop(arr, n)` — skip first n
+
+[1.39.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.39.0
+
 ## [1.38.0] — 2026-05-03
 
 ### Added — gradual type annotations
