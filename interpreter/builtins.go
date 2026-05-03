@@ -257,6 +257,13 @@ func registerBuiltins(i *Interpreter) {
 	g.Set("http", ObjectValue(httpNS))
 	builtinNames["http"] = true
 
+	// form.* — urlencoded form body parsing + building.
+	formNS := NewOrderedMap()
+	formNS.Set("parse", FunctionValue(&Function{Name: "form.parse", Native: builtinFormParse}))
+	formNS.Set("encode", FunctionValue(&Function{Name: "form.encode", Native: builtinFormEncode}))
+	g.Set("form", ObjectValue(formNS))
+	builtinNames["form"] = true
+
 	// health.* — k8s-style liveness / readiness probes.
 	healthNS := NewOrderedMap()
 	healthNS.Set("live", FunctionValue(&Function{Name: "health.live", Native: builtinHealthLive}))

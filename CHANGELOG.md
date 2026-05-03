@@ -4,6 +4,36 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.12.0] — 2026-05-03
+
+### Added — `form.*` namespace (urlencoded form bodies)
+
+```mx
+form.parse("a=1&b=hello%20world&tags=x&tags=y")
+// → { a: "1", b: "hello world", tags: ["x", "y"] }
+
+form.encode({ user: "alice", count: 3 })
+// → "count=3&user=alice"     # sorted keys
+
+// Build a POST body for an API that wants form-encoded:
+fetch(url, {
+  method: "POST",
+  body:    form.encode({ grant_type: "refresh_token", refresh_token: rt })
+})
+```
+
+- **Single-value keys → strings**, multi-value keys → arrays.
+- **Sorted-key encoding** so signing + caching upstream of MX sees
+  byte-stable output.
+- **Null values skip** in `form.encode` so `{ x: maybe }` patterns
+  don't send the literal string "null".
+- **Returns null on malformed input** — easier to compose with
+  `if (form.parse(s) == null) ...` than try/catch.
+- **7 tests** including the full round-trip and the array-expansion
+  + sorted-key invariants.
+
+[1.12.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.12.0
+
 ## [1.11.0] — 2026-05-03
 
 ### Added — `mx stats <file.mx>` (code-shape summary)
