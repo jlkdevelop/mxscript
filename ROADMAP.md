@@ -8,6 +8,13 @@ Public roadmap. Vote on items via 👍 reactions on the linked issues.
 
 ## Shipped
 
+- **v1.0.0** (2026-05-03) — 🎉 production-ready stable release. Core language frozen for the 1.x line.
+- **v0.97.0** (2026-05-03)
+  - `vault.*` — AES-256-GCM encrypted secrets store backed by `.vault.json`
+- **v0.96.0** (2026-05-03)
+  - `arr.*` namespaced aliases (mirrors v0.95's `str.*`)
+- **v0.95.0** (2026-05-03)
+  - `str.*` namespaced aliases for the string helpers
 - **v0.94.0** (2026-05-03)
   - `http.session(opts?)` — stateful HTTP client with cookie jar; for SDKs that consume legacy form-login APIs
 - **v0.93.0** (2026-05-03)

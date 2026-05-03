@@ -4,6 +4,103 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.0] — 2026-05-03
+
+🎉 **MX Script 1.0** — production-ready stable release.
+
+### What this means
+
+The core language is frozen for the 1.x line: syntax, type system,
+standard library shapes, and CLI surface stay backwards-compatible
+within 1.x. Future 1.x releases add features and fix bugs;
+breaking changes wait for 2.0.
+
+### What ships in 1.0
+
+The 96 releases between v0.1.0 and v0.97.0 layered up to a complete
+stack for shipping production SaaS apps in a single file:
+
+**Language**
+- Tree-walking interpreter + experimental bytecode VM (~2-3× on
+  tight loops; behind `mx run --bytecode`)
+- Closures, destructuring, match expressions, try/catch, optional
+  chaining, nullish coalescing, short-circuit, spread args
+- `loop` / `while` / `if-else`, `break` / `continue` / `return`
+- `spawn { ... }` goroutines + channels + wait groups
+
+**Web framework**
+- Routes (shorthand `get /users { ... }` + verbose `route GET /...`)
+- Middleware, route groups, static files, rate limiting (global +
+  per-key), CORS, gzip, body limits, timeouts, graceful shutdown,
+  TLS, signed cookies, AES-256-GCM
+- Server-sent events, WebSockets (server + client), pure stdlib
+
+**Stdlib (~220 builtins, 30+ namespaces)**
+- `ai.*` — 10 providers (OpenAI, Anthropic, Gemini, Grok, Mistral,
+  DeepSeek, Groq, OpenRouter, Together, Ollama) with `complete`,
+  `stream`, `embed`, `vision`, `image`, `transcribe`
+- `stripe.*` — checkout, customer, portal, subscription
+- `webhooks.*` — Stripe, GitHub, Svix, Shopify, Slack signature
+  verification
+- `magic_link.*` — passwordless email auth (HMAC-signed tokens)
+- `totp.*` — RFC 6238 TOTP (Google Authenticator compatible)
+- `oauth.*` — Google, GitHub, Discord, LinkedIn, Microsoft
+- `password.*` — PBKDF2 / Argon2id / scrypt
+- `notify.*` — Slack, Discord, Resend email
+- `s3.*` — pure-Go AWS SigV4 (works with R2, B2, MinIO, Spaces)
+- `metrics.*` — Prometheus counters, gauges, histograms +
+  `/metrics` endpoint
+- `health.*` — k8s-style liveness + readiness probes
+- `search.*` — SQLite FTS5 full-text search
+- `graphql.*` — minimal GraphQL handler
+- `time.*`, `path.*`, `fs.*` — date, path, glob utilities
+- `id.*` — uuid, ulid, nanoid, snowflake
+- `cron(spec, fn)` — Vixie 5-field schedules
+- `rate_limit(key, max, window)` — token bucket
+- `ws.connect(url)` — outbound WebSocket client
+- `http.session()` — stateful client with cookie jar
+- `vault.*` — AES-256-GCM encrypted secrets store
+- `debug.*` — assert / invariant / unreachable / trace / dump
+- Templates with `{{#if}}`, `{{#each}}`, `{{> partial}}`
+- CSV (header-keyed), JSON, regex, image (resize / thumbnail /
+  crop / convert), markdown, validation, scheduling, jobs,
+  subprocess, Redis, MySQL, Postgres, base64/base32, RSA-style
+  helpers, randomness
+
+**Tooling**
+- `mx run / init / new / build / repl / test [--cover] / bench /
+  fmt / lsp / check / pkg / serve / ci / examples / help / docs /
+  routes / upgrade / doctor`
+- Six `mx new` templates: api / todo / chat / ai / blog / saas
+- `mx pkg add github.com/...` — Git-backed package manager
+- `mx check` — static analyzer (undefined idents, wrong arity,
+  unused lets)
+- `mx fmt` — opinionated formatter
+- LSP with hover, completion, signature help, snippets,
+  format-on-save, diagnostics
+- `mx build --vercel / --docker / --fly / --railway / --wasm` —
+  one-command deploy artifacts for the five most common targets
+- `mx ci init github|gitlab` — CI workflow scaffolding
+- Browser playground (`site/playground/`) running the full
+  interpreter in WebAssembly
+
+**Quality**
+- Comprehensive test suite: every package, every namespace, every
+  bundled example runs through `mx check` in CI
+- Bytecode VM verified to produce identical results to the
+  tree-walker
+- AWS SigV4 verified against AWS's published canonical example
+  byte-for-byte
+- RFC 6455 WebSocket accept-header math verified against the RFC
+  worked example
+
+### Thanks
+
+Created and maintained by Jassim Alkharafi. MIT licensed. PRs +
+issues at https://github.com/jlkdevelop/mxscript.
+
+[1.0.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.0.0
+
 ## [0.97.0] — 2026-05-03
 
 ### Added — `vault.*` (encrypted secrets store)

@@ -16,7 +16,8 @@
 </p>
 
 <p align="center">
-  <strong>Created and developed by <a href="https://github.com/jlkdevelop">Jassim Alkharafi</a>.</strong>
+  <strong>🎉 v1.0 — production-ready stable release.</strong><br>
+  Created and maintained by <a href="https://github.com/jlkdevelop">Jassim Alkharafi</a>.
 </p>
 
 ```mx
