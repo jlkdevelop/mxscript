@@ -551,6 +551,8 @@ func registerBuiltins(i *Interpreter) {
 	timeNS.Set("hour", FunctionValue(&Function{Name: "time.hour", Native: builtinTimeHour}))
 	timeNS.Set("minute", FunctionValue(&Function{Name: "time.minute", Native: builtinTimeMinute}))
 	timeNS.Set("second", FunctionValue(&Function{Name: "time.second", Native: builtinTimeSecond}))
+	timeNS.Set("in_zone", FunctionValue(&Function{Name: "time.in_zone", Native: builtinTimeInZone}))
+	timeNS.Set("relative", FunctionValue(&Function{Name: "time.relative", Native: builtinTimeRelative}))
 	g.Set("time", ObjectValue(timeNS))
 	builtinNames["time"] = true
 

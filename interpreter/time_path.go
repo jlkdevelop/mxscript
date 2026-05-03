@@ -173,6 +173,69 @@ func timeFromArg(args []Value) (time.Time, error) {
 	return time.Unix(int64(args[0].Number), 0).UTC(), nil
 }
 
+// time.in_zone(unix, zone) — return component fields for the
+// timestamp interpreted in the given IANA timezone (e.g.
+// "America/New_York", "Europe/London", "Asia/Tokyo").
+//
+//   let parts = time.in_zone(time.now(), "America/New_York")
+//   println(parts.hour, parts.minute, parts.zone)   // local hour, minute, "EDT"
+func builtinTimeInZone(_ *Interpreter, args []Value) (Value, error) {
+	if len(args) < 2 || args[0].Kind != KindNumber || args[1].Kind != KindString {
+		return Value{}, fmt.Errorf("time.in_zone(unix, zone) requires (number, string)")
+	}
+	loc, err := time.LoadLocation(args[1].String)
+	if err != nil {
+		return Value{}, fmt.Errorf("time.in_zone: unknown zone %q", args[1].String)
+	}
+	t := time.Unix(int64(args[0].Number), 0).In(loc)
+	zone, _ := t.Zone()
+	out := NewOrderedMap()
+	out.Set("year", NumberValue(float64(t.Year())))
+	out.Set("month", NumberValue(float64(t.Month())))
+	out.Set("day", NumberValue(float64(t.Day())))
+	out.Set("hour", NumberValue(float64(t.Hour())))
+	out.Set("minute", NumberValue(float64(t.Minute())))
+	out.Set("second", NumberValue(float64(t.Second())))
+	out.Set("weekday", StringValue(t.Weekday().String()))
+	out.Set("zone", StringValue(zone))
+	out.Set("iso", StringValue(t.Format(time.RFC3339)))
+	return ObjectValue(out), nil
+}
+
+// time.relative(unix) — human-friendly elapsed string ("2m ago",
+// "3h ago", "5 days ago", "in 1h", etc.). Useful for activity
+// feeds without bringing in a date library.
+func builtinTimeRelative(_ *Interpreter, args []Value) (Value, error) {
+	if len(args) < 1 || args[0].Kind != KindNumber {
+		return Value{}, fmt.Errorf("time.relative(unix) requires a number")
+	}
+	target := time.Unix(int64(args[0].Number), 0)
+	delta := time.Since(target)
+	suffix := "ago"
+	if delta < 0 {
+		delta = -delta
+		suffix = "from now"
+	}
+	switch {
+	case delta < 5*time.Second:
+		return StringValue("just now"), nil
+	case delta < time.Minute:
+		return StringValue(fmt.Sprintf("%ds %s", int(delta.Seconds()), suffix)), nil
+	case delta < time.Hour:
+		return StringValue(fmt.Sprintf("%dm %s", int(delta.Minutes()), suffix)), nil
+	case delta < 24*time.Hour:
+		return StringValue(fmt.Sprintf("%dh %s", int(delta.Hours()), suffix)), nil
+	case delta < 30*24*time.Hour:
+		return StringValue(fmt.Sprintf("%dd %s", int(delta.Hours()/24), suffix)), nil
+	case delta < 365*24*time.Hour:
+		months := int(delta.Hours() / 24 / 30)
+		return StringValue(fmt.Sprintf("%dmo %s", months, suffix)), nil
+	default:
+		years := int(delta.Hours() / 24 / 365)
+		return StringValue(fmt.Sprintf("%dy %s", years, suffix)), nil
+	}
+}
+
 // ===== path.* =====
 
 // path.join(...) — variadic, slash-style joining via path/filepath.

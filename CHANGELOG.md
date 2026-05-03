@@ -4,6 +4,30 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.13.0] — 2026-05-03
+
+### Added — `time.in_zone()` + `time.relative()`
+
+```mx
+// 1. Components in any IANA timezone (default time.* is UTC).
+let parts = time.in_zone(time.now(), "America/New_York")
+println(parts.hour, parts.zone, parts.iso)
+// → 8 EDT 2026-05-03T08:00:00-04:00
+
+// 2. Human-friendly elapsed strings — "just now", "5m ago",
+//    "2h ago", "3d ago", "1mo ago", "1y ago", "in 30s", etc.
+println(time.relative(post.created_at))
+println(time.relative(reminder.fires_at))   // "in 1h"
+```
+
+`time.in_zone` returns `{ year, month, day, hour, minute, second,
+weekday, zone, iso }` so callers can render a localised display
+without doing the offset math themselves. `time.relative` covers
+6 buckets (seconds → years) on either side of "now" so activity
+feeds get readable timestamps without pulling in a date library.
+
+[1.13.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.13.0
+
 ## [1.12.0] — 2026-05-03
 
 ### Added — `form.*` namespace (urlencoded form bodies)
