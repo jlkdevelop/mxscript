@@ -29,6 +29,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jlkdevelop/mxscript/checker"
 	"github.com/jlkdevelop/mxscript/formatter"
 	"github.com/jlkdevelop/mxscript/interpreter"
 	"github.com/jlkdevelop/mxscript/lexer"
@@ -54,7 +55,7 @@ func (rr *replReader) ReadLine() (string, bool) {
 // Version is bumped at release time. Override at build with:
 //
 //	go build -ldflags "-X main.Version=v0.2.0"
-var Version = "v0.59.0"
+var Version = "v0.60.0"
 
 const (
 	cReset  = "\033[0m"
@@ -100,6 +101,8 @@ func main() {
 		cmdDoctor(args)
 	case "routes":
 		cmdRoutes(args)
+	case "check":
+		cmdCheck(args)
 	case "version", "-v", "--version":
 		fmt.Println("MX Script", Version)
 	case "help", "-h", "--help":
@@ -130,6 +133,7 @@ func printHelp() {
 	fmt.Println("  upgrade               Self-update to the latest release")
 	fmt.Println("  doctor                Diagnose env / install / runtime")
 	fmt.Println("  routes <file.mx>      List every route the program registers (no server boot)")
+	fmt.Println("  check <file.mx>       Static analysis: undefined idents, wrong arity, unused lets")
 	fmt.Println("  version               Print version and exit")
 	fmt.Println("  help                  Show this help")
 	fmt.Println()
@@ -1257,6 +1261,70 @@ func cmdDoctor(args []string) {
 		fmt.Printf("  %s%s%s %-20s %s\n", mark, cReset, "", c.Name, detail)
 	}
 	fmt.Println()
+}
+
+// ===== mx check =====
+
+// cmdCheck runs the static analyzer over a single file and prints
+// diagnostics. Exits 1 if any errors are found (warnings don't fail
+// the build) so it composes naturally with CI.
+//
+//	$ mx check app.mx
+//	app.mx:42:7: error: undefined identifier "respnse"
+//	app.mx:51:5: warning: unused let binding "tmp"
+//	2 issues (1 error, 1 warning)
+func cmdCheck(args []string) {
+	if len(args) < 1 {
+		fatal("usage: mx check <file.mx>")
+	}
+	file := args[0]
+	src, err := os.ReadFile(file)
+	if err != nil {
+		fatal("cannot read %s: %v", file, err)
+	}
+	tokens, err := lexer.New(string(src)).Tokenize()
+	if err != nil {
+		printError(file, err)
+		os.Exit(1)
+	}
+	prog, err := parser.New(tokens).Parse()
+	if err != nil {
+		printError(file, err)
+		os.Exit(1)
+	}
+	diags := checker.Check(prog)
+	errors, warnings := 0, 0
+	for _, d := range diags {
+		color := cRed
+		if d.Severity == checker.SeverityWarning {
+			color = cYellow
+			warnings++
+		} else {
+			errors++
+		}
+		fmt.Fprintf(os.Stderr, "%s:%d:%d: %s%s%s: %s\n",
+			file, d.Line, d.Col, color, d.Severity, cReset, d.Message)
+	}
+	if len(diags) == 0 {
+		fmt.Printf("%s✓%s no issues in %s\n", cGreen, cReset, file)
+		return
+	}
+	fmt.Fprintf(os.Stderr, "\n%d issue", len(diags))
+	if len(diags) != 1 {
+		fmt.Fprint(os.Stderr, "s")
+	}
+	fmt.Fprintf(os.Stderr, " (%d error", errors)
+	if errors != 1 {
+		fmt.Fprint(os.Stderr, "s")
+	}
+	fmt.Fprintf(os.Stderr, ", %d warning", warnings)
+	if warnings != 1 {
+		fmt.Fprint(os.Stderr, "s")
+	}
+	fmt.Fprintln(os.Stderr, ")")
+	if errors > 0 {
+		os.Exit(1)
+	}
 }
 
 // ===== mx routes =====

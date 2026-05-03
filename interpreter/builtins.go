@@ -11,6 +11,7 @@ import (
 	"crypto/hmac"
 	crand "crypto/rand"
 	"crypto/sha256"
+	"encoding/base32"
 	"encoding/base64"
 	"encoding/csv"
 	"encoding/hex"
@@ -46,8 +47,20 @@ var builtinNames = map[string]bool{}
 var serverStartTime = time.Now()
 
 // IsBuiltin reports whether a global name was installed by the standard
-// library rather than the user's program.
-func IsBuiltin(name string) bool { return builtinNames[name] }
+// library rather than the user's program. The map is populated by
+// registerBuiltins, which only runs when an Interpreter is constructed.
+// Static-analysis callers (the checker) trigger that population once
+// here so IsBuiltin works without a live interpreter.
+var builtinPopulateOnce sync.Once
+
+func IsBuiltin(name string) bool {
+	builtinPopulateOnce.Do(func() {
+		// Register builtins on a throwaway interpreter so we capture
+		// the full name set without having to maintain a parallel list.
+		_ = New()
+	})
+	return builtinNames[name]
+}
 
 func registerBuiltins(i *Interpreter) {
 	g := i.globals
@@ -137,6 +150,10 @@ func registerBuiltins(i *Interpreter) {
 	def("min", builtinMin)
 	def("max", builtinMax)
 	def("random", builtinRandom)
+	def("random_string", builtinRandomString)
+	def("random_bytes", builtinRandomBytes)
+	def("base32_encode", builtinBase32Encode)
+	def("base32_decode", builtinBase32Decode)
 	def("pow", builtinPow)
 	def("sqrt", builtinSqrt)
 	def("log", builtinLog)
@@ -1916,6 +1933,79 @@ func builtinRandom(i *Interpreter, args []Value) (Value, error) {
 		return Value{}, err
 	}
 	return NumberValue(lo + math.Floor(rand.Float64()*(hi-lo))), nil
+}
+
+// random_string(n, alphabet?) returns an n-character string drawn at
+// random from `alphabet`. Default alphabet is RFC 4648 base32 — the
+// shape TOTP secrets and short identifiers want.
+func builtinRandomString(i *Interpreter, args []Value) (Value, error) {
+	n, err := numberArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	alphabet := "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+	if len(args) > 1 && args[1].Kind == KindString {
+		alphabet = args[1].String
+	}
+	if alphabet == "" || n <= 0 {
+		return StringValue(""), nil
+	}
+	out := make([]byte, int(n))
+	buf := make([]byte, int(n))
+	if _, err := crand.Read(buf); err != nil {
+		return Value{}, fmt.Errorf("random_string: %w", err)
+	}
+	for k := range out {
+		out[k] = alphabet[int(buf[k])%len(alphabet)]
+	}
+	return StringValue(string(out)), nil
+}
+
+// random_bytes(n) returns n cryptographically random bytes hex-encoded
+// (so the result is a 2n-character string). Use base64_encode or
+// base32_encode if you need a different format.
+func builtinRandomBytes(i *Interpreter, args []Value) (Value, error) {
+	n, err := numberArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	if n <= 0 {
+		return StringValue(""), nil
+	}
+	buf := make([]byte, int(n))
+	if _, err := crand.Read(buf); err != nil {
+		return Value{}, fmt.Errorf("random_bytes: %w", err)
+	}
+	return StringValue(hex.EncodeToString(buf)), nil
+}
+
+// base32_encode(s) returns the RFC 4648 base32 encoding of `s` (with
+// padding). Mirrors base64_encode for users who need authenticator-
+// app–compatible secrets or DNS-safe identifiers.
+func builtinBase32Encode(i *Interpreter, args []Value) (Value, error) {
+	s, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	return StringValue(base32.StdEncoding.EncodeToString([]byte(s))), nil
+}
+
+// base32_decode(s) reverses base32_encode. Tolerates lower-case input
+// and missing trailing padding.
+func builtinBase32Decode(i *Interpreter, args []Value) (Value, error) {
+	s, err := stringArg(args, 0)
+	if err != nil {
+		return Value{}, err
+	}
+	clean := strings.ToUpper(strings.TrimSpace(s))
+	for len(clean)%8 != 0 {
+		clean += "="
+	}
+	out, err := base32.StdEncoding.DecodeString(clean)
+	if err != nil {
+		return Value{}, fmt.Errorf("base32_decode: %w", err)
+	}
+	return StringValue(string(out)), nil
 }
 
 // ===== Type checks =====

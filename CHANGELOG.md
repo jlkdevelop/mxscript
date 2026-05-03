@@ -4,6 +4,57 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.60.0] — 2026-05-02
+
+### Added — `mx check` static analyzer + new randomness builtins
+
+- **`mx check <file.mx>` finds bugs before `mx run` does.** A single
+  AST pass catches the three most common classes of mistake:
+
+  ```bash
+  $ mx check app.mx
+  app.mx:42:7: error: undefined identifier "respnse"
+  app.mx:51:5: error: function "add" expects 2 argument(s), got 1
+  app.mx:60:1: warning: unused let binding "tmp"
+  3 issues (2 errors, 1 warning)
+  ```
+
+  Errors fail the build (exit 1); warnings just print. Underscore
+  prefixes silence the unused warning (`let _intentional = ...`).
+
+- **Scope-aware.** Routes auto-bind `request`. WebSocket routes
+  (`ws /chat { ... }`) auto-bind `send`, `recv`, `close`. SSE routes
+  auto-bind `send`. Loop variables, catch variables, destructure
+  patterns, and namespaced imports (`import "./x" as x`) all bind
+  correctly. Mutual recursion at the top level works (forward decls).
+
+- **Caught real bugs in our own examples** the first time it ran —
+  `chat.mx` was using `close()` (now bound), `passwordless.mx` was
+  calling `base32_encode/random_bytes` (now real builtins),
+  `stdlib_test.mx` had a nested fn decl the checker missed (now fixed).
+  All six issues found by running the checker on `examples/*.mx`,
+  all six legitimate.
+
+- **14 checker tests** covering happy paths, undefined identifiers,
+  arity errors, spread arguments, builtin recognition, route bodies
+  with `request`, loop scopes, nested function declarations, mutual
+  recursion, unused warnings, underscore-suppressed warnings,
+  destructure binding, and namespaced imports.
+
+### Added — randomness + base32 builtins
+
+- **`random_string(n, alphabet?)`** — n random characters from
+  `alphabet` (defaults to RFC 4648 base32). Use this for TOTP
+  secrets, short IDs, invitation codes.
+- **`random_bytes(n)`** — n cryptographically random bytes,
+  hex-encoded (returns 2n chars).
+- **`base32_encode(s)` / `base32_decode(s)`** — RFC 4648 base32
+  encoding. Decode tolerates lower-case and missing padding.
+
+All four use `crypto/rand` for the underlying entropy.
+
+[0.60.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.60.0
+
 ## [0.59.0] — 2026-05-02
 
 ### Added — `notify.*` namespace (Slack / Discord / Resend email)
