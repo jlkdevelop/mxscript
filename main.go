@@ -58,7 +58,7 @@ func (rr *replReader) ReadLine() (string, bool) {
 // Version is bumped at release time. Override at build with:
 //
 //	go build -ldflags "-X main.Version=v0.2.0"
-var Version = "v1.71.0"
+var Version = "v1.72.0"
 
 const (
 	cReset  = "\033[0m"
@@ -2120,9 +2120,9 @@ func mustAbs(p string) string {
 // and compares it to the binary's compile-time Version. Emits one of
 // three lines:
 //
-//   ✓ up to date
-//   ↑ v1.20.0 available — run `mx upgrade`
-//   ⚠ couldn't reach GitHub
+//	✓ up to date
+//	↑ v1.20.0 available — run `mx upgrade`
+//	⚠ couldn't reach GitHub
 func cmdVersionCheck() {
 	resp, err := http.Get("https://api.github.com/repos/jlkdevelop/mxscript/releases/latest")
 	if err != nil {
@@ -2311,9 +2311,9 @@ func cmdParse(args []string) {
 // remaining fields hung off the right. Optional --level= filter
 // shows only entries at or above the named severity.
 //
-//   mx logs prod.log
-//   mx logs prod.log --level=warn
-//   tail -f app.log | mx logs        # live mode
+//	mx logs prod.log
+//	mx logs prod.log --level=warn
+//	tail -f app.log | mx logs        # live mode
 func cmdLogs(args []string) {
 	var path string
 	minLevel := "trace"
@@ -2429,6 +2429,7 @@ func pickTimestamp(entry map[string]any) string {
 //   - macOS:   `open <url>`
 //   - Linux:   `xdg-open <url>`
 //   - Windows: `cmd /c start <url>`
+//
 // Falls back to printing the URL when none works so headless
 // environments still get the link.
 func cmdOpen(args []string) {
@@ -2834,10 +2835,11 @@ func cmdAudit(args []string) {
 //	mx db mysql://user:pass@tcp(host:3306)/dbname  # MySQL
 //
 // Commands:
-//	  .schema         show every CREATE TABLE
-//	  .tables         list table names
-//	  .quit           leave
-//	  <SQL>;          run the statement, print results as a table
+//
+//	.schema         show every CREATE TABLE
+//	.tables         list table names
+//	.quit           leave
+//	<SQL>;          run the statement, print results as a table
 func cmdDB(args []string) {
 	if len(args) < 1 {
 		fatal("usage: mx db <dsn>")
@@ -2924,7 +2926,7 @@ func cmdEnv(args []string) {
 			"RESEND_API_KEY", "RESEND_FROM",
 		},
 		"Object storage": {"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION"},
-		"Auth": {"JWT_SECRET", "SESSION_SECRET", "APP_SECRET", "MX_VAULT_KEY"},
+		"Auth":           {"JWT_SECRET", "SESSION_SECRET", "APP_SECRET", "MX_VAULT_KEY"},
 		"OAuth": {
 			"GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET",
 			"GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET",
@@ -4016,35 +4018,35 @@ var projectTemplates = map[string]projectTemplate{
 		Description: "Vite + React frontend with an MX backend serving /api/*",
 		Hint:        "  cd web && npm install — then `MX_DEV=1 mx run app.mx` and `npm --prefix web run dev`.",
 		Files: map[string]string{
-			"app.mx":              starterReactApp,
-			".env.example":        "MX_DEV=1\nVITE_URL=http://localhost:5173\n",
-			".gitignore":          ".env\n*.bin\nweb/node_modules\nweb/dist\nmx_modules/\n",
-			"README.md":           starterReactReadme,
-			"web/package.json":    starterReactPackageJSON,
-			"web/vite.config.js":  starterReactViteConfig,
-			"web/index.html":      starterReactIndexHTML,
-			"web/src/main.jsx":    starterReactMainJSX,
-			"web/src/App.jsx":     starterReactAppJSX,
-			"web/src/styles.css":  starterReactStyles,
+			"app.mx":             starterReactApp,
+			".env.example":       "MX_DEV=1\nVITE_URL=http://localhost:5173\n",
+			".gitignore":         ".env\n*.bin\nweb/node_modules\nweb/dist\nmx_modules/\n",
+			"README.md":          starterReactReadme,
+			"web/package.json":   starterReactPackageJSON,
+			"web/vite.config.js": starterReactViteConfig,
+			"web/index.html":     starterReactIndexHTML,
+			"web/src/main.jsx":   starterReactMainJSX,
+			"web/src/App.jsx":    starterReactAppJSX,
+			"web/src/styles.css": starterReactStyles,
 		},
 	},
 	"dashboard": {
 		Description: "Admin dashboard — auth, live metrics, WebSocket updates, server-rendered charts",
 		Hint:        "  Login at /login with ADMIN_PASSWORD; live updates via WebSocket on the dashboard.",
 		Files: map[string]string{
-			"app.mx":      starterDashboardApp,
+			"app.mx":       starterDashboardApp,
 			".env.example": "ADMIN_PASSWORD=admin\nSESSION_SECRET=replace-with-32-random-bytes\n",
-			".gitignore":  ".env\n*.bin\n*.db\n*.kv\nmx_modules/\n",
-			"README.md":   starterDashboardReadme,
+			".gitignore":   ".env\n*.bin\n*.db\n*.kv\nmx_modules/\n",
+			"README.md":    starterDashboardReadme,
 		},
 	},
 	"shortener": {
 		Description: "URL shortener in ~50 lines — the canonical 'how short can it be' demo",
 		Hint:        "  POST /shorten with { url } to create a short link.",
 		Files: map[string]string{
-			"app.mx":      starterShortenerApp,
-			".gitignore":  ".env\n*.bin\n*.db\nmx_modules/\n",
-			"README.md":   starterShortenerReadme,
+			"app.mx":     starterShortenerApp,
+			".gitignore": ".env\n*.bin\n*.db\nmx_modules/\n",
+			"README.md":  starterShortenerReadme,
 		},
 	},
 }

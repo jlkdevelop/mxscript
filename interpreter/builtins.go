@@ -1187,11 +1187,11 @@ func builtinEnvRequired(i *Interpreter, args []Value) (Value, error) {
 // fetch returns: { status, headers, body, text }, plus an optional
 // `error` field for entries that failed.
 //
-//   let pages = fetch_all([
-//     "https://api.example.com/a",
-//     { url: "https://api.example.com/b", method: "POST", body: "..." }
-//   ])
-//   loop pages as p { println(p.status, p.text) }
+//	let pages = fetch_all([
+//	  "https://api.example.com/a",
+//	  { url: "https://api.example.com/b", method: "POST", body: "..." }
+//	])
+//	loop pages as p { println(p.status, p.text) }
 //
 // opts.concurrency caps in-flight requests (default = len(urls), but
 // at most 16). Useful for hitting paginated APIs without ddosing
@@ -4008,6 +4008,7 @@ func builtinAssertThrows(i *Interpreter, args []Value) (Value, error) {
 // assert_contains(haystack, needle, msg?) — passes when:
 //   - haystack is a string and contains needle
 //   - haystack is an array and any element equals needle
+//
 // Useful for fuzzy assertions where exact equality is too strict.
 func builtinAssertContains(_ *Interpreter, args []Value) (Value, error) {
 	if len(args) < 2 {

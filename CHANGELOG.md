@@ -4,6 +4,29 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.72.0] — 2026-05-03
+
+### Fixed — Release CI was broken since v0.50, blocking GitHub Releases
+
+Two failures had been silently breaking every tagged release since
+roughly v0.50:
+
+1. **GoReleaser config**: `extra_files:` was a top-level field; in
+   GoReleaser v2 it lives under `release:`. Every release run failed
+   instantly with `field extra_files not found in type config.Project`.
+   Moved the VS Code .vsix glob to `release.extra_files`.
+2. **`gofmt` check**: a number of files added during v1.41-v1.71
+   weren't gofmt-clean. Ran `gofmt -w .` across the tree.
+
+Net effect: the v0.51 - v1.71 tags exist as git refs but never published
+GitHub Releases (with binaries / Homebrew bump / .vsix asset). The next
+tag — v1.72.0 — should be the first one to land cleanly through the
+full pipeline. Past tags can be retroactively republished if needed.
+
+Brew formula description also updated to match the new positioning.
+
+[1.72.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.72.0
+
 ## [1.71.0] — 2026-05-03
 
 ### Added — `mx routes --json` for CI drift detection

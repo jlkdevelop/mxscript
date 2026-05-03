@@ -23,7 +23,7 @@ func PrettyDisplay(v Value, colors bool) string {
 // pp(value, opts?) prints a value in a human-friendly form. Returns
 // the value unchanged so it composes with chained expressions:
 //
-//   let user = pp(get_user(id))   // logs the user, then assigns it
+//	let user = pp(get_user(id))   // logs the user, then assigns it
 func builtinPP(_ *Interpreter, args []Value) (Value, error) {
 	if len(args) < 1 {
 		return NullValue(), nil

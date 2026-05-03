@@ -29,37 +29,37 @@ var errBytecodeFallback = errors.New("bytecode fallback")
 type Op uint8
 
 const (
-	OpConst       Op = iota // push consts[arg]
-	OpLoadVar               // push env.Get(varNames[arg])
-	OpStoreVar              // env.Set(varNames[arg], pop()) — for `let`
-	OpAssignVar             // env.Assign(varNames[arg], pop()) — for `=`
-	OpAdd                   // a + b (numeric or string concat)
-	OpSub                   // a - b
-	OpMul                   // a * b
-	OpDiv                   // a / b
-	OpMod                   // a % b
-	OpEq                    // a == b
-	OpNeq                   // a != b
-	OpLt                    // a < b
-	OpGt                    // a > b
-	OpLte                   // a <= b
-	OpGte                   // a >= b
-	OpNot                   // !a
-	OpNeg                   // -a
-	OpJump                  // pc = arg (absolute)
-	OpJumpIfFalse           // pop; if !truthy: pc = arg
-	OpPop                   // discard top
-	OpReturn                // halt; return top of stack (or null)
-	OpCall                  // pop arg values + callee; push call result
-	OpGetField              // pop obj; push obj.<consts[arg].String>
-	OpMakeArray             // pop arg values; push as KindArray
-	OpMakeObject            // pop arg*2 values (key, value pairs); push as KindObject
-	OpGetIndex              // pop index; pop target; push target[index]
-	OpLength                // pop value; push its length (array len, string len, object key count)
-	OpAndJump               // peek; if falsy: pc = arg (leaves value); else pop + continue
-	OpOrJump                // peek; if truthy: pc = arg (leaves value); else pop + continue
-	OpNullishJump           // peek; if non-null: pc = arg (leaves value); else pop + continue
-	OpJumpIfNullKeep        // peek; if null: pc = arg (leaves null); else continue with value still on stack
+	OpConst          Op = iota // push consts[arg]
+	OpLoadVar                  // push env.Get(varNames[arg])
+	OpStoreVar                 // env.Set(varNames[arg], pop()) — for `let`
+	OpAssignVar                // env.Assign(varNames[arg], pop()) — for `=`
+	OpAdd                      // a + b (numeric or string concat)
+	OpSub                      // a - b
+	OpMul                      // a * b
+	OpDiv                      // a / b
+	OpMod                      // a % b
+	OpEq                       // a == b
+	OpNeq                      // a != b
+	OpLt                       // a < b
+	OpGt                       // a > b
+	OpLte                      // a <= b
+	OpGte                      // a >= b
+	OpNot                      // !a
+	OpNeg                      // -a
+	OpJump                     // pc = arg (absolute)
+	OpJumpIfFalse              // pop; if !truthy: pc = arg
+	OpPop                      // discard top
+	OpReturn                   // halt; return top of stack (or null)
+	OpCall                     // pop arg values + callee; push call result
+	OpGetField                 // pop obj; push obj.<consts[arg].String>
+	OpMakeArray                // pop arg values; push as KindArray
+	OpMakeObject               // pop arg*2 values (key, value pairs); push as KindObject
+	OpGetIndex                 // pop index; pop target; push target[index]
+	OpLength                   // pop value; push its length (array len, string len, object key count)
+	OpAndJump                  // peek; if falsy: pc = arg (leaves value); else pop + continue
+	OpOrJump                   // peek; if truthy: pc = arg (leaves value); else pop + continue
+	OpNullishJump              // peek; if non-null: pc = arg (leaves value); else pop + continue
+	OpJumpIfNullKeep           // peek; if null: pc = arg (leaves null); else continue with value still on stack
 )
 
 type Instr struct {
@@ -90,9 +90,9 @@ type Compiled struct {
 // jumps target `continueTo` (set when the loop builder knows the
 // post-body increment block); break jumps target the loop end.
 type loopFrame struct {
-	continueTo  int32 // patch target for `continue`
-	breakJumps  []int // indices of OpJump instructions emitted by `break`
-	contJumps   []int // indices of OpJump instructions emitted by `continue`
+	continueTo int32 // patch target for `continue`
+	breakJumps []int // indices of OpJump instructions emitted by `break`
+	contJumps  []int // indices of OpJump instructions emitted by `continue`
 }
 
 // CompileExpr lowers a single expression node into a self-contained

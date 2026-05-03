@@ -66,12 +66,12 @@ func ParseCron(spec string) (*CronSchedule, error) {
 
 // parseCronField turns one field into a bitmask. Accepts:
 //
-//	*               every value in [min, max]
-//	n               single value
-//	a-b             inclusive range
-//	*/k             every k starting from min
-//	a-b/k           every k from a to b
-//	a,b,c           list of any of the above
+//   - every value in [min, max]
+//     n               single value
+//     a-b             inclusive range
+//     */k             every k starting from min
+//     a-b/k           every k from a to b
+//     a,b,c           list of any of the above
 func parseCronField(field string, min, max int) (uint64, error) {
 	var bits uint64
 	for _, item := range strings.Split(field, ",") {

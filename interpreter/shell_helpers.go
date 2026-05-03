@@ -1,10 +1,10 @@
 // shell_helpers.go — convenience wrappers around the existing
 // `shell()` builtin. Three patterns:
 //
-//   shell.run(cmd, args?, opts?)    -> exit_code  (just the exit code)
-//   shell.output(cmd, args?, opts?) -> string     (stdout, fail on non-zero)
-//   shell.bash(script, opts?)       -> result     (run a multi-line script)
-//   shell.which(name)               -> string|null  (locate on PATH)
+//	shell.run(cmd, args?, opts?)    -> exit_code  (just the exit code)
+//	shell.output(cmd, args?, opts?) -> string     (stdout, fail on non-zero)
+//	shell.bash(script, opts?)       -> result     (run a multi-line script)
+//	shell.which(name)               -> string|null  (locate on PATH)
 //
 // All four delegate to the existing builtinShell so they share env /
 // dir / timeout / stdin opts.
@@ -48,7 +48,7 @@ func builtinShellOutput(i *Interpreter, args []Value) (Value, error) {
 // shell.bash — run a multi-line bash script via `bash -c`. Useful
 // for pipelines and conditional logic that don't fit one command.
 //
-//   shell.bash("ls *.mx | wc -l | tr -d ' '")
+//	shell.bash("ls *.mx | wc -l | tr -d ' '")
 func builtinShellBash(i *Interpreter, args []Value) (Value, error) {
 	if len(args) < 1 || args[0].Kind != KindString {
 		return Value{}, fmt.Errorf("shell.bash(script, opts?) requires a script string")

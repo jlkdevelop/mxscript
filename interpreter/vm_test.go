@@ -156,9 +156,9 @@ func TestVMOptionalChaining(t *testing.T) {
 	// `a?.b` should return null when a is null and the actual field
 	// otherwise. v0.81's OpJumpIfNullKeep makes both compile cleanly.
 	cases := []struct {
-		src  string
+		src   string
 		setup func(*Env)
-		want any
+		want  any
 	}{
 		{
 			"x?.name",

@@ -4,10 +4,10 @@
 // `fetch()` builtin is stateless; `http.session()` returns an object
 // with methods that share a cookie jar and base configuration.
 //
-//   let s = http.session({ base_url: "https://api.example.com" })
-//   s.post("/login", { email: "x", password: "y" })
-//   let user = s.get("/me")        // cookies from /login auto-attach
-//   s.close()                       // optional, clears the jar
+//	let s = http.session({ base_url: "https://api.example.com" })
+//	s.post("/login", { email: "x", password: "y" })
+//	let user = s.get("/me")        // cookies from /login auto-attach
+//	s.close()                       // optional, clears the jar
 package interpreter
 
 import (
@@ -32,9 +32,9 @@ type httpSession struct {
 // http.session(opts?) — returns an object with get/post/put/delete/close.
 // opts:
 //
-//   base_url:  prefix for all requests (e.g. "https://api.example.com")
-//   headers:   default headers attached to every request
-//   timeout:   per-request timeout in seconds (default 60)
+//	base_url:  prefix for all requests (e.g. "https://api.example.com")
+//	headers:   default headers attached to every request
+//	timeout:   per-request timeout in seconds (default 60)
 func builtinHTTPSession(_ *Interpreter, args []Value) (Value, error) {
 	jar, err := cookiejar.New(nil)
 	if err != nil {
@@ -201,4 +201,3 @@ func (s *httpSession) snapshotCookies() Value {
 	}
 	return ArrayValue(out)
 }
-

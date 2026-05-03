@@ -7,13 +7,13 @@ import (
 
 func TestNormalizeImportPath(t *testing.T) {
 	cases := map[string]string{
-		"github.com/foo/bar":                     "github.com/foo/bar",
-		"https://github.com/foo/bar":             "github.com/foo/bar",
-		"https://github.com/foo/bar.git":         "github.com/foo/bar",
-		"git@github.com:foo/bar.git":             "github.com/foo/bar",
-		"  github.com/foo/bar  ":                 "github.com/foo/bar",
-		"http://example.org/owner/repo":          "example.org/owner/repo",
-		"https://gitlab.example.com/team/x.git":  "gitlab.example.com/team/x",
+		"github.com/foo/bar":                    "github.com/foo/bar",
+		"https://github.com/foo/bar":            "github.com/foo/bar",
+		"https://github.com/foo/bar.git":        "github.com/foo/bar",
+		"git@github.com:foo/bar.git":            "github.com/foo/bar",
+		"  github.com/foo/bar  ":                "github.com/foo/bar",
+		"http://example.org/owner/repo":         "example.org/owner/repo",
+		"https://gitlab.example.com/team/x.git": "gitlab.example.com/team/x",
 	}
 	for input, want := range cases {
 		got := NormalizeImportPath(input)

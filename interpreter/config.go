@@ -1,17 +1,17 @@
 // config.go — convenience config loader with format auto-detection
 // and env-var interpolation. Common SaaS pattern:
 //
-//   # config.yaml
-//   db:
-//     dsn: ${DATABASE_URL}
-//     pool: 10
-//   stripe:
-//     secret: ${STRIPE_SECRET_KEY}
-//     price:  ${STRIPE_PRICE_ID}
+//	# config.yaml
+//	db:
+//	  dsn: ${DATABASE_URL}
+//	  pool: 10
+//	stripe:
+//	  secret: ${STRIPE_SECRET_KEY}
+//	  price:  ${STRIPE_PRICE_ID}
 //
-//   # app.mx
-//   let cfg = config.load("./config.yaml")
-//   let db  = sql.open(cfg.db.dsn)
+//	# app.mx
+//	let cfg = config.load("./config.yaml")
+//	let db  = sql.open(cfg.db.dsn)
 //
 // Supports .yaml / .yml / .json / .toml — picked by extension.
 // `${NAME}` placeholders expand to env(NAME) before parsing, so a

@@ -39,11 +39,6 @@ archives:
       - CHANGELOG.md
       - docs/**
 
-# Attach the VS Code extension .vsix (built by the `before:` hook) as a
-# standalone release asset so users can `code --install-extension <url>`.
-extra_files:
-  - glob: dist/mxscript-*.vsix
-
 checksum:
   name_template: 'checksums.txt'
 
@@ -70,6 +65,10 @@ release:
     # MX Script {{ .Tag }}
 
     Created by [Jassim Alkharafi](https://github.com/jlkdevelop).
+  # Attach the VS Code extension .vsix (built by the before: hook) as a
+  # standalone release asset so users can `code --install-extension <url>`.
+  extra_files:
+    - glob: dist/mxscript-*.vsix
 
 # Auto-bump the Homebrew formula on every tag.
 #
@@ -87,7 +86,7 @@ brews:
       token: '{{ envOrDefault "HOMEBREW_TAP_TOKEN" "" }}'
     directory: Formula
     homepage: https://mxscript.com
-    description: "Modern open-source scripting language for building web apps and APIs"
+    description: "A lightweight scripting language for building one-file web APIs"
     license: "MIT"
     skip_upload: '{{ eq (envOrDefault "HOMEBREW_TAP_TOKEN" "") "" }}'
     commit_author:

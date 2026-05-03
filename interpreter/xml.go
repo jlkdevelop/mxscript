@@ -3,14 +3,14 @@
 // HTTP, RSS / Atom feeds, sitemaps, podcast feeds, Google Search
 // Console responses, etc.
 //
-//   xml.parse("<root><a>1</a><b>2</b></root>")
-//   // → { tag: "root", attrs: {}, children: [
-//   //      { tag: "a", attrs: {}, text: "1", children: [] },
-//   //      { tag: "b", attrs: {}, text: "2", children: [] },
-//   //    ], text: "" }
+//	xml.parse("<root><a>1</a><b>2</b></root>")
+//	// → { tag: "root", attrs: {}, children: [
+//	//      { tag: "a", attrs: {}, text: "1", children: [] },
+//	//      { tag: "b", attrs: {}, text: "2", children: [] },
+//	//    ], text: "" }
 //
-//   xml.stringify({ tag: "rss", attrs: { version: "2.0" }, children: [...] })
-//   // → '<rss version="2.0"><channel>...</channel></rss>'
+//	xml.stringify({ tag: "rss", attrs: { version: "2.0" }, children: [...] })
+//	// → '<rss version="2.0"><channel>...</channel></rss>'
 //
 // The shape mirrors what callers actually want: each node carries
 // `tag`, `attrs`, `text` (the immediate text content), and

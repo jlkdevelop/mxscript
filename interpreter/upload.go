@@ -4,8 +4,8 @@
 // size / content_type / content / ext. The friction was the second
 // step: writing them to disk safely. Without save_upload(), users wrote:
 //
-//   let dir = "./uploads"
-//   write_file(dir + "/" + uuid() + img.ext, img.content)
+//	let dir = "./uploads"
+//	write_file(dir + "/" + uuid() + img.ext, img.content)
 //
 // — which has to mkdir the parent themselves, and the call is verbose
 // in the hot path of every endpoint that takes uploads. save_upload()
@@ -25,8 +25,9 @@ import (
 // the destination on disk; parent directories are created if missing.
 //
 // Returns:
-//   { ok: true,  path: "...", size: N }   // success
-//   { ok: false, error: "..." }           // disk error
+//
+//	{ ok: true,  path: "...", size: N }   // success
+//	{ ok: false, error: "..." }           // disk error
 //
 // Atomic: writes to `path.tmp` then renames so a partial write can't
 // be observed. 0644 perms.

@@ -3,8 +3,8 @@
 // Useful for dev workflows where MX is the backend serving the API
 // and a Vite / Next dev server is the frontend at a different port:
 //
-//   get /api/*  { return json(handle_api(...)) }
-//   get /*      { return proxy("http://localhost:5173", request) }
+//	get /api/*  { return json(handle_api(...)) }
+//	get /*      { return proxy("http://localhost:5173", request) }
 //
 // Streams body bytes through verbatim. Per-hop headers (Connection,
 // Hop-by-Hop) are stripped per RFC 2616 §13.5.1.

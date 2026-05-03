@@ -4,9 +4,9 @@
 //
 // Today we cover the three channels real SaaS apps wire up first:
 //
-//   notify.slack(webhook_url, msg)            // incoming-webhook post
-//   notify.discord(webhook_url, msg)          // Discord webhook
-//   notify.email(to, subject, body, opts?)    // Resend (recommended) or any RESEND_API_KEY-compatible API
+//	notify.slack(webhook_url, msg)            // incoming-webhook post
+//	notify.discord(webhook_url, msg)          // Discord webhook
+//	notify.email(to, subject, body, opts?)    // Resend (recommended) or any RESEND_API_KEY-compatible API
 //
 // Each returns a small response object: { ok: bool, status: number,
 // error: string|null }. Callers stay declarative — `if (!r.ok) ...`

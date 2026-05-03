@@ -4,12 +4,12 @@
 // by an arbitrary string so callers can rate-limit per user, per
 // tenant, per IP, per endpoint — whatever makes sense for the route.
 //
-//   route POST /signup {
-//     if (!rate_limit("signup:" + request.ip, 5, 60)) {
-//       return status(429, { error: "too many requests" })
-//     }
-//     // ... actual signup
-//   }
+//	route POST /signup {
+//	  if (!rate_limit("signup:" + request.ip, 5, 60)) {
+//	    return status(429, { error: "too many requests" })
+//	  }
+//	  // ... actual signup
+//	}
 //
 // Buckets live in-process; for distributed rate limiting back this
 // onto Redis with `redis.incr(...)` instead.

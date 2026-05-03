@@ -1,12 +1,12 @@
 // health.go — Kubernetes-flavoured liveness / readiness probes.
 //
-//   route GET /healthz { return health.live() }
-//   route GET /readyz {
-//     return health.ready({
-//       database: fn() { sql.query_one(db, "SELECT 1") != null },
-//       redis:    fn() { redis.get(r, "ping") != null }
-//     })
-//   }
+//	route GET /healthz { return health.live() }
+//	route GET /readyz {
+//	  return health.ready({
+//	    database: fn() { sql.query_one(db, "SELECT 1") != null },
+//	    redis:    fn() { redis.get(r, "ping") != null }
+//	  })
+//	}
 //
 // The conventions are deliberate: healthz checks "is this process
 // alive enough to keep" — nothing else, returns 200 once the binary

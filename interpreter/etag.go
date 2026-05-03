@@ -2,12 +2,12 @@
 //
 // The pattern:
 //
-//   get /users/:id {
-//     let user = sql.first(db, "SELECT * FROM users WHERE id = ?", request.params.id)
-//     let tag  = etag(user)
-//     if (request.headers["if-none-match"] == tag) { return not_modified() }
-//     return json(user, { headers: { "ETag": tag, "Cache-Control": "private, max-age=60" } })
-//   }
+//	get /users/:id {
+//	  let user = sql.first(db, "SELECT * FROM users WHERE id = ?", request.params.id)
+//	  let tag  = etag(user)
+//	  if (request.headers["if-none-match"] == tag) { return not_modified() }
+//	  return json(user, { headers: { "ETag": tag, "Cache-Control": "private, max-age=60" } })
+//	}
 //
 // One round-trip cost on the cold path; zero body bytes on the warm path.
 // Big win for list/detail endpoints that serve the same shape to the same
@@ -65,8 +65,9 @@ func builtinNotModified(_ *Interpreter, _ []Value) (Value, error) {
 // snapshot tests don't flap.
 //
 // Recognised keys (all optional):
-//   public, private, no_cache, no_store, must_revalidate, immutable  (bool)
-//   max_age, s_max_age, stale_while_revalidate, stale_if_error      (number, seconds)
+//
+//	public, private, no_cache, no_store, must_revalidate, immutable  (bool)
+//	max_age, s_max_age, stale_while_revalidate, stale_if_error      (number, seconds)
 func builtinCacheControl(_ *Interpreter, args []Value) (Value, error) {
 	if len(args) < 1 || args[0].Kind != KindObject {
 		return Value{}, fmt.Errorf("cache_control(opts) requires an options object")
@@ -108,12 +109,12 @@ func builtinCacheControl(_ *Interpreter, args []Value) (Value, error) {
 
 // server_timing(metrics) -> string — build a Server-Timing header.
 //
-//   let t0 = now()
-//   let users = sql.find(db, "users", {})
-//   let db_ms = now() - t0
-//   return json(users, {
-//     headers: { "Server-Timing": server_timing({ db: db_ms, total: now() - start }) }
-//   })
+//	let t0 = now()
+//	let users = sql.find(db, "users", {})
+//	let db_ms = now() - t0
+//	return json(users, {
+//	  headers: { "Server-Timing": server_timing({ db: db_ms, total: now() - start }) }
+//	})
 //
 // Renders `db;dur=23, total;dur=42`. Browser devtools surface this
 // under Network → Timing automatically. Pure number values mean

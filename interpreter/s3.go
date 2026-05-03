@@ -4,11 +4,11 @@
 // and any other S3-compatible store. The API surface is intentionally
 // small — five calls cover every common need:
 //
-//   s3.put(bucket, key, body, opts?)         upload
-//   s3.get(bucket, key, opts?)               download (returns body string)
-//   s3.delete(bucket, key, opts?)            delete
-//   s3.list(bucket, prefix?, opts?)          array of keys
-//   s3.presign(bucket, key, opts?)           presigned GET URL with expiry
+//	s3.put(bucket, key, body, opts?)         upload
+//	s3.get(bucket, key, opts?)               download (returns body string)
+//	s3.delete(bucket, key, opts?)            delete
+//	s3.list(bucket, prefix?, opts?)          array of keys
+//	s3.presign(bucket, key, opts?)           presigned GET URL with expiry
 //
 // All read AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_REGION
 // from the environment by default. opts.endpoint overrides the host

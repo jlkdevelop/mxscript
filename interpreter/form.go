@@ -2,14 +2,14 @@
 // router auto-decodes form bodies into request.body for incoming
 // requests, so mostly these are for outbound calls + tests.
 //
-//   form.parse("a=1&b=2&c=hello%20world")
-//   // -> { a: "1", b: "2", c: "hello world" }
+//	form.parse("a=1&b=2&c=hello%20world")
+//	// -> { a: "1", b: "2", c: "hello world" }
 //
-//   form.encode({ user: "alice", count: 3 })
-//   // -> "count=3&user=alice"
+//	form.encode({ user: "alice", count: 3 })
+//	// -> "count=3&user=alice"
 //
-//   // Building a POST body:
-//   fetch(url, { method: "POST", body: form.encode({ ... }) })
+//	// Building a POST body:
+//	fetch(url, { method: "POST", body: form.encode({ ... }) })
 package interpreter
 
 import (

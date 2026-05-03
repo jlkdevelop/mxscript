@@ -102,8 +102,8 @@ func builtinIDShort(i *Interpreter, _ []Value) (Value, error) {
 // number-string (since MX numbers are float64 and would lose precision
 // on 64-bit ints). 41 bits ms-since-epoch + 22 bits randomness.
 //
-//   epoch defaults to 2020-01-01T00:00:00Z so the first ~70 years fit
-//   in 41 bits.
+//	epoch defaults to 2020-01-01T00:00:00Z so the first ~70 years fit
+//	in 41 bits.
 func builtinIDSnowflake(_ *Interpreter, args []Value) (Value, error) {
 	epoch := int64(1577836800000) // 2020-01-01 UTC, ms
 	if len(args) > 0 && args[0].Kind == KindNumber {

@@ -24,18 +24,18 @@ func TestParseCronAccepts(t *testing.T) {
 
 func TestParseCronRejects(t *testing.T) {
 	cases := []string{
-		"",                  // empty
-		"a b c d e",         // non-numeric
-		"60 0 * * *",        // minute out of range
-		"0 24 * * *",        // hour out of range
-		"0 0 32 * *",        // dom out of range
-		"0 0 * 13 *",        // month out of range
-		"0 0 * * 7",         // dow out of range (0-6)
-		"0 0 * * * *",       // 6 fields
-		"0 0 * *",           // 4 fields
-		"5-1 * * * *",       // reversed range
-		"*/0 * * * *",       // step zero
-		"0 9 * * 1-5/abc",   // bad step
+		"",                // empty
+		"a b c d e",       // non-numeric
+		"60 0 * * *",      // minute out of range
+		"0 24 * * *",      // hour out of range
+		"0 0 32 * *",      // dom out of range
+		"0 0 * 13 *",      // month out of range
+		"0 0 * * 7",       // dow out of range (0-6)
+		"0 0 * * * *",     // 6 fields
+		"0 0 * *",         // 4 fields
+		"5-1 * * * *",     // reversed range
+		"*/0 * * * *",     // step zero
+		"0 9 * * 1-5/abc", // bad step
 	}
 	for _, src := range cases {
 		if _, err := ParseCron(src); err == nil {
@@ -120,10 +120,10 @@ func TestCronDomDowOrSemantics(t *testing.T) {
 		ts   string
 		want bool
 	}{
-		{"2026-05-01T00:00:00Z", true}, // 1st (Friday) — both match
+		{"2026-05-01T00:00:00Z", true},  // 1st (Friday) — both match
 		{"2026-05-02T00:00:00Z", false}, // 2nd Saturday — neither
-		{"2026-05-04T00:00:00Z", true}, // 4th Monday — DOW match only
-		{"2026-05-15T00:00:00Z", true}, // 15th Friday — both
+		{"2026-05-04T00:00:00Z", true},  // 4th Monday — DOW match only
+		{"2026-05-15T00:00:00Z", true},  // 15th Friday — both
 		{"2026-05-17T00:00:00Z", false}, // 17th Sunday — neither
 	}
 	for _, c := range cases {

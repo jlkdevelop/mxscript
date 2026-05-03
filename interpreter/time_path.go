@@ -1,21 +1,21 @@
 // time_path.go — time, path, and fs.glob builtins. The shapes match
 // what users coming from Python/JS/Ruby expect:
 //
-//   time.parse("2026-05-03T12:00:00Z") -> unix seconds
-//   time.format(unix, "2006-01-02")    -> "2026-05-03"
-//   time.add(unix, "24h")              -> unix + 86400
-//   time.diff(a, b)                    -> seconds (b - a)
-//   time.weekday(unix)                 -> "Sunday"..."Saturday"
-//   time.iso(unix)                     -> "2026-05-03T12:00:00Z"
-//   time.unix(iso)                     -> unix seconds (alias of parse)
+//	time.parse("2026-05-03T12:00:00Z") -> unix seconds
+//	time.format(unix, "2006-01-02")    -> "2026-05-03"
+//	time.add(unix, "24h")              -> unix + 86400
+//	time.diff(a, b)                    -> seconds (b - a)
+//	time.weekday(unix)                 -> "Sunday"..."Saturday"
+//	time.iso(unix)                     -> "2026-05-03T12:00:00Z"
+//	time.unix(iso)                     -> unix seconds (alias of parse)
 //
-//   path.join("/a", "b", "c.txt")      -> "/a/b/c.txt"
-//   path.dir("/a/b/c.txt")             -> "/a/b"
-//   path.base("/a/b/c.txt")            -> "c.txt"
-//   path.ext("/a/b/c.txt")             -> ".txt"
+//	path.join("/a", "b", "c.txt")      -> "/a/b/c.txt"
+//	path.dir("/a/b/c.txt")             -> "/a/b"
+//	path.base("/a/b/c.txt")            -> "c.txt"
+//	path.ext("/a/b/c.txt")             -> ".txt"
 //
-//   fs.glob("*.mx")                    -> ["app.mx", "auth.mx"]
-//   fs.glob("**/*.mx")                 -> recursive (max-depth 16)
+//	fs.glob("*.mx")                    -> ["app.mx", "auth.mx"]
+//	fs.glob("**/*.mx")                 -> recursive (max-depth 16)
 package interpreter
 
 import (
@@ -83,7 +83,7 @@ func builtinTimeAdd(_ *Interpreter, args []Value) (Value, error) {
 
 // time.diff(a, b) — returns b - a in seconds. Useful with time.parse:
 //
-//   let elapsed = time.diff(time.parse(start_iso), now())
+//	let elapsed = time.diff(time.parse(start_iso), now())
 func builtinTimeDiff(_ *Interpreter, args []Value) (Value, error) {
 	if len(args) < 2 || args[0].Kind != KindNumber || args[1].Kind != KindNumber {
 		return Value{}, fmt.Errorf("time.diff(a, b) requires two numbers")
@@ -177,8 +177,8 @@ func timeFromArg(args []Value) (time.Time, error) {
 // timestamp interpreted in the given IANA timezone (e.g.
 // "America/New_York", "Europe/London", "Asia/Tokyo").
 //
-//   let parts = time.in_zone(time.now(), "America/New_York")
-//   println(parts.hour, parts.minute, parts.zone)   // local hour, minute, "EDT"
+//	let parts = time.in_zone(time.now(), "America/New_York")
+//	println(parts.hour, parts.minute, parts.zone)   // local hour, minute, "EDT"
 func builtinTimeInZone(_ *Interpreter, args []Value) (Value, error) {
 	if len(args) < 2 || args[0].Kind != KindNumber || args[1].Kind != KindString {
 		return Value{}, fmt.Errorf("time.in_zone(unix, zone) requires (number, string)")
@@ -356,4 +356,3 @@ func recursiveGlob(pattern string) ([]string, error) {
 	})
 	return matches, err
 }
-

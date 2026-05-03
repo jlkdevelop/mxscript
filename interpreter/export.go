@@ -4,13 +4,13 @@
 //
 // Pattern:
 //
-//   get /export/users.csv {
-//     return csv(sql.find(db, "users", {}), { filename: "users.csv" })
-//   }
+//	get /export/users.csv {
+//	  return csv(sql.find(db, "users", {}), { filename: "users.csv" })
+//	}
 //
-//   get /export/events.ndjson {
-//     return ndjson(sql.find(db, "events", { active: true }))
-//   }
+//	get /export/events.ndjson {
+//	  return ndjson(sql.find(db, "events", { active: true }))
+//	}
 //
 // `filename` opts triggers `Content-Disposition: attachment` so a
 // browser downloads instead of trying to render.
@@ -27,7 +27,8 @@ import (
 // `items` is an array of row objects (same shape sql.find returns).
 // Column order follows the first row's keys for deterministic output.
 // opts:
-//   filename string  — sets Content-Disposition: attachment;filename=
+//
+//	filename string  — sets Content-Disposition: attachment;filename=
 func builtinCSVResponse(i *Interpreter, args []Value) (Value, error) {
 	if len(args) < 1 || args[0].Kind != KindArray {
 		return Value{}, fmt.Errorf("csv(items, opts?) requires an array of objects")

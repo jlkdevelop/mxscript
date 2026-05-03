@@ -3,9 +3,9 @@
 // the dev / panic-driven-development surface so MX programs can
 // short-circuit cleanly when invariants break.
 //
-//   debug.assert(user.subscribed, "user must be subscribed here")
-//   debug.unreachable("expected match arm to handle this")
-//   let result = debug.trace("expensive_query", fn() { ... })
+//	debug.assert(user.subscribed, "user must be subscribed here")
+//	debug.unreachable("expected match arm to handle this")
+//	let result = debug.trace("expensive_query", fn() { ... })
 //
 // All three throw on failure (so try/catch semantics work the same),
 // rather than calling os.Exit — programs that want hard-stop behavior
@@ -21,7 +21,7 @@ import (
 // debug.assert(cond, msg?) — throws when cond is falsy. Returns the
 // cond unchanged on success so it composes inside expressions:
 //
-//   let user = debug.assert(load_user(id), "user " + id + " missing")
+//	let user = debug.assert(load_user(id), "user " + id + " missing")
 func builtinDebugAssert(_ *Interpreter, args []Value) (Value, error) {
 	if len(args) < 1 {
 		return Value{}, fmt.Errorf("debug.assert(cond, msg?) requires a condition")
@@ -68,10 +68,10 @@ func builtinDebugUnreachable(_ *Interpreter, args []Value) (Value, error) {
 // with `label`, returns whatever fn() returned. Useful as a
 // throwaway profiler:
 //
-//   let result = debug.trace("expensive_query", fn() {
-//     return sql.query(db, "...")
-//   })
-//   // [trace] expensive_query: 12.4ms
+//	let result = debug.trace("expensive_query", fn() {
+//	  return sql.query(db, "...")
+//	})
+//	// [trace] expensive_query: 12.4ms
 func builtinDebugTrace(i *Interpreter, args []Value) (Value, error) {
 	if len(args) < 2 || args[0].Kind != KindString || args[1].Kind != KindFunction {
 		return Value{}, fmt.Errorf("debug.trace(label, fn)")

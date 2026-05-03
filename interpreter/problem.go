@@ -2,22 +2,22 @@
 //
 // The standard machine-readable error shape:
 //
-//   { "type": "...", "title": "...", "status": 400, "detail": "...", ... }
+//	{ "type": "...", "title": "...", "status": 400, "detail": "...", ... }
 //
 // Pattern in handlers:
 //
-//   post /users {
-//     let r = validate(request.body, schema)
-//     if (!r.valid) {
-//       return problem(400, "Validation failed", { errors: r.errors })
-//     }
-//   }
+//	post /users {
+//	  let r = validate(request.body, schema)
+//	  if (!r.valid) {
+//	    return problem(400, "Validation failed", { errors: r.errors })
+//	  }
+//	}
 //
-//   get /users/:id {
-//     let u = sql.first(db, "SELECT * FROM users WHERE id = ?", request.params.id)
-//     if (u == null) { return problem(404, "User not found") }
-//     return json(u)
-//   }
+//	get /users/:id {
+//	  let u = sql.first(db, "SELECT * FROM users WHERE id = ?", request.params.id)
+//	  if (u == null) { return problem(404, "User not found") }
+//	  return json(u)
+//	}
 //
 // Anything beyond status/title/detail goes into the `ext` object and
 // is merged into the top-level response — RFC 7807 §3.2 explicitly

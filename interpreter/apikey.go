@@ -2,16 +2,16 @@
 //
 // Pattern:
 //
-//   middleware require_api_key {
-//     if (!api_key_auth(request, env("API_KEYS"))) {
-//       return status(401, { error: "invalid api key" })
-//     }
-//   }
+//	middleware require_api_key {
+//	  if (!api_key_auth(request, env("API_KEYS"))) {
+//	    return status(401, { error: "invalid api key" })
+//	  }
+//	}
 //
-//   group /api {
-//     use require_api_key
-//     get /health { return json({ ok: true }) }
-//   }
+//	group /api {
+//	  use require_api_key
+//	  get /health { return json({ ok: true }) }
+//	}
 //
 // Reads `X-API-Key` first, falls back to `Authorization: Bearer <key>`.
 // `allowed_keys` is a comma-separated string of valid keys, typically

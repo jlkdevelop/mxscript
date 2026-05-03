@@ -2,22 +2,22 @@
 //
 // The pattern handlers used to write:
 //
-//   post /users {
-//     let r = validate(request.body, schema)
-//     if (!r.valid) {
-//       return problem(400, "Validation failed", "", { errors: r.errors, trace_id: request.id })
-//     }
-//     let body = request.body
-//     // ... actual logic
-//   }
+//	post /users {
+//	  let r = validate(request.body, schema)
+//	  if (!r.valid) {
+//	    return problem(400, "Validation failed", "", { errors: r.errors, trace_id: request.id })
+//	  }
+//	  let body = request.body
+//	  // ... actual logic
+//	}
 //
 // collapses to:
 //
-//   post /users {
-//     let r = body_validate(request, schema)
-//     if (!r.ok) { return r.response }
-//     // r.body is the validated body
-//   }
+//	post /users {
+//	  let r = body_validate(request, schema)
+//	  if (!r.ok) { return r.response }
+//	  // r.body is the validated body
+//	}
 //
 // `r.response` is a fully-formed problem+json 400 with the right
 // trace_id from request.id. Same shape as if you'd written it by hand.

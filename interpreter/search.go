@@ -126,8 +126,8 @@ func builtinSearchIndex(_ *Interpreter, args []Value) (Value, error) {
 // an array of `{ id, rank, ...columns }` ordered by relevance (FTS5
 // `bm25(table)`). opts:
 //
-//   limit:  max rows to return (default 50)
-//   offset: pagination offset (default 0)
+//	limit:  max rows to return (default 50)
+//	offset: pagination offset (default 0)
 func builtinSearchQuery(_ *Interpreter, args []Value) (Value, error) {
 	h, err := mustDBHandle(args)
 	if err != nil {

@@ -4,10 +4,10 @@
 // master key (read from env), so you can commit the encrypted vault
 // to source control without leaking the values.
 //
-//   $ MX_VAULT_KEY=$(openssl rand -hex 32) mx run app.mx
+//	$ MX_VAULT_KEY=$(openssl rand -hex 32) mx run app.mx
 //
-//   // app.mx
-//   let stripe = vault.get("stripe_key")  // decrypted on read
+//	// app.mx
+//	let stripe = vault.get("stripe_key")  // decrypted on read
 //
 // vault.set / vault.export are the write side: typically you run
 // these once interactively to bootstrap the file, then commit the

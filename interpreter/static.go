@@ -4,12 +4,12 @@
 //
 // Pairs naturally with proxy() for SPA setups:
 //
-//   get /* {
-//     if (env("MX_DEV") == "1") { return proxy("http://localhost:5173", request) }
-//     let f = static_file("./web/dist" + request.path)
-//     if (f != null) { return f }
-//     return html(read_file("./web/dist/index.html"))   // SPA fallback
-//   }
+//	get /* {
+//	  if (env("MX_DEV") == "1") { return proxy("http://localhost:5173", request) }
+//	  let f = static_file("./web/dist" + request.path)
+//	  if (f != null) { return f }
+//	  return html(read_file("./web/dist/index.html"))   // SPA fallback
+//	}
 //
 // Returns null when the path is missing or points at a directory so
 // the caller can do its own 404 / fallthrough handling.

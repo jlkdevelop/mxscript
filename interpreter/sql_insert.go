@@ -123,12 +123,12 @@ func builtinSQLInsert(_ *Interpreter, args []Value) (Value, error) {
 
 // sql.upsert(db, table, row, conflict_keys) — INSERT or UPDATE.
 //
-//   sql.upsert(db, "users", { id: 1, name: "Ada", email: "ada@x.com" }, ["id"])
-//   sql.upsert(db, "settings", { user_id: 7, key: "theme", value: "dark" }, ["user_id", "key"])
+//	sql.upsert(db, "users", { id: 1, name: "Ada", email: "ada@x.com" }, ["id"])
+//	sql.upsert(db, "settings", { user_id: 7, key: "theme", value: "dark" }, ["user_id", "key"])
 //
 // Picks the right dialect from the connection driver:
-//   • sqlite + postgres → INSERT ... ON CONFLICT (cols) DO UPDATE SET col = excluded.col
-//   • mysql            → INSERT ... ON DUPLICATE KEY UPDATE col = VALUES(col)
+//   - sqlite + postgres → INSERT ... ON CONFLICT (cols) DO UPDATE SET col = excluded.col
+//   - mysql            → INSERT ... ON DUPLICATE KEY UPDATE col = VALUES(col)
 //
 // `conflict_keys` is the unique-constraint column list. Non-key columns
 // are updated to the new value on conflict; key columns are left alone
@@ -231,7 +231,7 @@ func builtinSQLUpsert(_ *Interpreter, args []Value) (Value, error) {
 
 // sql.update(db, table, set, where) — UPDATE table SET col = ? WHERE col = ?
 //
-//   sql.update(db, "users", { name: "Ada", role: "admin" }, { id: 1 })
+//	sql.update(db, "users", { name: "Ada", role: "admin" }, { id: 1 })
 //
 // `set` is the columns to change; `where` is the columns to match (AND-joined).
 // Both must be objects. Empty `set` errors out so a typo doesn't accidentally
@@ -299,8 +299,8 @@ func builtinSQLUpdate(_ *Interpreter, args []Value) (Value, error) {
 
 // sql.delete(db, table, where) — DELETE FROM table WHERE col = ?
 //
-//   sql.delete(db, "sessions", { user_id: 7 })
-//   sql.delete(db, "events", { type: "trial", expired: true })
+//	sql.delete(db, "sessions", { user_id: 7 })
+//	sql.delete(db, "events", { type: "trial", expired: true })
 //
 // `where` is an object of column-equality matches, AND-joined. Empty
 // `where` is rejected — same reasoning as sql.update.
@@ -348,21 +348,22 @@ func builtinSQLDelete(_ *Interpreter, args []Value) (Value, error) {
 
 // sql.find(db, table, where, opts?) — SELECT * FROM table WHERE col = ?
 //
-//   sql.find(db, "users", { role: "admin" })
-//   sql.find(db, "users", {}, { order: "created_at DESC", limit: 10 })
-//   sql.find(db, "users", { active: 1 }, { columns: ["id", "name"], offset: 20 })
+//	sql.find(db, "users", { role: "admin" })
+//	sql.find(db, "users", {}, { order: "created_at DESC", limit: 10 })
+//	sql.find(db, "users", { active: 1 }, { columns: ["id", "name"], offset: 20 })
 //
 // Returns an array of row objects (same shape as sql.query). Unlike
 // sql.update/sql.delete, an empty `where` is fine — SELECT-everything
 // is a valid common case.
 //
 // Recognised opts:
-//   columns []string  — column whitelist (default: *)
-//   order   string    — raw ORDER BY clause; must be a plain identifier
-//                       optionally followed by ASC/DESC. No commas.
-//                       Use sql.query for multi-column / complex sorts.
-//   limit   number    — LIMIT N
-//   offset  number    — OFFSET N (paired with limit usually)
+//
+//	columns []string  — column whitelist (default: *)
+//	order   string    — raw ORDER BY clause; must be a plain identifier
+//	                    optionally followed by ASC/DESC. No commas.
+//	                    Use sql.query for multi-column / complex sorts.
+//	limit   number    — LIMIT N
+//	offset  number    — OFFSET N (paired with limit usually)
 func builtinSQLFind(_ *Interpreter, args []Value) (Value, error) {
 	h, err := mustDBHandle(args)
 	if err != nil {
@@ -484,8 +485,8 @@ func buildFindQuery(args []Value) (string, []Value, error) {
 
 // sql.count(db, table, where) — number
 //
-//   sql.count(db, "users", { active: 1 })
-//   sql.count(db, "events", {})
+//	sql.count(db, "users", { active: 1 })
+//	sql.count(db, "events", {})
 //
 // Returns a plain number (not an object). Empty `where` counts every
 // row. The hand-written equivalent — `sql.first("SELECT count(*) AS n
@@ -548,9 +549,9 @@ func builtinSQLCount(_ *Interpreter, args []Value) (Value, error) {
 // sql.exists(db, table, where) — bool. Sugar for sql.count(...) > 0
 // but reads cleaner at call sites:
 //
-//   if (sql.exists(db, "users", { email: e })) {
-//     return problem(409, "Email already in use")
-//   }
+//	if (sql.exists(db, "users", { email: e })) {
+//	  return problem(409, "Email already in use")
+//	}
 //
 // Internally we run a `LIMIT 1` SELECT, not count(*), so a hit short-
 // circuits without scanning the rest of the table.

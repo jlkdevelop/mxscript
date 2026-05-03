@@ -23,9 +23,11 @@ func jobsCreate(opts *OrderedMap) (*jobsHandle, error) { return nil, errJobsUnsu
 func jobsEnqueue(h *jobsHandle, payload Value, delaySec float64) (int64, error) {
 	return 0, errJobsUnsupported
 }
-func jobsClaim(h *jobsHandle) (*claimedJob, error)                              { return nil, errJobsUnsupported }
-func jobsMarkDone(h *jobsHandle, id int64) error                                { return errJobsUnsupported }
-func jobsMarkFailed(h *jobsHandle, id int64, attempts int, errMsg string) error { return errJobsUnsupported }
+func jobsClaim(h *jobsHandle) (*claimedJob, error) { return nil, errJobsUnsupported }
+func jobsMarkDone(h *jobsHandle, id int64) error   { return errJobsUnsupported }
+func jobsMarkFailed(h *jobsHandle, id int64, attempts int, errMsg string) error {
+	return errJobsUnsupported
+}
 func (h *jobsHandle) startWorker(stop <-chan struct{}, fn func(payload string) error) {
 	// no-op on wasm
 }

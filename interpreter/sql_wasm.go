@@ -28,19 +28,27 @@ func goArgs(args []Value) []any                                   { return nil }
 
 // Builtin shims — return the same "unsupported" error so route
 // handlers can detect the platform mismatch and degrade gracefully.
-func builtinSQLOpen(i *Interpreter, args []Value) (Value, error)        { return Value{}, errSQLUnsupported }
-func mustDBHandle(args []Value) (*dbHandle, error)                      { return nil, errSQLUnsupported }
-func builtinSQLExec(i *Interpreter, args []Value) (Value, error)        { return Value{}, errSQLUnsupported }
-func builtinSQLQuery(i *Interpreter, args []Value) (Value, error)       { return Value{}, errSQLUnsupported }
-func builtinSQLQueryOne(i *Interpreter, args []Value) (Value, error)    { return Value{}, errSQLUnsupported }
-func builtinSQLClose(i *Interpreter, args []Value) (Value, error)       { return Value{}, errSQLUnsupported }
-func builtinSQLMigrate(i *Interpreter, args []Value) (Value, error)     { return Value{}, errSQLUnsupported }
-func builtinSQLTransaction(i *Interpreter, args []Value) (Value, error) { return Value{}, errSQLUnsupported }
-func builtinSQLInsert(i *Interpreter, args []Value) (Value, error)      { return Value{}, errSQLUnsupported }
-func builtinSQLUpsert(i *Interpreter, args []Value) (Value, error)      { return Value{}, errSQLUnsupported }
-func builtinSQLUpdate(i *Interpreter, args []Value) (Value, error)      { return Value{}, errSQLUnsupported }
-func builtinSQLDelete(i *Interpreter, args []Value) (Value, error)      { return Value{}, errSQLUnsupported }
-func builtinSQLFind(i *Interpreter, args []Value) (Value, error)        { return Value{}, errSQLUnsupported }
-func builtinSQLFindOne(i *Interpreter, args []Value) (Value, error)     { return Value{}, errSQLUnsupported }
-func builtinSQLCount(i *Interpreter, args []Value) (Value, error)       { return Value{}, errSQLUnsupported }
-func builtinSQLExists(i *Interpreter, args []Value) (Value, error)      { return Value{}, errSQLUnsupported }
+func builtinSQLOpen(i *Interpreter, args []Value) (Value, error)  { return Value{}, errSQLUnsupported }
+func mustDBHandle(args []Value) (*dbHandle, error)                { return nil, errSQLUnsupported }
+func builtinSQLExec(i *Interpreter, args []Value) (Value, error)  { return Value{}, errSQLUnsupported }
+func builtinSQLQuery(i *Interpreter, args []Value) (Value, error) { return Value{}, errSQLUnsupported }
+func builtinSQLQueryOne(i *Interpreter, args []Value) (Value, error) {
+	return Value{}, errSQLUnsupported
+}
+func builtinSQLClose(i *Interpreter, args []Value) (Value, error) { return Value{}, errSQLUnsupported }
+func builtinSQLMigrate(i *Interpreter, args []Value) (Value, error) {
+	return Value{}, errSQLUnsupported
+}
+func builtinSQLTransaction(i *Interpreter, args []Value) (Value, error) {
+	return Value{}, errSQLUnsupported
+}
+func builtinSQLInsert(i *Interpreter, args []Value) (Value, error) { return Value{}, errSQLUnsupported }
+func builtinSQLUpsert(i *Interpreter, args []Value) (Value, error) { return Value{}, errSQLUnsupported }
+func builtinSQLUpdate(i *Interpreter, args []Value) (Value, error) { return Value{}, errSQLUnsupported }
+func builtinSQLDelete(i *Interpreter, args []Value) (Value, error) { return Value{}, errSQLUnsupported }
+func builtinSQLFind(i *Interpreter, args []Value) (Value, error)   { return Value{}, errSQLUnsupported }
+func builtinSQLFindOne(i *Interpreter, args []Value) (Value, error) {
+	return Value{}, errSQLUnsupported
+}
+func builtinSQLCount(i *Interpreter, args []Value) (Value, error)  { return Value{}, errSQLUnsupported }
+func builtinSQLExists(i *Interpreter, args []Value) (Value, error) { return Value{}, errSQLUnsupported }

@@ -2,21 +2,21 @@
 //
 // Most list endpoints reinvent the same five lines:
 //
-//   let page     = num(request.query?.page) || 1
-//   let per_page = math.min(100, num(request.query?.per_page) || 20)
-//   let offset   = (page - 1) * per_page
-//   let total    = sql.first(db, "SELECT count(*) AS n FROM ...").n
-//   return json({ items: ..., page, per_page, total, total_pages: ceil(...), ... })
+//	let page     = num(request.query?.page) || 1
+//	let per_page = math.min(100, num(request.query?.per_page) || 20)
+//	let offset   = (page - 1) * per_page
+//	let total    = sql.first(db, "SELECT count(*) AS n FROM ...").n
+//	return json({ items: ..., page, per_page, total, total_pages: ceil(...), ... })
 //
 // paginate() collapses the input parsing, page_response() collapses the
 // envelope. Together they turn a list endpoint into:
 //
-//   get /users {
-//     let p = paginate(request)
-//     let total = sql.first(db, "SELECT count(*) AS n FROM users").n
-//     let items = sql.query(db, "SELECT * FROM users LIMIT ? OFFSET ?", p.limit, p.offset)
-//     return json(page_response(items, p, total))
-//   }
+//	get /users {
+//	  let p = paginate(request)
+//	  let total = sql.first(db, "SELECT count(*) AS n FROM users").n
+//	  let items = sql.query(db, "SELECT * FROM users LIMIT ? OFFSET ?", p.limit, p.offset)
+//	  return json(page_response(items, p, total))
+//	}
 package interpreter
 
 import (
@@ -81,10 +81,10 @@ func builtinPaginate(_ *Interpreter, args []Value) (Value, error) {
 //
 // Builds the conventional list-endpoint shape:
 //
-//   {
-//     items, page, per_page, total,
-//     total_pages, has_next, has_prev
-//   }
+//	{
+//	  items, page, per_page, total,
+//	  total_pages, has_next, has_prev
+//	}
 //
 // Pass the value `paginate()` returned as `page_info`.
 func builtinPageResponse(_ *Interpreter, args []Value) (Value, error) {

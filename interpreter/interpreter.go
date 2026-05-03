@@ -844,7 +844,7 @@ func (i *Interpreter) File() string { return i.file }
 // changed snapshot. "" / "compare" (default): fail on miss/diff.
 // "update": overwrite the snapshot from disk and pass.
 func (i *Interpreter) SetSnapshotMode(mode string) { i.snapshotMode = mode }
-func (i *Interpreter) SnapshotMode() string         { return i.snapshotMode }
+func (i *Interpreter) SnapshotMode() string        { return i.snapshotMode }
 
 // PackageResolver lets the host (the `mx` CLI) plug in a function
 // that turns a package-style import path like `github.com/foo/bar`

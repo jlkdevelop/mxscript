@@ -12,11 +12,17 @@ type redisHandle struct{}
 
 var errRedisUnsupported = fmt.Errorf("redis is unsupported on the wasm build (no raw TCP from the browser)")
 
-func builtinRedisConnect(_ *Interpreter, _ []Value) (Value, error) { return Value{}, errRedisUnsupported }
-func builtinRedisSet(_ *Interpreter, _ []Value) (Value, error)     { return Value{}, errRedisUnsupported }
-func builtinRedisGet(_ *Interpreter, _ []Value) (Value, error)     { return Value{}, errRedisUnsupported }
-func builtinRedisDel(_ *Interpreter, _ []Value) (Value, error)     { return Value{}, errRedisUnsupported }
-func builtinRedisIncr(_ *Interpreter, _ []Value) (Value, error)    { return Value{}, errRedisUnsupported }
-func builtinRedisExpire(_ *Interpreter, _ []Value) (Value, error)  { return Value{}, errRedisUnsupported }
-func builtinRedisPublish(_ *Interpreter, _ []Value) (Value, error) { return Value{}, errRedisUnsupported }
-func builtinRedisClose(_ *Interpreter, _ []Value) (Value, error)   { return Value{}, errRedisUnsupported }
+func builtinRedisConnect(_ *Interpreter, _ []Value) (Value, error) {
+	return Value{}, errRedisUnsupported
+}
+func builtinRedisSet(_ *Interpreter, _ []Value) (Value, error)  { return Value{}, errRedisUnsupported }
+func builtinRedisGet(_ *Interpreter, _ []Value) (Value, error)  { return Value{}, errRedisUnsupported }
+func builtinRedisDel(_ *Interpreter, _ []Value) (Value, error)  { return Value{}, errRedisUnsupported }
+func builtinRedisIncr(_ *Interpreter, _ []Value) (Value, error) { return Value{}, errRedisUnsupported }
+func builtinRedisExpire(_ *Interpreter, _ []Value) (Value, error) {
+	return Value{}, errRedisUnsupported
+}
+func builtinRedisPublish(_ *Interpreter, _ []Value) (Value, error) {
+	return Value{}, errRedisUnsupported
+}
+func builtinRedisClose(_ *Interpreter, _ []Value) (Value, error) { return Value{}, errRedisUnsupported }

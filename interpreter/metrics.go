@@ -1,8 +1,8 @@
 // metrics.go — minimal Prometheus-compatible metrics. Three primitives:
 //
-//   metrics.counter(name, value?, labels?)    monotonically increasing
-//   metrics.gauge(name, value, labels?)       point-in-time number
-//   metrics.histogram(name, value, labels?)   distribution of observations
+//	metrics.counter(name, value?, labels?)    monotonically increasing
+//	metrics.gauge(name, value, labels?)       point-in-time number
+//	metrics.histogram(name, value, labels?)   distribution of observations
 //
 // Plus a built-in /metrics route handler (`metrics.handler()`) that emits
 // the standard Prometheus text exposition format. Drop-in for any
@@ -41,10 +41,10 @@ type metric struct {
 
 type metricValue struct {
 	labels    map[string]string
-	counter   float64    // counter / gauge
-	histCount uint64     // histogram observation count
-	histSum   float64    // sum of all observations
-	histBkt   []uint64   // bucket counts, len(histogramBuckets) + 1
+	counter   float64  // counter / gauge
+	histCount uint64   // histogram observation count
+	histSum   float64  // sum of all observations
+	histBkt   []uint64 // bucket counts, len(histogramBuckets) + 1
 }
 
 // registry holds every metric registered in this process. The mutex
