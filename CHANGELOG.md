@@ -4,6 +4,33 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.56.0] — 2026-05-03
+
+### Added — `body_validate(request, schema)` — single-call body validation
+
+```mx
+post /users {
+  let r = body_validate(request, {
+    type: "object",
+    required: ["name"],
+    properties: { name: { type: "string", min_length: 2 } }
+  })
+  if (!r.ok) { return r.response }
+
+  // r.body is the validated body
+  let id = sql.insert(db, "users", { name: r.body.name }).last_insert_id
+  return status(201, { id: id })
+}
+```
+
+Was three lines (`validate(...)` → check `r.valid` → build the
+`problem(400, ...)` response by hand). Now it's one call. The 400
+response is a fully-formed RFC 7807 `application/problem+json` with
+the validation errors array and `request.id` baked in as `trace_id` —
+the same shape the dedicated `problem()` builds.
+
+[1.56.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.56.0
+
 ## [1.55.0] — 2026-05-03
 
 ### Added — `csv()` + `ndjson()` response helpers for export endpoints

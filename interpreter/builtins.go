@@ -496,6 +496,7 @@ func registerBuiltins(i *Interpreter) {
 	def("assert_contains", builtinAssertContains)
 	def("assert_snapshot", builtinAssertSnapshot)
 	def("validate", builtinValidate)
+	def("body_validate", builtinBodyValidate)
 	def("sign_cookie", builtinSignCookie)
 	def("verify_cookie", builtinVerifyCookie)
 	def("csrf_token", builtinCSRFToken)
