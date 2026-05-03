@@ -66,18 +66,25 @@ MX Script is opinionated: **the language is the framework**. Routes, JSON, SQL, 
 
 | Layer | What you get |
 |---|---|
-| **Web framework** | Routes (`get /users { ... }`), middleware, route groups, static files, cookies, CORS, gzip, rate limiting, body limits, timeouts, graceful shutdown, TLS |
+| **Web framework** | Routes (`get /users { ... }`), middleware, route groups, static files, cookies, CORS, gzip, rate limiting (global + per-key), body limits, timeouts, graceful shutdown, TLS |
 | **Real-time** | Server-sent events (`sse /events`) and WebSockets (`ws /chat`) — both pure stdlib, no external dependencies |
-| **Database** | SQLite + Postgres through one `sql` namespace. Transactions, hash-tracked migrations, parameterized queries |
-| **Auth** | JWT, signed-cookie sessions, OAuth2 helpers (Google / GitHub / Discord / LinkedIn / Microsoft), `password.hash` (PBKDF2-SHA256), AES-256-GCM, webhook signature verification |
-| **AI** | OpenAI / Anthropic Claude / Google Gemini through `ai.complete`. Streaming, tool calling, embeddings |
-| **Background jobs** | Durable, SQLite-backed queue with retries and exponential backoff |
-| **API tooling** | `openapi()` auto-generates a 3.1 spec from your routes. `swagger_ui()` and `redoc_ui()` mount interactive docs in one line |
-| **Stdlib (~200 fns)** | Strings, arrays (`map / filter / reduce / sort / group_by / zip`), math, JSON, URL parsing, regex, file I/O, image manipulation, markdown rendering, CSV, email (SMTP), templates, schedulers, validation, subprocess, fs.watch |
+| **Database** | SQLite + Postgres + MySQL through one `sql` namespace. Transactions, hash-tracked migrations, parameterized queries. Full-text search via `search.*` (FTS5) |
+| **Auth** | JWT, signed-cookie sessions, OAuth2 (Google / GitHub / Discord / LinkedIn / Microsoft), `magic_link.*` (passwordless email), `totp.*` (RFC 6238 — Google Authenticator compatible), `password.hash` (PBKDF2 / Argon2id / scrypt), AES-256-GCM, `webhooks.*` signature verification (Stripe / GitHub / Svix / Shopify / Slack) |
+| **AI** | 10 providers behind one API: OpenAI / Anthropic / Gemini / xAI Grok / Mistral / DeepSeek / Groq / OpenRouter / Together / Ollama. `ai.complete`, `ai.stream`, `ai.embed`, `ai.vision`, `ai.image` (DALL-E), `ai.transcribe` (Whisper) |
+| **Payments** | `stripe.*` — checkout, customer, customer_portal, subscription. Pairs with `webhooks.verify_stripe` for the full SaaS loop |
+| **Notifications** | `notify.slack` / `notify.discord` / `notify.email` (Resend) — string or rich-payload sends with `{ ok, status, error }` results |
+| **Object storage** | `s3.*` — pure-Go AWS Signature V4. Works with AWS S3, Cloudflare R2, Backblaze B2, DigitalOcean Spaces, MinIO, Wasabi |
+| **Background jobs + cron** | Durable, SQLite-backed queue with retries and exponential backoff. `cron(spec, fn)` for Vixie 5-field schedules |
+| **Observability** | `metrics.counter / gauge / histogram` + auto `/metrics` endpoint in Prometheus exposition format. Pairs with the existing `log.*` and request logging |
+| **API tooling** | `openapi()` auto-generates a 3.1 spec from your routes. `swagger_ui()` and `redoc_ui()` mount interactive docs in one line. `mx routes` lists every route without booting the server |
+| **Templates** | Mustache-style with `{{#if}}`, `{{#each}}`, `{{> partial}}`, auto-escape default. `render(path, vars, partials)` returns an HTML response |
+| **Stdlib (~200 fns)** | Strings, arrays, math, JSON, regex, file I/O, image manipulation (`thumbnail`/`crop`/`resize`/`convert`), markdown, CSV, email (SMTP), templates, schedulers, validation, subprocess, fs.watch + glob, time + path utilities, IDs (`uuid`/`ulid`/`nanoid`/`snowflake`), random + base32, `pick` / `omit` / `merge` / `deep_merge` |
 | **Concurrency** | `spawn { ... }` goroutines, channels, `wait_group`, thread-safe environments |
-| **Tooling** | `mx run / init / new / build / repl / test [--cover] / bench / fmt / lsp / upgrade / doctor` |
-| **Editor support** | TextMate grammar, VS Code extension, full LSP (diagnostics, format-on-save, hover, completion for all builtins) |
-| **Distribution** | GoReleaser binaries on every tag, Homebrew tap, `mx build --vercel` adapter |
+| **Performance** | Bytecode VM behind `mx run --bytecode` lowers expressions, function bodies, control flow, calls, member access, optional chaining, short-circuit, break/continue. ~2-3× faster on tight loops; falls back transparently for unsupported nodes |
+| **Tooling** | `mx run / init / new / build / repl / test [--cover] / bench / fmt / lsp / check / pkg / serve / ci / examples / help / docs / routes / upgrade / doctor` |
+| **Editor support** | TextMate grammar, VS Code extension (auto-built into every release), full LSP (diagnostics, format-on-save, hover, completion, signature help, snippets — all 200+ builtins) |
+| **Distribution** | GoReleaser binaries on every tag, Homebrew tap, `mx build --vercel` / `--docker` / `--fly` / `--railway` / `--wasm` for one-command deploys |
+| **Browser** | `mx build --wasm` produces `dist/mx.wasm` + JS shim. Full interpreter runs client-side. Live playground at [`site/playground/`](site/playground/) |
 
 ### Six starter projects, one command
 

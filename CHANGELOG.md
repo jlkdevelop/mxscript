@@ -4,6 +4,23 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.86.0] — 2026-05-03
+
+### Improved — README feature matrix reflects v0.52 → v0.85
+
+The README's "What ships in the box" table is now exhaustive — every
+namespace and capability added in the v0.52→v0.85 push is in there:
+10 AI providers, Stripe payments, webhook signature verification for
+5 senders, magic-link / TOTP auth, S3-compatible object storage,
+Prometheus metrics + `/metrics` endpoint, FTS5 search, cron, the
+expanded VM with ~2-3× perf, image thumbnail/crop, time/path/fs
+utilities, ULID/NanoID/Snowflake IDs, deploy generators for Docker /
+Fly / Railway / Vercel / browser, terminal docs viewer, bundled
+example browser. Single-screen overview of the language as it
+stands.
+
+[0.86.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v0.86.0
+
 ## [0.85.0] — 2026-05-03
 
 ### Added — `mx examples` (browse 16 bundled examples)
