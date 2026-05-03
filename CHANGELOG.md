@@ -4,6 +4,32 @@ All notable changes to MX Script are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.9.0] — 2026-05-03
+
+### Added — `mx fmt --diff`
+
+```
+$ mx fmt --diff app.mx
+--- app.mx (current)
++++ app.mx (formatted)
+- let x =1
+- fn   foo(  ){return 1}
++ let x = 1
++ fn foo() {
++   return 1
++ }
+```
+
+Preview formatter changes without writing the file. Tiny line-based
+unified-diff implementation — no third-party deps. Coloured red/green
+in a terminal so the change is obvious.
+
+Use cases: review what `mx fmt -w` would do before committing it,
+spot-check a CI failure (`mx fmt --check` says "not formatted",
+`mx fmt --diff` says exactly what would change).
+
+[1.9.0]: https://github.com/jlkdevelop/mxscript/releases/tag/v1.9.0
+
 ## [1.8.0] — 2026-05-03
 
 ### Added — `fetch_retry()` (resilient HTTP)

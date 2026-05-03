@@ -58,7 +58,7 @@ func (rr *replReader) ReadLine() (string, bool) {
 // Version is bumped at release time. Override at build with:
 //
 //	go build -ldflags "-X main.Version=v0.2.0"
-var Version = "v1.8.0"
+var Version = "v1.9.0"
 
 const (
 	cReset  = "\033[0m"
@@ -167,7 +167,7 @@ func printHelp() {
 	fmt.Println("  repl                  Start an interactive REPL")
 	fmt.Println("  test [path] [--cover] [--watch]  Run *_test.mx files (current dir by default)")
 	fmt.Println("  bench [path]          Run *_bench.mx benchmarks (each fn bench_*)")
-	fmt.Println("  fmt [paths]           Format .mx files (-w writes, --check exits 1 on diffs)")
+	fmt.Println("  fmt [paths]           Format .mx files (-w writes, --check exits 1 on diffs, --diff previews changes)")
 	fmt.Println("  lsp                   Run the Language Server (JSON-RPC over stdio)")
 	fmt.Println("  upgrade               Self-update to the latest release")
 	fmt.Println("  doctor                Diagnose env / install / runtime")
@@ -674,6 +674,7 @@ func cmdLSP(args []string) {
 func cmdFmt(args []string) {
 	check := false
 	write := false
+	diff := false
 	var paths []string
 	for _, a := range args {
 		switch a {
@@ -681,6 +682,8 @@ func cmdFmt(args []string) {
 			check = true
 		case "-w", "--write":
 			write = true
+		case "--diff":
+			diff = true
 		default:
 			paths = append(paths, a)
 		}
@@ -723,6 +726,13 @@ func cmdFmt(args []string) {
 				fmt.Println(file)
 				hadDiff = true
 			}
+		case diff:
+			if string(src) != out {
+				fmt.Printf("%s--- %s (current)%s\n", cRed, file, cReset)
+				fmt.Printf("%s+++ %s (formatted)%s\n", cGreen, file, cReset)
+				printUnifiedDiff(string(src), out)
+				hadDiff = true
+			}
 		case write:
 			if string(src) != out {
 				if err := os.WriteFile(file, []byte(out), 0o644); err != nil {
@@ -738,6 +748,52 @@ func cmdFmt(args []string) {
 		fmt.Fprintf(os.Stderr, "\n%sfiles above are not formatted — run `mx fmt -w <path>`%s\n", cYellow, cReset)
 		os.Exit(1)
 	}
+}
+
+// printUnifiedDiff emits a unified-style diff between `a` and `b`.
+// Tiny line-based implementation so we don't need a third-party diff
+// library — only the stdlib. For each common-prefix block we print
+// nothing; for each divergent block we print `-` lines from `a` and
+// `+` lines from `b` together. Good enough for human review of fmt
+// changes.
+func printUnifiedDiff(a, b string) {
+	aLines := strings.Split(a, "\n")
+	bLines := strings.Split(b, "\n")
+
+	// Walk both sides in parallel. When they match, skip silently
+	// (or print 1 line of context). When they diverge, scan ahead
+	// in both for the next sync line and print everything between.
+	i, j := 0, 0
+	for i < len(aLines) || j < len(bLines) {
+		if i < len(aLines) && j < len(bLines) && aLines[i] == bLines[j] {
+			i++
+			j++
+			continue
+		}
+		// Find next match.
+		nextI, nextJ := findNextSync(aLines, bLines, i, j)
+		for k := i; k < nextI; k++ {
+			fmt.Printf("%s- %s%s\n", cRed, aLines[k], cReset)
+		}
+		for k := j; k < nextJ; k++ {
+			fmt.Printf("%s+ %s%s\n", cGreen, bLines[k], cReset)
+		}
+		i, j = nextI, nextJ
+	}
+}
+
+// findNextSync looks ahead in `a` and `b` for the next line that
+// appears in both, returning the indices into each. Quadratic but
+// fine for a few hundred lines of MX.
+func findNextSync(a, b []string, ai, bi int) (int, int) {
+	for di := ai; di < len(a); di++ {
+		for dj := bi; dj < len(b); dj++ {
+			if a[di] == b[dj] && a[di] != "" {
+				return di, dj
+			}
+		}
+	}
+	return len(a), len(b)
 }
 
 func expandFmtPaths(paths []string) ([]string, error) {
