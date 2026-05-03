@@ -11,8 +11,8 @@
 </p>
 
 <p align="center">
-  A modern, open-source scripting language for building web apps and APIs.<br>
-  One file. Zero boilerplate. Run with <code>mx run app.mx</code>.
+  <strong>A lightweight scripting language for building one-file web APIs.</strong><br>
+  No framework. No build step. No <code>node_modules</code>. Run with <code>mx run app.mx</code>.
 </p>
 
 <p align="center">
@@ -59,9 +59,11 @@ That's a real validated REST API with persistence and auto-generated docs. `mx r
 
 ## Why MX Script?
 
-Most languages make you choose: ergonomics or speed. JavaScript is fast to write but you assemble a framework, a runtime, a build tool, and a deploy story before you ship anything. Go is fast and simple but the syntax for a JSON API is a hundred lines.
+The simple case — *"I want a JSON endpoint that does one useful thing"* — gets buried under setup. Before writing the thing you actually wanted to build, you assemble a runtime, a framework, a router, a build tool, a deploy story, and twenty config files.
 
-MX Script is opinionated: **the language is the framework**. Routes, JSON, SQL, JWT, OAuth, WebSockets, AI, and background jobs are all first-class. The interpreter is a single Go binary.
+MX Script collapses that. **The language is the framework.** Routes, JSON, SQL, JWT, OAuth, WebSockets, AI, and background jobs are first-class syntax. The interpreter is a single Go binary, ~5 MB. Drop a `.mx` file on disk, run `mx run app.mx`, and you have a real HTTP server.
+
+It's intentionally small and opinionated — built for the 80% case where you want **one file, one binary, one command to ship**.
 
 ### What ships in the box
 
